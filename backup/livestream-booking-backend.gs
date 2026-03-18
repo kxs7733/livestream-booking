@@ -10,7 +10,7 @@
  *    - Slots: id | sellerId | sellerName | date | startTime | endTime | description | createdAt
  *    - Bookings: id | slotId | sellerId | sellerName | affiliateId | affiliateName | date | startTime | endTime | bookedAt
  *    - BrandApplications: id | brandId | brandName | shopId | shopName | month | streamCount | sellerType | productNominationsConfirmed | numProductsSponsored | streamLocation | hasPackageActivation | preferredDate | sellerSiteRequired | amsCommission | bundleDealsAgreed | voucherTier | creatorAssignmentAgreed | sellerPicName | sellerPicMobile | sellerPicEmail | status | createdAt | livestreamBrief | sellerSiteAddress
- *    - CreatorApplications: id | creatorId | creatorName | brandApplicationId | brandName | shopName | streamDate | streamTime | streamEndDate | streamEndTime | affiliateUsername | phone | telegram | shippingAddress | willingToTravel | status | createdAt | sampleSentAt | groupId
+ *    - CreatorApplications: id | creatorId | creatorName | brandApplicationId | brandName | shopName | streamDate | streamTime | affiliateUsername | phone | telegram | shippingAddress | willingToTravel | status | createdAt | sampleSentAt
  *    - InternalTeam: id | email | createdAt
  * 4. Go to Extensions > Apps Script
  * 5. Paste this code and save
@@ -19,9 +19,6 @@
  *    - Who has access: Anyone
  * 7. Copy the deployment URL and update API_URL in the HTML file
  */
-
-// Keep-warm no-op — triggered every 5 minutes to prevent cold starts
-function keepWarm() {}
 
 // Get the active spreadsheet
 function getSpreadsheet() {
@@ -118,9 +115,6 @@ function doGet(e) {
       case 'updateCreatorApplication':
         result = updateCreatorApplication(e.parameter.id, JSON.parse(e.parameter.data));
         break;
-      case 'updateCreatorApplicationsByGroupId':
-        result = updateCreatorApplicationsByGroupId(e.parameter.groupId, JSON.parse(e.parameter.data));
-        break;
       case 'deleteSlot':
         result = deleteSlot(e.parameter.id);
         break;
@@ -161,13 +155,6 @@ function doPost(e) {
 
     // Telegram webhook — incoming message or callback
     if (body.update_id !== undefined) {
-      // Deduplicate: skip if we've already processed this update_id (Telegram retries on slow responses)
-      var props = PropertiesService.getScriptProperties();
-      var lastId = parseInt(props.getProperty('lastUpdateId') || '0', 10);
-      if (body.update_id <= lastId) {
-        return ContentService.createTextOutput('ok');
-      }
-      props.setProperty('lastUpdateId', String(body.update_id));
       handleTelegramUpdate(body);
       return ContentService.createTextOutput('ok');
     }
@@ -185,13 +172,16 @@ function doPost(e) {
 
 // Upload brief file to Google Drive and return the file URL
 function uploadBriefFile(fileName, base64Data, mimeType) {
-  var decoded, blob, folder, file;
-  try { decoded = Utilities.base64Decode(base64Data); } catch(e) { return { success: false, error: 'base64Decode failed: ' + e.toString() }; }
-  try { blob = Utilities.newBlob(decoded, mimeType || 'application/octet-stream', fileName); } catch(e) { return { success: false, error: 'newBlob failed: ' + e.toString() }; }
-  try { folder = getBriefFolder(); } catch(e) { return { success: false, error: 'getFolderById failed: ' + e.toString() }; }
-  try { file = folder.createFile(blob); } catch(e) { return { success: false, error: 'createFile failed: ' + e.toString() }; }
-  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(e) { Logger.log('setSharing failed (non-fatal): ' + e.toString()); }
-  return { success: true, fileUrl: file.getUrl(), fileId: file.getId() };
+  try {
+    var decoded = Utilities.base64Decode(base64Data);
+    var blob = Utilities.newBlob(decoded, mimeType || 'application/octet-stream', fileName);
+    var folder = getBriefFolder();
+    var file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return { success: true, fileUrl: file.getUrl(), fileId: file.getId() };
+  } catch (err) {
+    return { success: false, error: err.toString() };
+  }
 }
 
 // Get the briefs folder in Drive — replace the folder ID with your own
@@ -378,38 +368,35 @@ function addBrandApplication(data) {
 // Add creator application (supports both old single-slot and new multi-slot format)
 function addCreatorApplication(data) {
   const sheet = getSheet('CreatorApplications');
-  const groupId = data.id; // application-level id becomes the groupId
-  const timeslots = Array.isArray(data.timeslots) ? data.timeslots : [];
-
-  timeslots.forEach(function(slot) {
-    const rowId = Math.random().toString(36).substr(2, 9);
-    appendRowAsText(sheet, [
-      rowId,
-      data.creatorId,
-      data.creatorName,
-      data.brandApplicationId,
-      data.brandName,
-      data.shopName,
-      slot.date || '',
-      slot.startTime || '',
-      slot.endDate || slot.date || '',
-      slot.endTime || '',
-      data.affiliateUsername,
-      data.phone,
-      data.telegram,
-      data.shippingAddress,
-      data.willingToTravel,
-      data.status,
-      data.createdAt,
-      '', // sampleSentAt
-      groupId
-    ]);
-  });
+  // New format: timeslots array stored as JSON in the streamDate column
+  var timeslotsStr = '';
+  if (data.timeslots) {
+    timeslotsStr = Array.isArray(data.timeslots) ? JSON.stringify(data.timeslots) : String(data.timeslots);
+  } else if (data.streamDate) {
+    timeslotsStr = String(data.streamDate);
+  }
+  appendRowAsText(sheet, [
+    data.id,
+    data.creatorId,
+    data.creatorName,
+    data.brandApplicationId,
+    data.brandName,
+    data.shopName,
+    timeslotsStr,
+    data.streamTime || '',
+    data.affiliateUsername,
+    data.phone,
+    data.telegram,
+    data.shippingAddress,
+    data.willingToTravel,
+    data.status,
+    data.createdAt
+  ]);
 
   // Email notification to internal team
   try { sendEmailToInternalTeam_CreatorAppSubmitted(data); } catch(e) { Logger.log('Email error: ' + e); }
 
-  return { success: true, groupId: groupId, count: timeslots.length };
+  return { success: true, data: data };
 }
 
 // Update brand application
@@ -434,128 +421,44 @@ function updateBrandApplication(id, data) {
   return { success: success };
 }
 
-// Update a single creator application row by id
+// Update creator application
 function updateCreatorApplication(id, data) {
   const sheet = getSheet('CreatorApplications');
-
-  // Read sheet once — reused for undo check and all notifications
-  var allRows = sheetToObjects(sheet);
-  var currentRow = null;
-  for (var i = 0; i < allRows.length; i++) {
-    if (String(allRows[i].id) === String(id)) { currentRow = allRows[i]; break; }
-  }
-
-  // Block undo of sample sent if creator has already confirmed receipt
-  if (data.sampleSentAt === '') {
-    if (currentRow && currentRow.sampleReceivedAt) {
-      return { success: false, error: 'Cannot undo — the creator has already confirmed receipt of the samples.' };
-    }
-  }
-
-  // Block duplicate sample receipt confirmation
-  if (data.sampleReceivedAt && currentRow && currentRow.sampleReceivedAt) {
-    return { success: false, error: 'Samples already marked as received.' };
-  }
-
-  // When marking as sent, reset sampleReceivedAt so receipt flow starts fresh
-  if (data.sampleSentAt) {
-    data.sampleReceivedAt = '';
-  }
-
   const success = updateRowById(sheet, id, data);
 
-  if (success && currentRow) {
-    // Merge updated fields into the row object for notification context
-    var row = Object.assign({}, currentRow, data);
-
-    // Send Telegram approval notification for this timeslot
-    if (String(data.status) === 'approved') {
-      try { sendApprovalNotificationForRow(row); } catch (err) { Logger.log('Telegram notification error: ' + err.toString()); }
-    }
-
-    // Email seller when creator confirms this timeslot
-    if (String(data.status) === 'confirmed') {
-      try { sendEmailToSeller_CreatorConfirmed(row); } catch (err) { Logger.log('Email notification error: ' + err.toString()); }
-    }
-
-    // Telegram notification to creator when seller marks sample as sent
-    if (data.sampleSentAt) {
-      try { sendSampleSentNotification(row); } catch (err) { Logger.log('Sample sent notification error: ' + err.toString()); }
-    }
-
-    // Telegram notification to creator when seller undoes sample sent
-    if (data.sampleSentAt === '') {
-      try { sendSampleUndoNotification(row); } catch (err) { Logger.log('Sample undo notification error: ' + err.toString()); }
-    }
-
-    // Sync Telegram button with sampleReceivedAt state
-    if (data.sampleReceivedAt || data.sampleReceivedAt === '') {
-      try {
-        var props = PropertiesService.getScriptProperties();
-        var stored = props.getProperty('sampleMsg_' + id);
-        if (stored) {
-          var parts = stored.split(':');
-          var tgChatId = parts[0];
-          var tgMsgId = parseInt(parts[1], 10);
-          if (data.sampleReceivedAt) {
-            // Confirmed — remove button
-            telegramSend('editMessageReplyMarkup', {
-              chat_id: tgChatId,
-              message_id: tgMsgId,
-              reply_markup: JSON.stringify({ inline_keyboard: [] })
-            });
-          } else {
-            // Undone — restore button
-            telegramSend('editMessageReplyMarkup', {
-              chat_id: tgChatId,
-              message_id: tgMsgId,
-              reply_markup: JSON.stringify({
-                inline_keyboard: [
-                  [{ text: '✅ I\'ve Received the Samples', callback_data: 'sample_received_' + id }]
-                ]
-              })
-            });
-          }
-        }
-      } catch (err) {
-        Logger.log('Could not sync Telegram sample button: ' + err.toString());
-      }
-    }
-  }
-
-  return { success: success };
-}
-
-// Update all creator application rows sharing a groupId (used for status changes: approve/reject/confirm)
-function updateCreatorApplicationsByGroupId(groupId, data) {
-  var sheet = getSheet('CreatorApplications');
-  var allRows = sheetToObjects(sheet);
-  var groupRows = allRows.filter(function(r) { return String(r.groupId) === String(groupId); });
-
-  var anySuccess = false;
-  groupRows.forEach(function(row) {
-    if (updateRowById(sheet, row.id, data)) anySuccess = true;
-  });
-
-  // Send Telegram notification when approved — one message per group
-  if (anySuccess && String(data.status) === 'approved' && groupRows.length > 0) {
+  // Send Telegram notification when application is approved
+  if (success && String(data.status) === 'approved') {
     try {
-      sendApprovalNotification(groupId, groupRows);
+      var apps = sheetToObjects(sheet);
+      var app = null;
+      for (var i = 0; i < apps.length; i++) {
+        if (String(apps[i].id) === String(id)) { app = apps[i]; break; }
+      }
+      if (app) {
+        sendApprovalNotification(app);
+      }
     } catch (err) {
       Logger.log('Telegram notification error: ' + err.toString());
     }
   }
 
-  // Email seller when creator confirms — once per group
-  if (anySuccess && String(data.status) === 'confirmed' && groupRows.length > 0) {
+  // Email seller when creator confirms slot
+  if (success && String(data.status) === 'confirmed') {
     try {
-      sendEmailToSeller_CreatorConfirmed(groupRows[0]);
+      var allApps = sheetToObjects(sheet);
+      var confirmedApp = null;
+      for (var j = 0; j < allApps.length; j++) {
+        if (String(allApps[j].id) === String(id)) { confirmedApp = allApps[j]; break; }
+      }
+      if (confirmedApp) {
+        sendEmailToSeller_CreatorConfirmed(confirmedApp);
+      }
     } catch (err) {
       Logger.log('Email notification error: ' + err.toString());
     }
   }
 
-  return { success: anySuccess, count: groupRows.length };
+  return { success: success };
 }
 
 // Delete slot
@@ -919,213 +822,189 @@ function handleTelegramUpdate(update) {
   }
 }
 
-// Handle inline button callback — callback data is "confirm_<id>" or "reject_<id>"
-// id can be a row id (per-row approval) or a groupId (legacy group-level approval)
+// Handle inline button callback (Confirm Slot)
 function handleTelegramCallback(callback) {
-  var data = callback.data;
+  var data = callback.data; // e.g. "confirm_abc123xyz"
   var chatId = callback.message.chat.id;
-  var sheet = getSheet('CreatorApplications');
-  var allRows = sheetToObjects(sheet);
-
-  // Helper: resolve id to rows — try single row first, fall back to groupId
-  function resolveRows(id) {
-    var singleRow = null;
-    for (var i = 0; i < allRows.length; i++) {
-      if (String(allRows[i].id) === String(id)) { singleRow = allRows[i]; break; }
-    }
-    if (singleRow) return [singleRow];
-    return allRows.filter(function(r) { return String(r.groupId) === String(id); });
-  }
 
   if (data && data.indexOf('confirm_') === 0) {
-    var id = data.substring(8);
-    var groupRows = resolveRows(id);
+    var appId = data.substring(8);
 
-    if (groupRows.length === 0) {
+    // Verify the application exists and is in 'approved' status
+    var sheet = getSheet('CreatorApplications');
+    var apps = sheetToObjects(sheet);
+    var app = null;
+    for (var i = 0; i < apps.length; i++) {
+      if (String(apps[i].id) === String(appId)) { app = apps[i]; break; }
+    }
+
+    if (!app) {
       telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: 'Application not found.', show_alert: true });
       return;
     }
 
-    if (groupRows.every(function(r) { return String(r.status) === 'confirmed'; })) {
+    if (String(app.status) === 'confirmed') {
       telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: 'This slot is already confirmed!', show_alert: true });
-      telegramSend('editMessageText', { chat_id: chatId, message_id: callback.message.message_id, text: callback.message.text + '\n\n✅ CONFIRMED', parse_mode: 'HTML' });
+      // Update the message to show confirmed
+      telegramSend('editMessageText', {
+        chat_id: chatId,
+        message_id: callback.message.message_id,
+        text: callback.message.text + '\n\n✅ CONFIRMED',
+        parse_mode: 'HTML'
+      });
       return;
     }
 
-    if (!groupRows.some(function(r) { return String(r.status) === 'approved'; })) {
+    if (String(app.status) !== 'approved') {
       telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: 'This application is no longer pending confirmation.', show_alert: true });
       return;
     }
 
-    telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: '✅ Slot confirmed!', show_alert: false });
-    telegramSend('editMessageText', { chat_id: chatId, message_id: callback.message.message_id, text: callback.message.text + '\n\n✅ SLOT CONFIRMED — ' + new Date().toLocaleDateString('en-SG'), parse_mode: 'HTML' });
-
+    // Confirm the slot
     var confirmedAt = new Date().toISOString();
-    groupRows.forEach(function(row) { updateRowById(sheet, row.id, { status: 'confirmed', confirmedAt: confirmedAt }); });
-    try { sendEmailToSeller_CreatorConfirmed(groupRows[0]); } catch(err) { Logger.log('Email error: ' + err); }
+    updateRowById(sheet, appId, { status: 'confirmed', confirmedAt: confirmedAt });
+
+    telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: '✅ Slot confirmed!', show_alert: false });
+
+    // Update the message to show confirmed
+    telegramSend('editMessageText', {
+      chat_id: chatId,
+      message_id: callback.message.message_id,
+      text: callback.message.text + '\n\n✅ SLOT CONFIRMED — ' + new Date().toLocaleDateString('en-SG'),
+      parse_mode: 'HTML'
+    });
   }
 
   if (data && data.indexOf('reject_') === 0) {
-    var id = data.substring(7);
-    var groupRows = resolveRows(id);
+    var appId = data.substring(7);
 
-    if (groupRows.length === 0) {
+    // Verify the application exists and is in 'approved' status
+    var sheet = getSheet('CreatorApplications');
+    var apps = sheetToObjects(sheet);
+    var app = null;
+    for (var i = 0; i < apps.length; i++) {
+      if (String(apps[i].id) === String(appId)) { app = apps[i]; break; }
+    }
+
+    if (!app) {
       telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: 'Application not found.', show_alert: true });
       return;
     }
 
-    if (groupRows.every(function(r) { return String(r.status) === 'rejected'; })) {
+    if (String(app.status) === 'rejected') {
       telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: 'This slot is already rejected.', show_alert: true });
-      telegramSend('editMessageText', { chat_id: chatId, message_id: callback.message.message_id, text: callback.message.text + '\n\n❌ REJECTED', parse_mode: 'HTML' });
+      telegramSend('editMessageText', {
+        chat_id: chatId,
+        message_id: callback.message.message_id,
+        text: callback.message.text + '\n\n❌ REJECTED',
+        parse_mode: 'HTML'
+      });
       return;
     }
 
-    if (groupRows.some(function(r) { return String(r.status) === 'confirmed'; })) {
+    if (String(app.status) === 'confirmed') {
       telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: 'This slot is already confirmed and cannot be rejected.', show_alert: true });
       return;
     }
 
-    if (!groupRows.some(function(r) { return String(r.status) === 'approved'; })) {
+    if (String(app.status) !== 'approved') {
       telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: 'This application is no longer pending confirmation.', show_alert: true });
       return;
     }
 
-    telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: '❌ Slot rejected.', show_alert: false });
-    telegramSend('editMessageText', { chat_id: chatId, message_id: callback.message.message_id, text: callback.message.text + '\n\n❌ SLOT REJECTED — ' + new Date().toLocaleDateString('en-SG'), parse_mode: 'HTML' });
-
+    // Reject the slot
     var rejectedAt = new Date().toISOString();
-    groupRows.forEach(function(row) { updateRowById(sheet, row.id, { status: 'rejected', rejectedAt: rejectedAt, rejectedBy: 'creator' }); });
-  }
+    updateRowById(sheet, appId, { status: 'rejected', rejectedAt: rejectedAt, rejectedBy: 'creator' });
 
-  if (data && data.indexOf('sample_received_') === 0 && data.indexOf('sample_received_undo_') !== 0) {
-    // Answer immediately to dismiss Telegram's loading spinner (prevents user from double-tapping)
-    telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: '' });
+    telegramSend('answerCallbackQuery', { callback_query_id: callback.id, text: '❌ Slot rejected.', show_alert: false });
 
-    var rowId = data.substring(16);
-    var row = null;
-    for (var i = 0; i < allRows.length; i++) {
-      if (String(allRows[i].id) === String(rowId)) { row = allRows[i]; break; }
-    }
-
-    if (!row) {
-      telegramSend('sendMessage', { chat_id: chatId, text: '⚠️ Record not found.' });
-      return;
-    }
-
-    // Block if seller has since undone the sample dispatch
-    if (!row.sampleSentAt) {
-      telegramSend('editMessageReplyMarkup', {
-        chat_id: chatId,
-        message_id: callback.message.message_id,
-        reply_markup: JSON.stringify({ inline_keyboard: [] })
-      });
-      telegramSend('sendMessage', { chat_id: chatId, text: '⚠️ This notification is outdated — the sample dispatch was cancelled. You will be notified again once samples are on the way.' });
-      return;
-    }
-
-    // Use a lock to prevent duplicate writes from spam clicks
-    var lock = LockService.getScriptLock();
-    try {
-      lock.waitLock(5000);
-    } catch (e) {
-      telegramSend('sendMessage', { chat_id: chatId, text: '⚠️ Please wait a moment and try again.' });
-      return;
-    }
-
-    // Re-fetch the row inside the lock to get the latest state
-    var freshRows = sheetToObjects(sheet);
-    var freshRow = null;
-    for (var j = 0; j < freshRows.length; j++) {
-      if (String(freshRows[j].id) === String(rowId)) { freshRow = freshRows[j]; break; }
-    }
-
-    if (freshRow && freshRow.sampleReceivedAt) {
-      lock.releaseLock();
-      telegramSend('sendMessage', { chat_id: chatId, text: 'ℹ️ You have already confirmed receipt of these samples.' });
-      return;
-    }
-    var receivedAt = new Date().toISOString();
-    var confirmedDateStr = new Date().toLocaleDateString('en-SG');
+    // Update the message to show rejected
     telegramSend('editMessageText', {
       chat_id: chatId,
       message_id: callback.message.message_id,
-      text: callback.message.text + '\n\n✅ SAMPLES RECEIVED — ' + confirmedDateStr + '\n\nTo undo this, please log in to the app.',
-      reply_markup: JSON.stringify({ inline_keyboard: [] })
+      text: callback.message.text + '\n\n❌ SLOT REJECTED — ' + new Date().toLocaleDateString('en-SG'),
+      parse_mode: 'HTML'
     });
-
-    updateRowById(sheet, row.id, { sampleReceivedAt: receivedAt });
-    lock.releaseLock();
   }
 }
 
-// Handle text "Confirm" reply — confirm pending group(s) for this user
+// Handle text "Confirm" reply — confirm the most recent pending approval for this user
 function handleTelegramTextConfirm(chatId, username) {
   var sheet = getSheet('CreatorApplications');
   var apps = sheetToObjects(sheet);
 
-  // Find approved rows for this creator, grouped by groupId
-  var groupMap = {};
-  apps.forEach(function(a) {
-    var appTelegram = String(a.telegram || '').replace('@', '').toLowerCase();
-    if (appTelegram === username && String(a.status) === 'approved') {
-      if (!groupMap[a.groupId]) groupMap[a.groupId] = [];
-      groupMap[a.groupId].push(a);
+  // Find approved apps for this creator (by telegram username)
+  var pending = [];
+  for (var i = 0; i < apps.length; i++) {
+    var appTelegram = String(apps[i].telegram || '').replace('@', '').toLowerCase();
+    if (appTelegram === username && String(apps[i].status) === 'approved') {
+      pending.push(apps[i]);
     }
-  });
-  var groupIds = Object.keys(groupMap);
+  }
 
-  if (groupIds.length === 0) {
-    telegramSend('sendMessage', { chat_id: chatId, text: 'You don\'t have any slots pending confirmation right now.' });
+  if (pending.length === 0) {
+    telegramSend('sendMessage', {
+      chat_id: chatId,
+      text: 'You don\'t have any slots pending confirmation right now.'
+    });
     return;
   }
 
-  if (groupIds.length === 1) {
+  if (pending.length === 1) {
+    // Confirm the single pending app
     var confirmedAt = new Date().toISOString();
-    var rows = groupMap[groupIds[0]];
-    rows.forEach(function(row) { updateRowById(sheet, row.id, { status: 'confirmed', confirmedAt: confirmedAt }); });
-    try { sendEmailToSeller_CreatorConfirmed(rows[0]); } catch(err) { Logger.log('Email error: ' + err); }
-    telegramSend('sendMessage', { chat_id: chatId, text: '✅ Slot confirmed for ' + (rows[0].brandName || rows[0].shopName) + '!\n\nThank you!' });
+    updateRowById(sheet, pending[0].id, { status: 'confirmed', confirmedAt: confirmedAt });
+    telegramSend('sendMessage', {
+      chat_id: chatId,
+      text: '✅ Slot confirmed for ' + (pending[0].brandName || pending[0].shopName) + '!\n\nThank you!'
+    });
     return;
   }
 
+  // Multiple pending — ask them to use the buttons
   telegramSend('sendMessage', {
     chat_id: chatId,
-    text: 'You have ' + groupIds.length + ' pending confirmations. Please use the "Confirm Slot" buttons in the notification messages above, or log in to the app to confirm individually.'
+    text: 'You have ' + pending.length + ' slots pending confirmation. Please use the "Confirm Slot" buttons in the notification messages above, or log in to the app to confirm individually.'
   });
 }
 
-// Handle text "Reject" reply — reject pending group(s) for this user
+// Handle text "Reject" reply — reject the most recent pending approval for this user
 function handleTelegramTextReject(chatId, username) {
   var sheet = getSheet('CreatorApplications');
   var apps = sheetToObjects(sheet);
 
-  // Find approved rows for this creator, grouped by groupId
-  var groupMap = {};
-  apps.forEach(function(a) {
-    var appTelegram = String(a.telegram || '').replace('@', '').toLowerCase();
-    if (appTelegram === username && String(a.status) === 'approved') {
-      if (!groupMap[a.groupId]) groupMap[a.groupId] = [];
-      groupMap[a.groupId].push(a);
+  // Find approved apps for this creator (by telegram username)
+  var pending = [];
+  for (var i = 0; i < apps.length; i++) {
+    var appTelegram = String(apps[i].telegram || '').replace('@', '').toLowerCase();
+    if (appTelegram === username && String(apps[i].status) === 'approved') {
+      pending.push(apps[i]);
     }
-  });
-  var groupIds = Object.keys(groupMap);
+  }
 
-  if (groupIds.length === 0) {
-    telegramSend('sendMessage', { chat_id: chatId, text: 'You don\'t have any slots pending confirmation right now.' });
+  if (pending.length === 0) {
+    telegramSend('sendMessage', {
+      chat_id: chatId,
+      text: 'You don\'t have any slots pending confirmation right now.'
+    });
     return;
   }
 
-  if (groupIds.length === 1) {
+  if (pending.length === 1) {
+    // Reject the single pending app
     var rejectedAt = new Date().toISOString();
-    var rows = groupMap[groupIds[0]];
-    rows.forEach(function(row) { updateRowById(sheet, row.id, { status: 'rejected', rejectedAt: rejectedAt, rejectedBy: 'creator' }); });
-    telegramSend('sendMessage', { chat_id: chatId, text: '❌ Slot rejected for ' + (rows[0].brandName || rows[0].shopName) + '.\n\nThe slot is now available for other creators.' });
+    updateRowById(sheet, pending[0].id, { status: 'rejected', rejectedAt: rejectedAt, rejectedBy: 'creator' });
+    telegramSend('sendMessage', {
+      chat_id: chatId,
+      text: '❌ Slot rejected for ' + (pending[0].brandName || pending[0].shopName) + '.\n\nThe slot is now available for other creators.'
+    });
     return;
   }
 
+  // Multiple pending — ask them to use the buttons
   telegramSend('sendMessage', {
     chat_id: chatId,
-    text: 'You have ' + groupIds.length + ' pending confirmations. Please use the buttons in the notification messages above, or log in to the app to confirm or reject individually.'
+    text: 'You have ' + pending.length + ' slots pending confirmation. Please use the buttons in the notification messages above, or log in to the app to confirm or reject individually.'
   });
 }
 
@@ -1166,162 +1045,34 @@ function getTelegramChatId(telegramUsername) {
   return null;
 }
 
-// Format a YYYY-MM-DD date string as DD MMM YYYY
-function formatDateDDMMMYYYY(dateStr) {
-  if (!dateStr) return '';
-  var parts = String(dateStr).split('-');
-  if (parts.length !== 3) return dateStr;
-  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var day = parts[2];
-  var month = months[parseInt(parts[1], 10) - 1] || parts[1];
-  var year = parts[0];
-  return day + ' ' + month + ' ' + year;
-}
-
-// Send approval notification for a single timeslot row (per-row approval flow)
-function sendApprovalNotificationForRow(row) {
-  var chatId = getTelegramChatId(row.telegram);
-  if (!chatId) {
-    Logger.log('No Telegram chatId found for: ' + row.telegram);
-    return false;
-  }
-
-  var time = row.streamTime || '';
-  if (row.streamEndTime) time += ' – ' + row.streamEndTime;
-  var slotText = '📅 ' + formatDateDDMMMYYYY(row.streamDate) + (time ? ' ' + time : '');
-
-  var message = '🎬 <b>Your application has been approved!</b>\n\n'
-    + '🏪 <b>Shop:</b> ' + (row.brandName || row.shopName) + '\n'
-    + slotText + '\n'
-    + '📦 <b>Shipping Address:</b> ' + (row.shippingAddress || 'N/A') + '\n\n'
-    + 'Please confirm your slot by clicking the button below, or log in to the app.';
-
-  telegramSend('sendMessage', {
-    chat_id: chatId,
-    text: message,
-    parse_mode: 'HTML',
-    reply_markup: JSON.stringify({
-      inline_keyboard: [
-        [{ text: '✅ Confirm Slot', callback_data: 'confirm_' + row.id }],
-        [{ text: '❌ Reject Slot', callback_data: 'reject_' + row.id }]
-      ]
-    })
-  });
-
-  return true;
-}
-
-// Send sample-sent notification to creator via Telegram
-function sendSampleSentNotification(row) {
-  var chatId = getTelegramChatId(row.telegram);
-  if (!chatId) {
-    Logger.log('No Telegram chatId found for: ' + row.telegram);
-    return false;
-  }
-
-  var shopName = row.brandName || row.shopName || 'The brand';
-  var time = row.streamTime || '';
-  if (row.streamEndTime) time += ' – ' + row.streamEndTime;
-  var slotText = formatDateDDMMMYYYY(row.streamDate) + (time ? ' ' + time : '');
-
-  var message = '📦 <b>Samples have been dispatched!</b>\n\n'
-    + '<b>' + shopName + '</b> has sent out the samples for the livestream on <b>' + slotText + '</b>.\n\n'
-    + 'Kindly confirm that you have received the samples once they have arrived by clicking the button below, or log in to the app.';
-
-  var resp = telegramSend('sendMessage', {
-    chat_id: chatId,
-    text: message,
-    parse_mode: 'HTML',
-    reply_markup: JSON.stringify({
-      inline_keyboard: [
-        [{ text: '✅ I\'ve Received the Samples', callback_data: 'sample_received_' + row.id }]
-      ]
-    })
-  });
-
-  // Store message_id so we can remove the button if the brand undoes the dispatch
-  try {
-    var respData = JSON.parse(resp.getContentText());
-    if (respData.ok && respData.result && respData.result.message_id) {
-      PropertiesService.getScriptProperties().setProperty(
-        'sampleMsg_' + row.id,
-        chatId + ':' + respData.result.message_id
-      );
-    }
-  } catch (err) {
-    Logger.log('Could not store sample message_id: ' + err.toString());
-  }
-
-  return true;
-}
-
-// Send sample undo notification to creator via Telegram
-function sendSampleUndoNotification(row) {
-  var chatId = getTelegramChatId(row.telegram);
-  if (!chatId) {
-    Logger.log('No Telegram chatId found for: ' + row.telegram);
-    return false;
-  }
-
-  // Remove the button from the original sample-sent message
-  var props = PropertiesService.getScriptProperties();
-  var stored = props.getProperty('sampleMsg_' + row.id);
-  if (stored) {
-    var parts = stored.split(':');
-    var storedChatId = parts[0];
-    var storedMsgId = parts[1];
-    try {
-      telegramSend('editMessageReplyMarkup', {
-        chat_id: storedChatId,
-        message_id: parseInt(storedMsgId, 10),
-        reply_markup: JSON.stringify({ inline_keyboard: [] })
-      });
-    } catch (err) {
-      Logger.log('Could not remove sample button: ' + err.toString());
-    }
-    props.deleteProperty('sampleMsg_' + row.id);
-  }
-
-  var shopName = row.brandName || row.shopName || 'The brand';
-  var time = row.streamTime || '';
-  if (row.streamEndTime) time += ' – ' + row.streamEndTime;
-  var slotText = formatDateDDMMMYYYY(row.streamDate) + (time ? ' ' + time : '');
-
-  var message = 'ℹ️ <b>Sample dispatch update</b>\n\n'
-    + 'Hi, there was an update — please disregard the previous sample dispatch notification for <b>' + shopName + '\'s</b> livestream on <b>' + slotText + '</b>.\n\n'
-    + 'We\'ll notify you again once the samples are on the way.';
-
-  telegramSend('sendMessage', {
-    chat_id: chatId,
-    text: message,
-    parse_mode: 'HTML'
-  });
-
-  return true;
-}
-
 // Send approval notification to creator via Telegram
-// rows = array of all CA rows sharing the same groupId (legacy group-level flow)
-function sendApprovalNotification(groupId, rows) {
-  if (!rows || rows.length === 0) return false;
-  var firstRow = rows[0];
-  var telegramUsername = firstRow.telegram;
+function sendApprovalNotification(creatorApp) {
+  var telegramUsername = creatorApp.telegram;
   var chatId = getTelegramChatId(telegramUsername);
   if (!chatId) {
     Logger.log('No Telegram chatId found for: ' + telegramUsername);
     return false;
   }
 
-  var slotsText = rows.map(function(r) {
-    var time = r.streamTime || '';
-    if (r.streamEndTime) time += ' – ' + r.streamEndTime;
-    return '📅 ' + formatDateDDMMMYYYY(r.streamDate) + (time ? ' ' + time : '');
-  }).join('\n');
+  // Parse timeslots for display
+  var slotsText = '';
+  try {
+    var slots = JSON.parse(creatorApp.streamDate);
+    if (Array.isArray(slots)) {
+      slotsText = slots.map(function(s) {
+        var time = s.startTime || '';
+        if (s.endTime) time += ' – ' + s.endTime;
+        return '📅 ' + s.date + ' ' + time;
+      }).join('\n');
+    }
+  } catch (e) {
+    slotsText = '📅 ' + String(creatorApp.streamDate || '') + ' ' + String(creatorApp.streamTime || '');
+  }
 
   var message = '🎬 <b>Your application has been approved!</b>\n\n'
-    + '🏪 <b>Shop:</b> ' + (firstRow.brandName || firstRow.shopName) + '\n'
+    + '🏪 <b>Shop:</b> ' + (creatorApp.brandName || creatorApp.shopName) + '\n'
     + slotsText + '\n'
-    + '📦 <b>Shipping Address:</b> ' + (firstRow.shippingAddress || 'N/A') + '\n\n'
+    + '📦 <b>Shipping Address:</b> ' + (creatorApp.shippingAddress || 'N/A') + '\n\n'
     + 'Please confirm your slot by clicking the button below, or log in to the app.';
 
   telegramSend('sendMessage', {
@@ -1330,8 +1081,8 @@ function sendApprovalNotification(groupId, rows) {
     parse_mode: 'HTML',
     reply_markup: JSON.stringify({
       inline_keyboard: [
-        [{ text: '✅ Confirm Slot', callback_data: 'confirm_' + groupId }],
-        [{ text: '❌ Reject Slot', callback_data: 'reject_' + groupId }]
+        [{ text: '✅ Confirm Slot', callback_data: 'confirm_' + creatorApp.id }],
+        [{ text: '❌ Reject Slot', callback_data: 'reject_' + creatorApp.id }]
       ]
     })
   });
@@ -1454,10 +1205,18 @@ function sendEmailToSeller_CreatorConfirmed(creatorApp) {
   }
   if (!brandApp || !brandApp.sellerPicEmail) return;
 
-  // Build slot display — each row has flat streamDate/streamTime/streamEndTime fields
-  var slotsText = String(creatorApp.streamDate || '');
-  if (creatorApp.streamTime) slotsText += ' ' + creatorApp.streamTime;
-  if (creatorApp.streamEndTime) slotsText += ' – ' + creatorApp.streamEndTime;
+  // Parse timeslots for display
+  var slotsText = '';
+  try {
+    var slots = JSON.parse(creatorApp.streamDate);
+    if (Array.isArray(slots)) {
+      slotsText = slots.map(function(s) {
+        return s.date + ' ' + (s.startTime || '') + (s.endTime ? ' - ' + s.endTime : '');
+      }).join('\n');
+    }
+  } catch(e) {
+    slotsText = String(creatorApp.streamDate || '') + ' ' + String(creatorApp.streamTime || '');
+  }
 
   var subject = '[Shopee Live Creator Match] Creator Confirmed - ' + (creatorApp.creatorName || '');
   var body = 'A creator has confirmed their livestream slot.\n\n'

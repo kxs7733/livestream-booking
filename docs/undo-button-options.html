@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Undo Button Options</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 32px 24px; color: #333; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 14px; color: #888; margin-bottom: 32px; }
+    .options { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+    .option { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .option-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #aaa; margin-bottom: 16px; }
+    .option-title { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 16px; }
+    .divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+
+    /* Shared "Sample Sent" badge */
+    .sample-sent-badge {
+      background: #e8f5e9; color: #27ae60;
+      border-radius: 6px; padding: 6px 14px;
+      font-size: 13px; font-weight: 600;
+    }
+    .sent-date { font-size: 12px; color: #999; }
+
+    /* Option A — Icon button */
+    .undo-icon-btn {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 1px solid #ddd; background: #f9f9f9;
+      color: #999; font-size: 14px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .undo-icon-btn:hover { background: #eee; color: #555; }
+
+    /* Option B — Red text link */
+    .undo-red-link {
+      background: none; border: none;
+      font-size: 12px; color: #e74c3c;
+      cursor: pointer; padding: 0;
+      font-weight: 500;
+    }
+    .undo-red-link:hover { text-decoration: underline; }
+
+    /* Option C — Dashed pill */
+    .undo-dashed-pill {
+      background: none;
+      border: 1.5px dashed #bbb;
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px; color: #888;
+      cursor: pointer;
+    }
+    .undo-dashed-pill:hover { border-color: #999; color: #555; }
+
+    /* Option D — Inline footnote style */
+    .undo-footnote {
+      background: none; border: none;
+      font-size: 12px; color: #aaa;
+      cursor: pointer; padding: 0;
+    }
+    .undo-footnote:hover { color: #777; }
+
+    /* Option E — Outlined secondary button */
+    .undo-outlined-btn {
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 12px; color: #666;
+      cursor: pointer; font-weight: 500;
+    }
+    .undo-outlined-btn:hover { border-color: #999; color: #333; background: #f9f9f9; }
+
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+  <h1>Undo Button Options</h1>
+  <p class="subtitle">After brand marks sample as sent — how should the "undo" action look?</p>
+
+  <div class="options">
+
+    <!-- Option A -->
+    <div class="option">
+      <div class="option-label">Option A</div>
+      <div class="option-title">Subtle icon button</div>
+      <hr class="divider">
+      <div class="row">
+        <span class="sample-sent-badge">✓ Sample Sent</span>
+        <span class="sent-date">12 Jan 2026</span>
+        <button class="undo-icon-btn" title="Mark as not sent">↩</button>
+      </div>
+    </div>
+
+    <!-- Option B -->
+    <div class="option">
+      <div class="option-label">Option B</div>
+      <div class="option-title">Red text link</div>
+      <hr class="divider">
+      <div class="row">
+        <span class="sample-sent-badge">✓ Sample Sent</span>
+        <span class="sent-date">12 Jan 2026</span>
+        <button class="undo-red-link">× Mark as Unsent</button>
+      </div>
+    </div>
+
+    <!-- Option C -->
+    <div class="option">
+      <div class="option-label">Option C</div>
+      <div class="option-title">Dashed pill</div>
+      <hr class="divider">
+      <div class="row">
+        <span class="sample-sent-badge">✓ Sample Sent</span>
+        <span class="sent-date">12 Jan 2026</span>
+        <button class="undo-dashed-pill">↩ Not sent yet?</button>
+      </div>
+    </div>
+
+    <!-- Option D -->
+    <div class="option">
+      <div class="option-label">Option D</div>
+      <div class="option-title">Inline footnote</div>
+      <hr class="divider">
+      <div class="row">
+        <span class="sample-sent-badge">✓ Sample Sent</span>
+        <span class="sent-date">12 Jan 2026</span>
+        <button class="undo-footnote">[↩ Undo]</button>
+      </div>
+    </div>
+
+    <!-- Option E -->
+    <div class="option">
+      <div class="option-label">Option E</div>
+      <div class="option-title">Outlined secondary button</div>
+      <hr class="divider">
+      <div class="row">
+        <span class="sample-sent-badge">✓ Sample Sent</span>
+        <span class="sent-date">12 Jan 2026</span>
+        <button class="undo-outlined-btn">↩ Revert</button>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

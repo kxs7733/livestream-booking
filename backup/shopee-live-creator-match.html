@@ -40,7 +40,6 @@
       color: #fff; font-weight: 500; z-index: 1000;
       animation: slideIn 0.3s ease;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      max-width: calc(100% - 40px);
     }
     .notification.success { background: linear-gradient(135deg, #2ed573 0%, #26c066 100%); }
     .notification.error { background: linear-gradient(135deg, #ff4757 0%, #EE4D2D 100%); }
@@ -408,15 +407,6 @@
     /* Mobile Responsive        */
     /* ======================== */
 
-    /* Timeslot row remove button */
-    .timeslot-remove-btn {
-      background: none; border: none; color: #ff4757; font-size: 18px; cursor: pointer;
-      padding: 4px 8px; min-width: 36px; min-height: 36px;
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-      border-radius: 4px;
-    }
-    .timeslot-remove-btn:hover { background: #fff0f0; }
-
     @media (max-width: 768px) {
       /* Header */
       .header { padding: 12px 16px; }
@@ -489,47 +479,16 @@
 
       /* Modal */
       .brand-detail-modal { padding: 20px 16px; width: 95%; }
-
-      /* Role card arrow — hide to prevent overlap on narrow screens */
-      .role-arrow { display: none; }
-
-      /* Notification — stretch across top instead of corner */
-      .notification { left: 16px; right: 16px; top: 16px; text-align: center; }
-
-      /* Touch targets — all primary/secondary buttons must be at least 44px tall */
-      .btn-primary, .btn-secondary { min-height: 44px; }
-      .timeslot-remove-btn { min-width: 44px; min-height: 44px; font-size: 20px; }
-      .status-filter-pill { min-height: 44px; padding: 8px 14px !important; }
-
-      /* Date highlight pill — prevent overflow on narrow screens */
-      .stream-date-pill { white-space: normal !important; word-break: break-word; max-width: 100%; }
-
-      /* Filter tabs — override inline padding so class rule wins */
-      .filter-tab, .admin-tab { padding: 10px 14px !important; font-size: 13px !important; }
     }
 
     @media (max-width: 480px) {
       .hero-title { font-size: 24px; }
       .hero-subtitle { font-size: 14px; }
-      .hero-section { margin-bottom: 28px; }
       .header-right { gap: 10px; }
       .user-name { max-width: 80px; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .form-section-title { font-size: 12px; }
       .login-icon { width: 56px; height: 56px; font-size: 26px; }
-
-      /* More aggressive padding reduction on smallest screens */
-      .main { padding: 16px 12px; }
-      .login-card { padding: 20px 14px; }
-      .app-card { padding: 14px 12px; }
-      .form-container { padding: 16px 12px; }
-
-      /* Single-column stats on very small phones */
-      .stats-grid { grid-template-columns: 1fr; }
-
-      /* Ensure role cards stack properly */
-      .card-grid { gap: 12px; }
-      .role-card { padding: 22px 18px; }
     }
   </style>
 </head>
@@ -573,7 +532,6 @@
       creatorTab: 'available',
       internalTab: 'brand-apps',
       showBrandForm: false,
-      brandFormDraft: null,
       showCreatorApplyForm: null, // brandApplicationId to apply for
       expandedCards: {}, // cardId -> bool
       calendarMonth: new Date().getMonth(),
@@ -583,12 +541,10 @@
       profileEditMode: false,
       creatorCategoryFilter: 'all',
       isSubmitting: false,
-      confirmingGroupId: null,
+      confirmingAppId: null,
       isLoading: false,
       internalCalendarStatusFilter: { confirmed: true, approved: true, pending: true },
       confirmedSlotsFilters: { shopName: '', creatorUsername: '', category: '', dateFrom: '', dateTo: '', month: '', rm: '' },
-      brandAppStatusFilter: 'pending',
-      creatorAppStatusFilter: 'pending',
     };
 
     // Utilities
@@ -597,83 +553,84 @@
     // Country codes list (sorted alphabetically, SG first as default)
     const countryCodes = [
       { code: '65', label: '+65 SG' },
-      { code: '60', label: '+60 MY' },
-      { code: '971', label: '+971 AE' },
       { code: '93', label: '+93 AF' },
       { code: '355', label: '+355 AL' },
       { code: '213', label: '+213 DZ' },
       { code: '54', label: '+54 AR' },
-      { code: '43', label: '+43 AT' },
       { code: '61', label: '+61 AU' },
+      { code: '43', label: '+43 AT' },
+      { code: '973', label: '+973 BH' },
       { code: '880', label: '+880 BD' },
       { code: '32', label: '+32 BE' },
-      { code: '673', label: '+673 BN' },
       { code: '55', label: '+55 BR' },
-      { code: '1', label: '+1 US/CA' },
+      { code: '673', label: '+673 BN' },
       { code: '855', label: '+855 KH' },
-      { code: '41', label: '+41 CH' },
+      { code: '1', label: '+1 US/CA' },
       { code: '56', label: '+56 CL' },
       { code: '86', label: '+86 CN' },
       { code: '57', label: '+57 CO' },
       { code: '420', label: '+420 CZ' },
-      { code: '49', label: '+49 DE' },
       { code: '45', label: '+45 DK' },
       { code: '20', label: '+20 EG' },
-      { code: '34', label: '+34 ES' },
       { code: '251', label: '+251 ET' },
       { code: '358', label: '+358 FI' },
       { code: '33', label: '+33 FR' },
+      { code: '49', label: '+49 DE' },
       { code: '233', label: '+233 GH' },
       { code: '30', label: '+30 GR' },
       { code: '852', label: '+852 HK' },
       { code: '36', label: '+36 HU' },
+      { code: '354', label: '+354 IS' },
+      { code: '91', label: '+91 IN' },
       { code: '62', label: '+62 ID' },
+      { code: '98', label: '+98 IR' },
+      { code: '964', label: '+964 IQ' },
       { code: '353', label: '+353 IE' },
       { code: '972', label: '+972 IL' },
-      { code: '91', label: '+91 IN' },
-      { code: '964', label: '+964 IQ' },
-      { code: '98', label: '+98 IR' },
-      { code: '354', label: '+354 IS' },
       { code: '39', label: '+39 IT' },
-      { code: '962', label: '+962 JO' },
       { code: '81', label: '+81 JP' },
+      { code: '962', label: '+962 JO' },
       { code: '254', label: '+254 KE' },
       { code: '82', label: '+82 KR' },
       { code: '965', label: '+965 KW' },
       { code: '856', label: '+856 LA' },
       { code: '961', label: '+961 LB' },
-      { code: '94', label: '+94 LK' },
-      { code: '212', label: '+212 MA' },
-      { code: '95', label: '+95 MM' },
-      { code: '976', label: '+976 MN' },
       { code: '853', label: '+853 MO' },
+      { code: '60', label: '+60 MY' },
       { code: '960', label: '+960 MV' },
       { code: '52', label: '+52 MX' },
+      { code: '976', label: '+976 MN' },
+      { code: '212', label: '+212 MA' },
+      { code: '95', label: '+95 MM' },
       { code: '977', label: '+977 NP' },
       { code: '31', label: '+31 NL' },
-      { code: '47', label: '+47 NO' },
       { code: '64', label: '+64 NZ' },
       { code: '234', label: '+234 NG' },
+      { code: '47', label: '+47 NO' },
       { code: '968', label: '+968 OM' },
+      { code: '92', label: '+92 PK' },
       { code: '51', label: '+51 PE' },
       { code: '63', label: '+63 PH' },
-      { code: '92', label: '+92 PK' },
       { code: '48', label: '+48 PL' },
       { code: '351', label: '+351 PT' },
       { code: '974', label: '+974 QA' },
       { code: '40', label: '+40 RO' },
       { code: '7', label: '+7 RU' },
       { code: '966', label: '+966 SA' },
+      { code: '27', label: '+27 ZA' },
+      { code: '34', label: '+34 ES' },
+      { code: '94', label: '+94 LK' },
       { code: '46', label: '+46 SE' },
+      { code: '41', label: '+41 CH' },
       { code: '886', label: '+886 TW' },
+      { code: '255', label: '+255 TZ' },
       { code: '66', label: '+66 TH' },
       { code: '90', label: '+90 TR' },
-      { code: '255', label: '+255 TZ' },
-      { code: '380', label: '+380 UA' },
       { code: '256', label: '+256 UG' },
+      { code: '380', label: '+380 UA' },
+      { code: '971', label: '+971 AE' },
       { code: '44', label: '+44 UK' },
       { code: '84', label: '+84 VN' },
-      { code: '27', label: '+27 ZA' },
     ];
 
     // Combine country code + local number into digits-only string (e.g. "6592349765")
@@ -720,29 +677,17 @@
     };
 
     // Parse timeslots from a creator application (handles both old single-slot and new multi-slot format)
-    // Each CA row is one timeslot — streamDate/streamTime/streamEndDate/streamEndTime are plain fields
     const getTimeslots = (app) => {
-      if (app.streamDate) {
-        return [{
-          date: String(app.streamDate),
-          startTime: String(app.streamTime || ''),
-          endDate: String(app.streamEndDate || app.streamDate),
-          endTime: String(app.streamEndTime || '')
-        }];
+      if (app.streamDate && typeof app.streamDate === 'string') {
+        try {
+          const parsed = JSON.parse(app.streamDate);
+          if (Array.isArray(parsed)) return parsed;
+        } catch(e) {}
+      }
+      if (app.streamDate && app.streamTime) {
+        return [{ date: String(app.streamDate), startTime: String(app.streamTime), endTime: '' }];
       }
       return [];
-    };
-
-    // Group CA rows by groupId — returns array of { groupId, rows }
-    const groupCasByGroupId = (rows) => {
-      const map = {};
-      const order = [];
-      rows.forEach(row => {
-        const gid = row.groupId || row.id; // fallback for legacy rows
-        if (!map[gid]) { map[gid] = []; order.push(gid); }
-        map[gid].push(row);
-      });
-      return order.map(gid => ({ groupId: gid, rows: map[gid] }));
     };
 
     // Get all taken timeslots for a brand (from non-rejected creator applications)
@@ -843,28 +788,6 @@
       return found ? found.Description : 'Not Found';
     };
 
-    const NOMINATION_LINK_DEFAULT = 'https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset';
-
-    // Updates the nomination link in the brand application form based on selected stream month.
-    // Looks up BusinessMappingValues where Type=ProductNominationLink, Code=YYYY-MM, Active=ACTIVE.
-    const updateNominationLink = (monthVal) => {
-      const el = document.getElementById('nomination-link');
-      if (!el) return;
-      const entry = monthVal
-        ? state.businessMappingValues.find(r => {
-            const code = String(r.Code).trim();
-            const normalizedCode = code.length > 7 ? code.substring(0, 7) : code;
-            return r.Type === 'ProductNominationLink' &&
-              normalizedCode === monthVal &&
-              String(r.Active).trim() === 'ACTIVE' &&
-              r.Description;
-          })
-        : null;
-      const url = entry ? entry.Description.trim() : NOMINATION_LINK_DEFAULT;
-      el.href = url;
-      el.textContent = url;
-    };
-
     // Look up RM by shopId from the RMs sheet
     const getRmForShop = (shopId) => {
       if (!shopId) return 'Not Found';
@@ -898,10 +821,9 @@
       }
     };
 
-
     // Upload file via POST (Base64)
     const uploadFile = async (file) => {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async () => {
           try {
@@ -918,17 +840,13 @@
               redirect: 'follow'
             });
             const text = await response.text();
-            console.log('[Upload] Status:', response.status, '| Body:', text.substring(0, 300));
-            try { resolve(JSON.parse(text)); } catch (e) {
-              console.error('[Upload] Non-JSON response:', text.substring(0, 300));
-              resolve(null);
-            }
+            try { resolve(JSON.parse(text)); } catch (e) { resolve(null); }
           } catch (err) {
-            console.error('[Upload] Fetch error:', err.message);
+            console.error('Upload error:', err);
             resolve(null);
           }
         };
-        reader.onerror = (e) => { console.error('[Upload] FileReader error:', e); resolve(null); };
+        reader.onerror = () => resolve(null);
         reader.readAsDataURL(file);
       });
     };
@@ -1062,10 +980,7 @@
       const voucherTier = form.querySelector('#f-voucher-tier').value;
       const creatorAssignmentAgreed = form.querySelector('#f-creator-assignment').checked;
       const picName = form.querySelector('#f-pic-name').value.trim();
-      const picMobile = formatPhoneForStorage(
-        document.getElementById('f-pic-mobile-code').value,
-        document.getElementById('f-pic-mobile').value.trim()
-      );
+      const picMobile = form.querySelector('#f-pic-mobile').value.trim();
       const picEmail = form.querySelector('#f-pic-email').value.trim();
 
       // Validation
@@ -1116,48 +1031,31 @@
         return;
       }
 
-      state.brandFormDraft = {
-        month,
-        streamCount: form.querySelector('#f-stream-count').value,
-        sellerType,
-        productNomConfirmed,
-        numProductsSponsored: form.querySelector('#f-num-products').value,
-        streamLocation,
-        sellerSiteAddress,
-        hasPackageActivation,
-        preferredDate: form.querySelector('#f-preferred-date').value || '',
-        amsCommission: form.querySelector('#f-ams').value,
-        bundleDealsAgreed,
-        voucherTier,
-        creatorAssignmentAgreed,
-        picName,
-        picMobileCode: document.getElementById('f-pic-mobile-code').value,
-        picMobileNumber: document.getElementById('f-pic-mobile').value.trim(),
-        picEmail,
-      };
       state.isSubmitting = true;
       state.isLoading = true;
       render();
 
       // Upload brief file
       let livestreamBrief = '';
-      const file = briefFileInput.files[0];
-      if (file.size > 10 * 1024 * 1024) {
-        state.isSubmitting = false;
-        state.isLoading = false;
-        showNotification('Brief file must be under 10 MB', 'error');
-        render();
-        return;
-      }
-      const uploadResult = await uploadFile(file);
-      if (uploadResult && uploadResult.success) {
-        livestreamBrief = uploadResult.fileUrl;
-      } else {
-        state.isSubmitting = false;
-        state.isLoading = false;
-        showNotification('Failed to upload brief file. Please try again.', 'error');
-        render();
-        return;
+      if (briefFileInput && briefFileInput.files.length > 0) {
+        const file = briefFileInput.files[0];
+        if (file.size > 10 * 1024 * 1024) {
+          state.isSubmitting = false;
+          state.isLoading = false;
+          showNotification('Brief file must be under 10 MB', 'error');
+          render();
+          return;
+        }
+        const uploadResult = await uploadFile(file);
+        if (uploadResult && uploadResult.success) {
+          livestreamBrief = uploadResult.fileUrl;
+        } else {
+          state.isSubmitting = false;
+          state.isLoading = false;
+          showNotification('Failed to upload brief file. Please try again.', 'error');
+          render();
+          return;
+        }
       }
 
       const application = {
@@ -1196,7 +1094,6 @@
         showNotification('Application submitted successfully!');
       }
       state.showBrandForm = false;
-      state.brandFormDraft = null;
       state.brandTab = 'my-applications';
       state.isSubmitting = false;
       state.isLoading = false;
@@ -1397,15 +1294,10 @@
       state.isLoading = true;
       render();
       const approvedAt = new Date().toISOString();
-      const result = await apiCall('updateBrandApplication', { id: appId, data: { status: 'approved', approvedAt } });
+      await apiCall('updateBrandApplication', { id: appId, data: { status: 'approved', approvedAt } });
+      showNotification('Brand application approved');
       state.isSubmitting = false;
       state.isLoading = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to approve. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
-      showNotification('Brand application approved');
       await loadAllData();
     };
 
@@ -1415,71 +1307,51 @@
       state.isLoading = true;
       render();
       const rejectedAt = new Date().toISOString();
-      const result = await apiCall('updateBrandApplication', { id: appId, data: { status: 'rejected', rejectedAt } });
+      await apiCall('updateBrandApplication', { id: appId, data: { status: 'rejected', rejectedAt } });
+      showNotification('Brand application rejected');
       state.isSubmitting = false;
       state.isLoading = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to reject. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
-      showNotification('Brand application rejected');
       await loadAllData();
     };
 
-    const handleApproveCreatorApp = async (caId) => {
+    const handleApproveCreatorApp = async (appId) => {
       if (state.isSubmitting) return;
       state.isSubmitting = true;
       state.isLoading = true;
       render();
       const approvedAt = new Date().toISOString();
-      const result = await apiCall('updateCreatorApplication', { id: caId, data: { status: 'approved', approvedAt } });
+      await apiCall('updateCreatorApplication', { id: appId, data: { status: 'approved', approvedAt } });
+      showNotification('Creator application approved. Notification sent to creator.');
       state.isSubmitting = false;
       state.isLoading = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to approve. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
-      showNotification('Creator application approved. Notification sent to creator.');
       await loadAllData();
     };
 
-    const handleRejectCreatorApp = async (caId) => {
+    const handleRejectCreatorApp = async (appId) => {
       if (state.isSubmitting) return;
       state.isSubmitting = true;
       state.isLoading = true;
       render();
       const rejectedAt = new Date().toISOString();
-      const result = await apiCall('updateCreatorApplication', { id: caId, data: { status: 'rejected', rejectedAt } });
+      await apiCall('updateCreatorApplication', { id: appId, data: { status: 'rejected', rejectedAt } });
+      showNotification('Creator application rejected');
       state.isSubmitting = false;
       state.isLoading = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to reject. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
-      showNotification('Creator application rejected');
       await loadAllData();
     };
 
-    const handleCreatorConfirmSlot = async (caId) => {
+    const handleCreatorConfirmSlot = async (appId) => {
       if (state.isSubmitting) return;
       state.isSubmitting = true;
-      state.confirmingGroupId = caId;
+      state.confirmingAppId = appId;
       state.isLoading = true;
       render();
       const confirmedAt = new Date().toISOString();
-      const result = await apiCall('updateCreatorApplication', { id: caId, data: { status: 'confirmed', confirmedAt } });
-      state.isSubmitting = false;
-      state.confirmingGroupId = null;
-      state.isLoading = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to confirm slot. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
+      await apiCall('updateCreatorApplication', { id: appId, data: { status: 'confirmed', confirmedAt } });
       showNotification('Slot confirmed!');
+      state.isSubmitting = false;
+      state.confirmingAppId = null;
+      state.isLoading = false;
       await loadAllData();
     };
 
@@ -1488,57 +1360,23 @@
       state.isSubmitting = true;
       render();
       const sampleSentAt = sent ? new Date().toISOString() : '';
-      const result = await apiCall('updateCreatorApplication', { id: caId, data: { sampleSentAt } });
-      state.isSubmitting = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to update. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
+      await apiCall('updateCreatorApplication', { id: caId, data: { sampleSentAt } });
       showNotification(sent ? 'Sample marked as sent!' : 'Sample status cleared.');
-      await loadAllData();
-    };
-
-    const handleCreatorMarkSampleReceived = async (caId, received) => {
-      if (state.isSubmitting) return;
-      if (received) {
-        const ca = state.creatorApplications.find(a => a.id === caId);
-        if (ca && ca.sampleReceivedAt) {
-          showNotification('Samples already marked as received.', 'error');
-          await loadAllData();
-          return;
-        }
-      }
-      state.isSubmitting = true;
-      render();
-      const sampleReceivedAt = received ? new Date().toISOString() : '';
-      const result = await apiCall('updateCreatorApplication', { id: caId, data: { sampleReceivedAt } });
       state.isSubmitting = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to update. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
-      showNotification(received ? 'Sample receipt confirmed!' : 'Receipt status cleared.');
       await loadAllData();
     };
 
-    const handleCreatorRejectSlot = async (groupId) => {
+    const handleCreatorRejectSlot = async (appId) => {
       if (state.isSubmitting) return;
       if (!confirm('Are you sure you want to reject this slot? It will be opened up for other creators.')) return;
       state.isSubmitting = true;
       state.isLoading = true;
       render();
       const rejectedAt = new Date().toISOString();
-      const result = await apiCall('updateCreatorApplicationsByGroupId', { groupId, data: { status: 'rejected', rejectedAt, rejectedBy: 'creator' } });
+      await apiCall('updateCreatorApplication', { id: appId, data: { status: 'rejected', rejectedAt, rejectedBy: 'creator' } });
+      showNotification('Slot rejected. It is now available for other creators.');
       state.isSubmitting = false;
       state.isLoading = false;
-      if (!result || !result.success) {
-        showNotification(result?.error || 'Failed to reject slot. Please try again.', 'error');
-        await loadAllData();
-        return;
-      }
-      showNotification('Slot rejected. It is now available for other creators.');
       await loadAllData();
     };
 
@@ -1817,7 +1655,7 @@
             <button class="filter-tab ${state.brandTab === 'confirmed' ? 'active' : ''}"
               onclick="state.brandTab = 'confirmed'; render();"
               style="${state.brandTab === 'confirmed' ? 'background-color:#EE4D2D;border-color:#EE4D2D;' : ''}">
-              Confirmed Livestreams (${confirmedStreams.reduce((sum, ca) => sum + getTimeslots(ca).length, 0)})${pendingSampleCount > 0 ? ` <span style="background:#e65100;color:white;border-radius:10px;padding:3px 10px;font-size:11px;margin-left:6px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">⚠️ ${pendingSampleCount} pending action</span>` : ''}
+              Confirmed Livestreams (${confirmedStreams.reduce((sum, ca) => sum + getTimeslots(ca).length, 0)})${pendingSampleCount > 0 ? ` <span style="background:#e65100;color:white;border-radius:10px;padding:1px 8px;font-size:11px;margin-left:6px;font-weight:600;">🟠 ${pendingSampleCount} pending action</span>` : ''}
             </button>
           </div>
           ${contentHtml}
@@ -1842,12 +1680,12 @@
         <div style="display:flex;gap:8px;margin-bottom:16px;">
           <button class="filter-tab ${state.brandConfirmedView === 'list' ? 'active' : ''}"
             onclick="state.brandConfirmedView = 'list'; render();"
-            style="${state.brandConfirmedView === 'list' ? 'background-color:#EE4D2D;border-color:#EE4D2D;color:#fff;' : ''}">
+            style="padding:6px 16px;font-size:12px;${state.brandConfirmedView === 'list' ? 'background-color:#EE4D2D;border-color:#EE4D2D;' : ''}">
             List View
           </button>
           <button class="filter-tab ${state.brandConfirmedView === 'calendar' ? 'active' : ''}"
             onclick="state.brandConfirmedView = 'calendar'; render();"
-            style="${state.brandConfirmedView === 'calendar' ? 'background-color:#EE4D2D;border-color:#EE4D2D;color:#fff;' : ''}">
+            style="padding:6px 16px;font-size:12px;${state.brandConfirmedView === 'calendar' ? 'background-color:#EE4D2D;border-color:#EE4D2D;' : ''}">
             Calendar View
           </button>
         </div>
@@ -1923,7 +1761,6 @@
             slots.push({
               caId: ca.id,
               sampleSentAt: ca.sampleSentAt || '',
-              sampleReceivedAt: ca.sampleReceivedAt || '',
               date: slot.date,
               startTime: slot.startTime || slot.time,
               endDate: slot.endDate || slot.date,
@@ -1937,19 +1774,6 @@
               numProductsSponsored: brandApp ? brandApp.numProductsSponsored : '',
               voucherTier: brandApp ? brandApp.voucherTier : '',
               livestreamBrief: brandApp ? brandApp.livestreamBrief : '',
-              shopName: brandApp ? (brandApp.shopName || '') : '',
-              shopId: brandApp ? (brandApp.shopId || '') : '',
-              month: brandApp ? (brandApp.month || '') : '',
-              sellerType: brandApp ? (brandApp.sellerType || '') : '',
-              streamLocation: brandApp ? (brandApp.streamLocation || '') : '',
-              sellerSiteAddress: brandApp ? (brandApp.sellerSiteAddress || '') : '',
-              sellerSiteRequired: brandApp ? brandApp.sellerSiteRequired : '',
-              hasPackageActivation: brandApp ? brandApp.hasPackageActivation : '',
-              preferredDate: brandApp ? (brandApp.preferredDate || '') : '',
-              sellerPicName: brandApp ? (brandApp.sellerPicName || '') : '',
-              sellerPicMobile: brandApp ? (brandApp.sellerPicMobile || '') : '',
-              sellerPicEmail: brandApp ? (brandApp.sellerPicEmail || '') : '',
-              rm: brandApp ? getRmForShop(brandApp.shopId) : '—',
             });
           });
         });
@@ -1958,37 +1782,27 @@
       };
 
       const renderCard = (s, i, sectionKey) => {
-        const streamDateTime = formatDate(s.date) + ' ' + formatTime(s.startTime) +
-          (s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : '');
+        const streamDateTime = formatDate(s.date) + ', ' + formatTime(s.startTime) +
+          (s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ', ' : '') + formatTime(s.endTime) : '');
         const cardKey = `confirmed-slot-${sectionKey}-${i}`;
         const isExpanded = state.expandedCards[cardKey];
         const sampleButton = s.sampleSentAt
-          ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;">
+          ? `<div style="display:flex;align-items:center;gap:10px;margin-top:12px;">
                <span style="background:#e8f5e9;color:#27ae60;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;">✓ Sample Sent</span>
                <span style="font-size:12px;color:#999;">${new Date(s.sampleSentAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })}</span>
-               ${s.sampleReceivedAt
-                 ? `<span style="background:#e3f2fd;color:#1565c0;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;">📬 Received by Creator</span>
-                    <span style="font-size:12px;color:#999;">${new Date(s.sampleReceivedAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })}</span>`
-                 : `<button onclick="handleMarkSampleSent('${s.caId}', false)" ${state.isSubmitting ? 'disabled' : ''} style="background:none;border:1px solid #ccc;border-radius:6px;padding:5px 12px;font-size:12px;color:${state.isSubmitting ? '#bbb' : '#666'};cursor:${state.isSubmitting ? 'not-allowed' : 'pointer'};font-weight:500;">${state.isSubmitting ? 'Updating...' : '↩ Undo'}</button>`
-               }
+               <button onclick="handleMarkSampleSent('${s.caId}', false)" style="background:none;border:none;font-size:12px;color:#aaa;cursor:pointer;text-decoration:underline;padding:0;">Undo</button>
              </div>`
-          : `<button onclick="handleMarkSampleSent('${s.caId}', true)" ${state.isSubmitting ? 'disabled' : ''} style="margin-top:12px;background:${state.isSubmitting ? '#ccc' : '#EE4D2D'};color:white;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:${state.isSubmitting ? 'not-allowed' : 'pointer'};width:100%;">
-               ${state.isSubmitting ? '⏳ Updating...' : '📦 Mark Sample as Sent'}
+          : `<button onclick="handleMarkSampleSent('${s.caId}', true)" style="margin-top:12px;background:#EE4D2D;color:white;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;width:100%;">
+               📦 Mark Sample as Sent
              </button>`;
         return `
-          <div class="app-card" style="margin-bottom:10px;border-left-color:${!s.sampleSentAt ? '#ff9800' : '#27ae60'};">
-            <div class="app-card-header">
-              <div>
-                <div class="app-card-title">🎬 ${s.creatorName}${s.affiliateUsername && s.affiliateUsername !== s.creatorName ? ' (@' + s.affiliateUsername + ')' : ''}</div>
-              </div>
-              <span class="status-badge status-confirmed">Confirmed</span>
-            </div>
-            <div class="app-card-meta">
-              <div class="app-card-meta-item">Category: <strong>${s.sellerType || '—'}</strong></div>
-              <div class="app-card-meta-item">Stream Month: <strong>${formatMonth(s.month)}</strong></div>
-            </div>
-            <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
-              <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${streamDateTime}</span></div></div>
+          <div class="app-card" style="margin-bottom:10px;${!s.sampleSentAt ? 'border-left:3px solid #ff9800;' : ''}">
+            <div class="app-card-detail-grid" style="margin-bottom:0;margin-top:0;padding-top:0;border-top:none;">
+              <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date Time</div><div class="value">${streamDateTime}</div></div>
+              <div class="app-card-detail"><div class="label">Creator Username</div><div class="value">${s.affiliateUsername || '—'}</div></div>
+              <div class="app-card-detail"><div class="label">Phone</div><div class="value">${s.phone || '—'}</div></div>
+              <div class="app-card-detail"><div class="label">Telegram</div><div class="value">${s.telegram || '—'}</div></div>
+              <div class="app-card-detail"><div class="label">Shipping Address</div><div class="value">${s.address || '—'}</div></div>
             </div>
             ${sampleButton}
             <div style="margin-top:10px;">
@@ -1997,29 +1811,12 @@
               </span>
             </div>
             ${isExpanded ? `
-              <div style="margin-top:12px;padding:12px;background:#f0faf4;border-radius:8px;border:1px solid #c3e6cb;">
-                <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Creator Details</div>
-                <div class="app-card-detail-grid">
-                  <div class="app-card-detail"><div class="label">Creator Telegram</div><div class="value">${s.telegram || '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Creator Mobile</div><div class="value">${s.phone || '—'}</div></div>
-                  <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Creator Shipping Address</div><div class="value">${s.address || '—'}</div></div>
-                </div>
+              <div class="app-card-detail-grid" style="margin-top:12px;">
+                <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${s.amsCommission ? s.amsCommission + '%' : '—'}</div></div>
+                <div class="app-card-detail"><div class="label">Products Sponsored</div><div class="value">${s.numProductsSponsored || '—'}</div></div>
+                <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(s.voucherTier)}</div></div>
               </div>
-              <div style="margin-top:8px;padding:12px;background:#fff8f0;border-radius:8px;border:1px solid #fcddd4;">
-                <div style="font-size:12px;font-weight:700;color:#e67e22;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Brand Application</div>
-                <div class="app-card-detail-grid">
-                  <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${s.streamLocation || '—'}</div></div>
-                  ${(String(s.sellerSiteRequired) === 'true' || (s.streamLocation || '').trim().toLowerCase() === 'seller site') ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${s.sellerSiteAddress || '—'}</div></div>` : ''}
-                  <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${s.amsCommission ? s.amsCommission + '%' : '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Products Sponsored</div><div class="value">${s.numProductsSponsored || '—'}</div></div>
-                  <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(s.voucherTier)}</div></div>
-                  <div class="app-card-detail"><div class="label">Package Activation</div><div class="value">${String(s.hasPackageActivation) === 'true' ? 'Yes' : 'No'}</div></div>
-                  <div class="app-card-detail"><div class="label">Preferred Date</div><div class="value">${s.preferredDate ? formatDate(s.preferredDate) : '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Seller PIC</div><div class="value">${s.sellerPicName || '—'}${s.sellerPicMobile ? ' · ' + s.sellerPicMobile : ''}</div></div>
-                  <div class="app-card-detail"><div class="label">Seller PIC Email</div><div class="value">${s.sellerPicEmail || '—'}</div></div>
-                  ${s.livestreamBrief ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Livestream Brief</div><div class="value"><a href="${s.livestreamBrief}" target="_blank" style="color:#6c5ce7;text-decoration:underline;">View Brief</a></div></div>` : ''}
-                </div>
-              </div>
+              ${s.livestreamBrief ? `<div style="margin-top:8px;"><a href="${s.livestreamBrief}" target="_blank" style="font-size:12px;color:#6c5ce7;text-decoration:underline;">📄 View Livestream Brief</a></div>` : ''}
             ` : ''}
           </div>
         `;
@@ -2055,7 +1852,6 @@
     // ========================
 
     const renderBrandApplicationForm = () => {
-      const d = state.brandFormDraft || {};
       // Generate current month + next 2 months as options (MMM YYYY format)
       const monthOptions = [];
       const now = new Date();
@@ -2071,7 +1867,7 @@
 
       return `
         <div class="dashboard">
-          <button class="back-btn" onclick="state.showBrandForm = false; state.brandFormDraft = null; render();">← Back to Dashboard</button>
+          <button class="back-btn" onclick="state.showBrandForm = false; render();">← Back to Dashboard</button>
           <div class="form-container" id="brand-app-form">
             <h2 class="form-title">Apply for Livestream Slots</h2>
             <p class="form-subtitle">Complete this application to engage a Creator from Shopee to stream & sell on your behalf — for FREE with no hosting fees!</p>
@@ -2112,16 +1908,16 @@
               <div class="form-row single">
                 <div class="form-group">
                   <label class="form-label">Livestream Period <span class="required">*</span></label>
-                  <select id="f-month" class="form-select" onchange="updateNominationLink(this.value)">
+                  <select id="f-month" class="form-select">
                     <option value="">Select month</option>
-                    ${monthOptions.map(m => `<option value="${m.val}" ${d.month === m.val ? 'selected' : ''}>${m.label}</option>`).join('')}
+                    ${monthOptions.map(m => `<option value="${m.val}">${m.label}</option>`).join('')}
                   </select>
                 </div>
               </div>
               <div class="form-row single">
                 <div class="form-group">
                   <label class="form-label">Number of Livestreams <span class="required">*</span></label>
-                  <input type="number" id="f-stream-count" class="form-input" placeholder="e.g. 3" min="1" max="30" value="${d.streamCount || ''}">
+                  <input type="number" id="f-stream-count" class="form-input" placeholder="e.g. 3" min="1" max="30">
                   <div class="form-hint">Indicate the number of livestreams you would like for the selected period. At least 1 stream will fall on a spike day subject to availability.</div>
                 </div>
               </div>
@@ -2136,15 +1932,7 @@
                 Your nominations will be auto-approved within approximately 30 minutes if all criteria are met.<br>
                 See nomination guide <a href="https://docs.google.com/presentation/d/1KDJvv4oqS7rQawKqJTlwRfHpCJjZy40kINNXVmL7tpg/edit" target="_blank" style="color:#ee4d2d;">here</a>.<br><br>
                 Please confirm that you have submitted your product nominations via the following link:
-                ${(() => {
-                  const nomEntry = d.month ? state.businessMappingValues.find(r => {
-                    const code = String(r.Code).trim();
-                    const normalizedCode = code.length > 7 ? code.substring(0, 7) : code;
-                    return r.Type === 'ProductNominationLink' && normalizedCode === d.month && String(r.Active).trim() === 'ACTIVE' && r.Description;
-                  }) : null;
-                  const nomUrl = nomEntry ? nomEntry.Description.trim() : NOMINATION_LINK_DEFAULT;
-                  return `<a id="nomination-link" href="${nomUrl}" target="_blank" style="color:#ee4d2d;">${nomUrl}</a>`;
-                })()}
+                <a href="https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset" target="_blank" style="color:#ee4d2d;">https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset</a>
               </div>
               <div style="font-size:13px;color:#888;line-height:1.6;margin-bottom:12px;padding:10px 14px;background:#fff7f5;border-radius:8px;border:1px solid #FDE8E0;">
                 <strong style="color:#333;">Min No. of Product Nominations required:</strong><br>
@@ -2152,7 +1940,7 @@
                 All other categories: 8 products
               </div>
               <div class="form-checkbox-row" onclick="this.querySelector('input').click()">
-                <input type="checkbox" id="f-prod-nom" onclick="event.stopPropagation()" ${d.productNomConfirmed ? 'checked' : ''}>
+                <input type="checkbox" id="f-prod-nom" onclick="event.stopPropagation()">
                 <div>
                   <div class="form-checkbox-label">I confirm that I have submitted my product nominations</div>
                 </div>
@@ -2160,7 +1948,7 @@
               <div class="form-row single" style="margin-top:16px;">
                 <div class="form-group">
                   <label class="form-label">Number of products to be sponsored per Creator <span class="required">*</span></label>
-                  <input type="number" id="f-num-products" class="form-input" placeholder="e.g. 8" min="1" value="${d.numProductsSponsored || ''}">
+                  <input type="number" id="f-num-products" class="form-input" placeholder="e.g. 8" min="1">
                   <div class="form-hint">Min required: Electronics = 5 products, All other categories = 8 products</div>
                 </div>
               </div>
@@ -2169,7 +1957,14 @@
                   <label class="form-label">Category <span class="required">*</span></label>
                   <select id="f-seller-type" class="form-select">
                     <option value="">Select category</option>
-                    ${['Beauty','Electronics','F&B','Health','Home Appliances | Home & Living','Fashion','Toys, Kids & Babies','Others'].map(v => `<option value="${v}" ${d.sellerType === v ? 'selected' : ''}>${v}</option>`).join('')}
+                    <option value="Beauty">Beauty</option>
+                    <option value="Electronics">Electronics</option>
+                    <option value="F&B">F&B</option>
+                    <option value="Health">Health</option>
+                    <option value="Home Appliances | Home & Living">Home Appliances | Home & Living</option>
+                    <option value="Fashion">Fashion</option>
+                    <option value="Toys, Kids & Babies">Toys, Kids & Babies</option>
+                    <option value="Others">Others</option>
                   </select>
                 </div>
               </div>
@@ -2182,15 +1977,15 @@
                 <div class="form-group">
                   <label class="form-label">Stream Location <span class="required">*</span></label>
                   <select id="f-stream-location" class="form-select" onchange="var el=document.getElementById('seller-site-address-row');if(el)el.style.display=this.value==='Seller Site'?'block':'none';">
-                    <option value="Creator Site" ${d.streamLocation !== 'Seller Site' ? 'selected' : ''}>Creator Site</option>
-                    <option value="Seller Site" ${d.streamLocation === 'Seller Site' ? 'selected' : ''}>Seller Site</option>
+                    <option value="Creator Site">Creator Site</option>
+                    <option value="Seller Site">Seller Site</option>
                   </select>
                 </div>
               </div>
-              <div id="seller-site-address-row" style="display:${d.streamLocation === 'Seller Site' ? 'block' : 'none'};margin-top:12px;">
+              <div id="seller-site-address-row" style="display:none;margin-top:12px;">
                 <div class="form-group">
                   <label class="form-label">Seller Site Address <span class="required">*</span></label>
-                  <textarea id="f-seller-site-address" class="form-textarea" placeholder="Full address of seller site" style="min-height:80px;">${d.sellerSiteAddress !== undefined ? d.sellerSiteAddress : (state.currentUser?.siteAddress || '')}</textarea>
+                  <textarea id="f-seller-site-address" class="form-textarea" placeholder="Full address of seller site" style="min-height:80px;">${state.currentUser?.siteAddress || ''}</textarea>
                   <div class="form-hint">The full address of your shop. This will be used as the stream location if hosting at your site. Edit here if different from your profile — your profile will not be changed.</div>
                 </div>
               </div>
@@ -2204,7 +1999,7 @@
                 Kindly ensure the date request is at least 21 days before the activation date.
               </div>
               <div class="form-checkbox-row" onclick="this.querySelector('input').click()">
-                <input type="checkbox" id="f-package-activation" onclick="event.stopPropagation()" ${d.hasPackageActivation ? 'checked' : ''}>
+                <input type="checkbox" id="f-package-activation" onclick="event.stopPropagation()">
                 <div>
                   <div class="form-checkbox-label">I have a package activation (e.g. Super Brand Day)</div>
                 </div>
@@ -2212,7 +2007,7 @@
               <div class="form-row single">
                 <div class="form-group">
                   <label class="form-label">Preferred Stream Date</label>
-                  <input type="date" id="f-preferred-date" class="form-input" value="${d.preferredDate || ''}">
+                  <input type="date" id="f-preferred-date" class="form-input">
                   <div class="form-hint">Only fill in if you have a package activation. Ensure date is at least 21 days before the activation date.</div>
                 </div>
               </div>
@@ -2240,7 +2035,7 @@
               <div class="form-row single">
                 <div class="form-group">
                   <label class="form-label">AMS Commission (%) <span class="required">*</span></label>
-                  <input type="number" id="f-ams" class="form-input" placeholder="e.g. 15" min="0" step="0.5" value="${d.amsCommission || ''}">
+                  <input type="number" id="f-ams" class="form-input" placeholder="e.g. 15" min="0" step="0.5">
                 </div>
               </div>
 
@@ -2253,7 +2048,7 @@
                 Bundle Deal: <a href="https://seller.shopee.sg/edu/article/7062/about-bundle-deal" target="_blank" style="color:#ee4d2d;">here</a>
               </div>
               <div class="form-checkbox-row" onclick="this.querySelector('input').click()">
-                <input type="checkbox" id="f-bundle-deals" onclick="event.stopPropagation()" ${d.bundleDealsAgreed ? 'checked' : ''}>
+                <input type="checkbox" id="f-bundle-deals" onclick="event.stopPropagation()">
                 <div>
                   <div class="form-checkbox-label">I confirm that I will create Add-on/Bundle deals for the Creator Livestream</div>
                 </div>
@@ -2276,7 +2071,7 @@
                   <option value="">Select voucher tier</option>
                   ${state.businessMappingValues
                     .filter(r => r.Type === 'VoucherTier' && String(r.Active).toUpperCase() === 'ACTIVE')
-                    .map(r => `<option value="${r.Code}" ${d.voucherTier === String(r.Code) ? 'selected' : ''}>${r.Description}</option>`)
+                    .map(r => `<option value="${r.Code}">${r.Description}</option>`)
                     .join('')}
                 </select>
               </div>
@@ -2291,7 +2086,7 @@
                 Kindly note that the matching and final assignment of Creator is subjected to availability. Your account manager will get back on the final Creator assigned to your livestream(s) within 5 working days.
               </div>
               <div class="form-checkbox-row" onclick="this.querySelector('input').click()">
-                <input type="checkbox" id="f-creator-assignment" onclick="event.stopPropagation()" ${d.creatorAssignmentAgreed ? 'checked' : ''}>
+                <input type="checkbox" id="f-creator-assignment" onclick="event.stopPropagation()">
                 <div>
                   <div class="form-checkbox-label">I understood that Shopee will assign a suitable Creator to me based on my brand's image and product category and I'll liaise directly with the assigned Creator on product sample delivery</div>
                 </div>
@@ -2322,17 +2117,17 @@
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Seller PIC Name <span class="required">*</span></label>
-                  <input type="text" id="f-pic-name" class="form-input" placeholder="Contact person name" value="${d.picName || ''}">
+                  <input type="text" id="f-pic-name" class="form-input" placeholder="Contact person name">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Seller PIC Mobile Number <span class="required">*</span></label>
-                  ${phoneInputHtml('f-pic-mobile', 'f-pic-mobile-code', d.picMobileCode || '65', d.picMobileNumber || '')}
+                  <input type="tel" id="f-pic-mobile" class="form-input" placeholder="+65 xxxx xxxx">
                 </div>
               </div>
               <div class="form-row single">
                 <div class="form-group">
                   <label class="form-label">Seller PIC Email <span class="required">*</span></label>
-                  <input type="email" id="f-pic-email" class="form-input" placeholder="email@example.com" value="${d.picEmail || ''}">
+                  <input type="email" id="f-pic-email" class="form-input" placeholder="email@example.com">
                   <div class="form-hint">We'll notify you at this email when your application is approved and when creators confirm their slots.</div>
                 </div>
               </div>
@@ -2340,7 +2135,7 @@
 
             <div class="form-actions">
               <button class="btn-primary" onclick="handleSubmitBrandApplication()" ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>${state.isSubmitting ? 'Submitting...' : 'Submit Application'}</button>
-              <button class="btn-secondary" onclick="state.showBrandForm = false; state.brandFormDraft = null; render();" ${state.isSubmitting ? 'disabled' : ''}>Cancel</button>
+              <button class="btn-secondary" onclick="state.showBrandForm = false; render();" ${state.isSubmitting ? 'disabled' : ''}>Cancel</button>
             </div>
           </div>
         </div>
@@ -2370,8 +2165,6 @@
 
       // My applications (already filtered by backend to 3-month window)
       const myApps = state.creatorApplications.filter(a => a.creatorId === state.currentUser.id);
-      const confirmedCAs = myApps.filter(a => a.status === 'confirmed');
-      const pendingReceiptCount = confirmedCAs.filter(a => a.sampleSentAt && !a.sampleReceivedAt).length;
 
       let contentHtml = '';
 
@@ -2387,13 +2180,13 @@
         } else {
           const categoryTabsHtml = `
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">
-              <button class="filter-tab ${state.creatorCategoryFilter === 'all' ? 'active' : ''}"
+              <button class="filter-tab ${state.creatorCategoryFilter === 'all' ? 'active' : ''}" style="font-size:12px;padding:6px 14px;"
                 onclick="state.creatorCategoryFilter = 'all'; render();">
                 All (${availableBrands.length})
               </button>
               ${categories.map(cat => {
                 const count = availableBrands.filter(app => (app.sellerType || 'Uncategorized') === cat).length;
-                return `<button class="filter-tab ${state.creatorCategoryFilter === cat ? 'active' : ''}"
+                return `<button class="filter-tab ${state.creatorCategoryFilter === cat ? 'active' : ''}" style="font-size:12px;padding:6px 14px;"
                   onclick="state.creatorCategoryFilter = '${cat.replace(/'/g, "\\'")}'; render();">
                   ${cat} (${count})
                 </button>`;
@@ -2432,118 +2225,6 @@
             `;
           }).join(''));
         }
-      } else if (state.creatorTab === 'confirmed-livestreams') {
-        if (confirmedCAs.length === 0) {
-          contentHtml = `
-            <div class="empty-state">
-              <div class="empty-icon">🎬</div>
-              <h3 class="empty-title">No confirmed livestreams</h3>
-              <p class="empty-text">Your confirmed slots will appear here</p>
-            </div>
-          `;
-        } else {
-          const renderCreatorConfirmedCard = (ca, idx) => {
-            const brandApp = state.brandApplications.find(ba => ba.id === ca.brandApplicationId);
-            const streamDateTime = formatDate(ca.streamDate) + ' ' + formatTime(ca.streamTime) +
-              (ca.streamEndTime ? ' – ' + (ca.streamEndDate && ca.streamEndDate !== ca.streamDate ? formatDate(ca.streamEndDate) + ' ' : '') + formatTime(ca.streamEndTime) : '');
-            const cardKey = `creator-confirmed-${idx}`;
-            const isExpanded = state.expandedCards[cardKey];
-            const sampleBadge = ca.sampleReceivedAt
-              ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px;">
-                   <span style="background:#e3f2fd;color:#1565c0;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">📬 Sample Received — ${new Date(ca.sampleReceivedAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })}</span>
-                   <button onclick="handleCreatorMarkSampleReceived('${ca.id}', false)" ${state.isSubmitting ? 'disabled' : ''} style="background:none;border:1px solid #ccc;border-radius:6px;padding:5px 12px;font-size:12px;color:${state.isSubmitting ? '#bbb' : '#666'};cursor:${state.isSubmitting ? 'not-allowed' : 'pointer'};font-weight:500;">${state.isSubmitting ? 'Updating...' : '↩ Undo'}</button>
-                 </div>`
-              : ca.sampleSentAt
-                ? `<div style="margin-top:10px;">
-                     <span style="background:#fff8e1;color:#e65100;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;display:inline-block;margin-bottom:8px;">📦 Samples Dispatched — ${new Date(ca.sampleSentAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })}</span>
-                     <button onclick="handleCreatorMarkSampleReceived('${ca.id}', true)" ${state.isSubmitting ? 'disabled' : ''} style="display:block;width:100%;background:${state.isSubmitting ? '#ccc' : '#EE4D2D'};color:white;border:none;border-radius:6px;padding:10px 16px;font-size:13px;font-weight:600;cursor:${state.isSubmitting ? 'not-allowed' : 'pointer'};">${state.isSubmitting ? '⏳ Updating...' : '✅ I\'ve Received the Samples'}</button>
-                   </div>`
-                : `<span style="background:#f5f5f5;color:#888;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;display:inline-block;margin-top:10px;">⏳ Waiting for Samples</span>`;
-            return `
-              <div class="app-card" style="margin-bottom:10px;">
-                <div class="app-card-header">
-                  <div class="app-card-title">🏪 ${ca.brandName || ca.shopName || '—'}</div>
-                  <span class="status-badge status-confirmed">Confirmed</span>
-                </div>
-                ${brandApp ? `<div class="app-card-meta">
-                  <div class="app-card-meta-item">Category: <strong>${brandApp.sellerType || '—'}</strong></div>
-                  <div class="app-card-meta-item">Stream Month: <strong>${formatMonth(brandApp.month)}</strong></div>
-                </div>` : ''}
-                <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
-                  <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${streamDateTime}</span></div></div>
-                </div>
-                ${sampleBadge}
-                <div style="margin-top:10px;">
-                  <span style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="state.expandedCards['${cardKey}'] = !state.expandedCards['${cardKey}']; render();">
-                    ${isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
-                  </span>
-                </div>
-                ${isExpanded ? `
-                  <div style="margin-top:12px;padding:12px;background:#f0faf4;border-radius:8px;border:1px solid #c3e6cb;">
-                    <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Your Details</div>
-                    <div class="app-card-detail-grid">
-                      <div class="app-card-detail"><div class="label">Telegram</div><div class="value">${ca.telegram || '—'}</div></div>
-                      <div class="app-card-detail"><div class="label">Mobile</div><div class="value">${ca.phone || '—'}</div></div>
-                      <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Shipping Address</div><div class="value">${ca.shippingAddress || '—'}</div></div>
-                    </div>
-                  </div>
-                  ${brandApp ? `
-                  <div style="margin-top:8px;padding:12px;background:#fff8f0;border-radius:8px;border:1px solid #fcddd4;">
-                    <div style="font-size:12px;font-weight:700;color:#e67e22;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Brand Application</div>
-                    <div class="app-card-detail-grid">
-                      <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandApp.streamLocation || '—'}</div></div>
-                      ${(String(brandApp.sellerSiteRequired) === 'true' || (brandApp.streamLocation || '').trim().toLowerCase() === 'seller site') ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${brandApp.sellerSiteAddress || '—'}</div></div>` : ''}
-                      <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${brandApp.amsCommission ? brandApp.amsCommission + '%' : '—'}</div></div>
-                      <div class="app-card-detail"><div class="label">Products Sponsored</div><div class="value">${brandApp.numProductsSponsored || '—'}</div></div>
-                      <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(brandApp.voucherTier)}</div></div>
-                      <div class="app-card-detail"><div class="label">Package Activation</div><div class="value">${String(brandApp.hasPackageActivation) === 'true' ? 'Yes' : 'No'}</div></div>
-                      ${brandApp.preferredDate ? `<div class="app-card-detail"><div class="label">Preferred Date</div><div class="value">${formatDate(brandApp.preferredDate)}</div></div>` : ''}
-                      <div class="app-card-detail"><div class="label">Seller PIC</div><div class="value">${brandApp.sellerPicName || '—'}${brandApp.sellerPicMobile ? ' · ' + brandApp.sellerPicMobile : ''}</div></div>
-                      <div class="app-card-detail"><div class="label">Seller PIC Email</div><div class="value">${brandApp.sellerPicEmail || '—'}</div></div>
-                      ${brandApp.livestreamBrief ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Livestream Brief</div><div class="value"><a href="${brandApp.livestreamBrief}" target="_blank" style="color:#6c5ce7;text-decoration:underline;">View Brief</a></div></div>` : ''}
-                    </div>
-                  </div>` : ''}
-                ` : ''}
-              </div>
-            `;
-          };
-
-          const waitingCAs = confirmedCAs.filter(a => !a.sampleSentAt);
-          const pendingReceiptCAs = confirmedCAs.filter(a => a.sampleSentAt && !a.sampleReceivedAt);
-          const receivedCAs = confirmedCAs.filter(a => a.sampleReceivedAt);
-
-          const pendingSection = pendingReceiptCAs.length > 0 ? `
-            <div style="display:flex;align-items:center;gap:10px;margin:0 0 12px;">
-              <div style="flex:1;height:1px;background:#e65100;opacity:0.4;"></div>
-              <span style="font-size:11px;font-weight:700;color:#e65100;letter-spacing:0.8px;text-transform:uppercase;">Samples Dispatched — Please Confirm Receipt</span>
-              <div style="flex:1;height:1px;background:#e65100;opacity:0.4;"></div>
-            </div>
-            <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
-              <span style="font-size:13px;color:#e65100;font-weight:600;">⚠️ ${pendingReceiptCAs.length} slot${pendingReceiptCAs.length !== 1 ? 's' : ''} awaiting your confirmation — confirm once you have received your samples.</span>
-            </div>
-            ${pendingReceiptCAs.map((ca, i) => renderCreatorConfirmedCard(ca, 'pending-' + i)).join('')}
-          ` : '';
-
-          const waitingSection = waitingCAs.length > 0 ? `
-            <div style="display:flex;align-items:center;gap:10px;margin:${pendingReceiptCAs.length > 0 ? '20px' : '0'} 0 12px;">
-              <div style="flex:1;height:1px;background:#bbb;opacity:0.5;"></div>
-              <span style="font-size:11px;font-weight:700;color:#888;letter-spacing:0.8px;text-transform:uppercase;">Waiting for Samples</span>
-              <div style="flex:1;height:1px;background:#bbb;opacity:0.5;"></div>
-            </div>
-            ${waitingCAs.map((ca, i) => renderCreatorConfirmedCard(ca, 'waiting-' + i)).join('')}
-          ` : '';
-
-          const receivedSection = receivedCAs.length > 0 ? `
-            <div style="display:flex;align-items:center;gap:10px;margin:${(pendingReceiptCAs.length > 0 || waitingCAs.length > 0) ? '20px' : '0'} 0 12px;">
-              <div style="flex:1;height:1px;background:#27ae60;opacity:0.4;"></div>
-              <span style="font-size:11px;font-weight:700;color:#27ae60;letter-spacing:0.8px;text-transform:uppercase;">Sample Received ✓</span>
-              <div style="flex:1;height:1px;background:#27ae60;opacity:0.4;"></div>
-            </div>
-            ${receivedCAs.map((ca, i) => renderCreatorConfirmedCard(ca, 'received-' + i)).join('')}
-          ` : '';
-
-          contentHtml = pendingSection + waitingSection + receivedSection;
-        }
       } else if (state.creatorTab === 'pending-confirmation') {
         // Pending My Confirmation tab
         const pendingConfirm = myApps.filter(a => a.status === 'approved');
@@ -2556,19 +2237,19 @@
             </div>
           `;
         } else {
-          contentHtml = pendingConfirm.map(row => {
-            const slots = getTimeslots(row);
-            const brandApp = state.brandApplications.find(ba => ba.id === row.brandApplicationId);
+          contentHtml = pendingConfirm.map(app => {
+            const slots = getTimeslots(app);
+            const brandApp = state.brandApplications.find(ba => ba.id === app.brandApplicationId);
             return `
               <div class="app-card creator-app">
                 <div class="app-card-header">
-                  <div class="app-card-title">🏪 ${row.brandName || row.shopName}</div>
+                  <div class="app-card-title">🏪 ${app.brandName || app.shopName}</div>
                   <span class="status-badge status-approved">Awaiting Confirmation</span>
                 </div>
                 <div style="margin-top:8px;">
-                  ${slots.map(s => `
-                    <span style="display:inline-block;padding:4px 10px;background:#f0f0ff;border-radius:6px;font-size:12px;color:#6c5ce7;margin:2px;">📅 ${formatDate(s.date)} ${formatTime(s.startTime)}${s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span>
-                  `).join('')}
+                  ${slots.length > 0 ? slots.map(s => `
+                    <span style="display:inline-block;padding:4px 10px;background:#f0f0ff;border-radius:6px;font-size:12px;color:#6c5ce7;margin:2px;">📅 ${formatDate(s.date)} ${formatTime(s.startTime || s.time)}${s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span>
+                  `).join('') : ''}
                 </div>
                 ${brandApp ? `
                   <div class="app-card-meta" style="margin-top:8px;">
@@ -2580,8 +2261,8 @@
                 <div style="margin-top:12px;padding:12px 16px;background:#e8f5e9;border-radius:8px;">
                   <p style="font-size:13px;color:#27ae60;margin-bottom:8px;">Internal team approved your application. Please confirm your slot.</p>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <button class="btn-primary" style="background-color:#27ae60;" onclick="handleCreatorConfirmSlot('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:not-allowed;background-color:#27ae60;"' : ''}>${state.confirmingGroupId === row.id ? 'Confirming...' : 'Confirm Slot'}</button>
-                    <button class="btn-secondary" style="color:#c62828;border-color:#c62828;" onclick="handleCreatorRejectSlot('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>Reject Slot</button>
+                    <button class="btn-primary" style="background-color:#27ae60;" onclick="handleCreatorConfirmSlot('${app.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:not-allowed;background-color:#27ae60;"' : ''}>${state.confirmingAppId === app.id ? 'Confirming...' : 'Confirm Slot'}</button>
+                    <button class="btn-secondary" style="color:#c62828;border-color:#c62828;" onclick="handleCreatorRejectSlot('${app.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>Reject Slot</button>
                   </div>
                 </div>
               </div>
@@ -2594,12 +2275,12 @@
           <div style="display:flex;gap:8px;margin-bottom:16px;">
             <button class="filter-tab ${state.creatorAppsView === 'list' ? 'active' : ''}"
               onclick="state.creatorAppsView = 'list'; render();"
-              style="${state.creatorAppsView === 'list' ? 'background-color:#EE4D2D;border-color:#EE4D2D;color:#fff;' : ''}">
+              style="padding:6px 16px;font-size:12px;${state.creatorAppsView === 'list' ? 'background-color:#EE4D2D;border-color:#EE4D2D;' : ''}">
               List View
             </button>
             <button class="filter-tab ${state.creatorAppsView === 'calendar' ? 'active' : ''}"
               onclick="state.creatorAppsView = 'calendar'; render();"
-              style="${state.creatorAppsView === 'calendar' ? 'background-color:#EE4D2D;border-color:#EE4D2D;color:#fff;' : ''}">
+              style="padding:6px 16px;font-size:12px;${state.creatorAppsView === 'calendar' ? 'background-color:#EE4D2D;border-color:#EE4D2D;' : ''}">
               Calendar View
             </button>
           </div>
@@ -2672,20 +2353,25 @@
             </div>
           `;
         } else {
-          // List view (default) — one card per row
-          contentHtml = creatorAppsToggle + myApps.map(row => {
-            const slots = getTimeslots(row);
-            const brandApp = state.brandApplications.find(ba => ba.id === row.brandApplicationId);
+          // List view (default)
+          contentHtml = creatorAppsToggle + myApps.map(app => {
+            const slots = getTimeslots(app);
+            const brandApp = state.brandApplications.find(ba => ba.id === app.brandApplicationId);
             return `
               <div class="app-card creator-app">
                 <div class="app-card-header">
-                  <div class="app-card-title">🏪 ${row.brandName || row.shopName}</div>
-                  <span class="status-badge status-${row.status}">${row.status}</span>
+                  <div class="app-card-title">🏪 ${app.brandName || app.shopName}</div>
+                  <span class="status-badge status-${app.status}">${app.status}</span>
                 </div>
                 <div style="margin-top:8px;">
-                  ${slots.map(s => `
-                    <span style="display:inline-block;padding:4px 10px;background:#f0f0ff;border-radius:6px;font-size:12px;color:#6c5ce7;margin:2px;">📅 ${formatDate(s.date)} ${formatTime(s.startTime)}${s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span>
-                  `).join('')}
+                  ${slots.length > 0 ? slots.map(s => `
+                    <span style="display:inline-block;padding:4px 10px;background:#f0f0ff;border-radius:6px;font-size:12px;color:#6c5ce7;margin:2px;">📅 ${formatDate(s.date)} ${formatTime(s.startTime || s.time)}${s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span>
+                  `).join('') : `
+                    <div class="app-card-meta">
+                      <div class="app-card-meta-item">Date: <strong>${formatDate(app.streamDate)}</strong></div>
+                      <div class="app-card-meta-item">Time: <strong>${app.streamTime || '—'}</strong></div>
+                    </div>
+                  `}
                 </div>
                 ${brandApp ? `
                   <div class="app-card-meta" style="margin-top:8px;">
@@ -2722,10 +2408,6 @@
             <button class="filter-tab ${state.creatorTab === 'pending-confirmation' ? 'active' : ''}"
               onclick="state.creatorTab = 'pending-confirmation'; render();">
               Pending My Confirmation (${myApps.filter(a => a.status === 'approved').length})
-            </button>
-            <button class="filter-tab ${state.creatorTab === 'confirmed-livestreams' ? 'active' : ''}"
-              onclick="state.creatorTab = 'confirmed-livestreams'; render();">
-              Confirmed Livestreams (${confirmedCAs.length})${pendingReceiptCount > 0 ? ` <span style="background:#e65100;color:white;border-radius:10px;padding:3px 8px;font-size:11px;margin-left:4px;font-weight:600;">⚠️ ${pendingReceiptCount}</span>` : ''}
             </button>
             <button class="filter-tab ${state.creatorTab === 'my-applications' ? 'active' : ''}"
               onclick="state.creatorTab = 'my-applications'; render();">
@@ -2823,7 +2505,7 @@
                   ${selectedTimeslots.map((slot, i) => `
                     <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#f0f0ff;border-radius:8px;margin-bottom:6px;border:1px solid #e0e0ff;">
                       <span style="flex:1;font-size:14px;color:#333;">📅 ${formatDate(slot.date)} ${formatTime(slot.startTime)} — ${slot.endDate && slot.endDate !== slot.date ? formatDate(slot.endDate) + ' ' : ''}${formatTime(slot.endTime)}</span>
-                      <button type="button" class="timeslot-remove-btn" onclick="removeTimeslot(${i})">✕</button>
+                      <button type="button" onclick="removeTimeslot(${i})" style="background:none;border:none;color:#ff4757;font-size:18px;cursor:pointer;padding:0 4px;">✕</button>
                     </div>
                   `).join('')}
                 </div>
@@ -2922,8 +2604,8 @@
               </div>
             </div>
             <div class="form-actions">
-              <button id="brand-setup-save-btn" class="btn-primary" onclick="handleSaveBrandSetup()">
-                Save & Continue
+              <button class="btn-primary" onclick="handleSaveBrandSetup()" ${state.isSubmitting ? 'disabled' : ''}>
+                ${state.isSubmitting ? 'Saving...' : 'Save & Continue'}
               </button>
             </div>
           </div>
@@ -2937,15 +2619,13 @@
         showNotification('Please enter your seller site address', 'error');
         return;
       }
-      const btn = document.getElementById('brand-setup-save-btn');
-      const textarea = document.getElementById('setup-site-address');
-      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
-      if (textarea) textarea.disabled = true;
+      state.isSubmitting = true;
+      render();
       const result = await apiCall('updateSellerProfile', { shopId: state.currentUser.shopId, data: { siteAddress } });
+      state.isSubmitting = false;
       if (!result || !result.success) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Save & Continue'; }
-        if (textarea) textarea.disabled = false;
         showNotification(result ? result.error : 'Failed to save. Please try again.', 'error');
+        render();
         return;
       }
       state.currentUser.siteAddress = siteAddress;
@@ -3044,9 +2724,7 @@
 
       state.isLoading = true;
       render();
-      const profileData = { siteAddress: newSiteAddress };
-      if (newName !== state.currentUser.name) profileData.name = newName;
-      const result = await apiCall('updateSellerProfile', { shopId: state.currentUser.shopId, data: profileData });
+      const result = await apiCall('updateSellerProfile', { shopId: state.currentUser.shopId, data: { name: newName, siteAddress: newSiteAddress } });
       if (!result || !result.success) {
         state.isLoading = false;
         showNotification(result ? result.error : 'Failed to update profile', 'error');
@@ -3065,7 +2743,7 @@
       state.isLoading = false;
       await loadAllData();
       state.profileEditMode = false;
-      showNotification(result.updatedCount > 0 ? `Profile updated! Shop name synced across ${result.updatedCount} related record(s).` : 'Profile updated successfully!');
+      showNotification(`Profile updated! ${result.updatedCount} related record(s) updated.`);
       render();
     };
 
@@ -3169,7 +2847,7 @@
       state.isLoading = false;
       await loadAllData();
       state.profileEditMode = false;
-      showNotification(result.updatedCount > 0 ? `Profile updated! Username synced across ${result.updatedCount} related record(s).` : 'Profile updated successfully!');
+      showNotification(`Profile updated! ${result.updatedCount} related record(s) updated.`);
       render();
     };
 
@@ -3241,7 +2919,8 @@
       const pendingBrandApps = displayBrandApps.filter(a => a.status === 'pending').length;
       const pendingCreatorApps = displayCreatorApps.filter(a => a.status === 'pending').length;
       const pendingConfirmations = displayCreatorApps.filter(a => a.status === 'approved').length;
-      const confirmedSlots = displayCreatorApps.filter(a => a.status === 'confirmed').length;
+      let confirmedSlots = 0;
+      displayCreatorApps.filter(a => a.status === 'confirmed').forEach(a => { confirmedSlots += getTimeslots(a).length; });
 
       let tabContentHtml = '';
 
@@ -3301,38 +2980,19 @@
 
     // Internal: Brand Applications
     const renderInternalBrandApps = () => {
-      const all = filterBrandAppsByDisplayWindow(state.brandApplications);
-      const sf = state.brandAppStatusFilter;
-      const filtered = sf ? all.filter(a => a.status === sf) : all;
-
-      const statusCounts = { pending: 0, approved: 0, rejected: 0 };
-      all.forEach(a => { if (statusCounts[a.status] !== undefined) statusCounts[a.status]++; });
-
-      const filterBar = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-          <label style="font-size:13px;color:#888;white-space:nowrap;">Status:</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${[['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['','All']].map(([val, label]) => `
-              <button onclick="state.brandAppStatusFilter = '${val}'; render();"
-                class="status-filter-pill"
-                style="padding:5px 14px;border-radius:20px;border:1px solid ${sf === val ? '#6c5ce7' : '#ddd'};background:${sf === val ? '#6c5ce7' : '#fff'};color:${sf === val ? '#fff' : '#555'};font-size:13px;cursor:pointer;font-weight:${sf === val ? '600' : '400'};">
-                ${label}${val ? ` (${statusCounts[val] || 0})` : ` (${all.length})`}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-      `;
-
-      if (all.length === 0) {
-        return filterBar + `<div class="empty-state"><p style="color:#888;">No brand applications yet</p></div>`;
-      }
+      const filtered = filterBrandAppsByDisplayWindow(state.brandApplications);
       if (filtered.length === 0) {
-        return filterBar + `<div class="empty-state"><p style="color:#888;">No ${sf} applications</p></div>`;
+        return `<div class="empty-state"><p style="color:#888;">No brand applications yet</p></div>`;
       }
 
-      const sorted = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // Sort: pending first, then by date
+      const sorted = [...filtered].sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
 
-      return filterBar + sorted.map(app => {
+      return sorted.map(app => {
         const isExpanded = state.expandedCards['int-' + app.id];
         return `
           <div class="app-card">
@@ -3381,173 +3041,102 @@
       }).join('');
     };
 
-    // Internal: Creator Applications (one card per row)
+    // Internal: Creator Applications
     const renderInternalCreatorApps = () => {
-      const all = filterCreatorAppsByDisplayWindow(state.creatorApplications);
-      const sf = state.creatorAppStatusFilter;
-      const filtered = sf === 'approved_confirmed'
-        ? all.filter(a => a.status === 'approved' || a.status === 'confirmed')
-        : sf ? all.filter(a => a.status === sf) : all;
-
-      const approvedConfirmedCount = all.filter(a => a.status === 'approved' || a.status === 'confirmed').length;
-      const statusCounts = { pending: 0, rejected: 0 };
-      all.forEach(a => { if (statusCounts[a.status] !== undefined) statusCounts[a.status]++; });
-
-      const filterBar = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-          <label style="font-size:13px;color:#888;white-space:nowrap;">Status:</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${[['pending','Pending'],['approved_confirmed','Approved / Confirmed'],['rejected','Rejected'],['','All']].map(([val, label]) => `
-              <button onclick="state.creatorAppStatusFilter = '${val}'; render();"
-                class="status-filter-pill"
-                style="padding:5px 14px;border-radius:20px;border:1px solid ${sf === val ? '#6c5ce7' : '#ddd'};background:${sf === val ? '#6c5ce7' : '#fff'};color:${sf === val ? '#fff' : '#555'};font-size:13px;cursor:pointer;font-weight:${sf === val ? '600' : '400'};">
-                ${label} (${val === 'approved_confirmed' ? approvedConfirmedCount : val ? (statusCounts[val] || 0) : all.length})
-              </button>
-            `).join('')}
-          </div>
-        </div>
-      `;
-
-      if (all.length === 0) {
-        return filterBar + `<div class="empty-state"><p style="color:#888;">No creator applications yet</p></div>`;
-      }
+      const filtered = filterCreatorAppsByDisplayWindow(state.creatorApplications);
       if (filtered.length === 0) {
-        const sfLabel = sf === 'approved_confirmed' ? 'approved or confirmed' : sf;
-        return filterBar + `<div class="empty-state"><p style="color:#888;">No ${sfLabel} applications</p></div>`;
+        return `<div class="empty-state"><p style="color:#888;">No creator applications yet</p></div>`;
       }
 
-      const rows = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const sorted = [...filtered].sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
 
-      return filterBar + rows.map(row => {
-        const brandApp = state.brandApplications.find(ba => ba.id === row.brandApplicationId);
-        const rm = getRmForShop(brandApp?.shopId);
-        const isExpanded = state.expandedCards['ca-details-' + row.id];
-        const phoneParsed = parseStoredPhone(row.phone);
-        const displayPhone = '+' + phoneParsed.code + ' ' + phoneParsed.number;
+      return sorted.map(app => {
+        const slots = getTimeslots(app);
+        const brandAppForRm = state.brandApplications.find(ba => ba.id === app.brandApplicationId);
+        const rm = getRmForShop(brandAppForRm?.shopId);
         return `
           <div class="app-card creator-app">
             <div class="app-card-header">
               <div>
-                <div class="app-card-title">🏪 ${row.brandName || row.shopName}</div>
-                <div style="font-size:12px;color:#666;margin-top:4px;">🎬 ${row.creatorName}${row.affiliateUsername && row.affiliateUsername !== row.creatorName ? ' (@' + row.affiliateUsername + ')' : ''}</div>
+                <div class="app-card-title">🎬 ${app.creatorName}</div>
+                <div style="font-size:12px;color:#666;margin-top:4px;">Applied for 🏪 ${app.brandName || app.shopName} &nbsp;·&nbsp; RM: <strong>${rm}</strong></div>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
-                <span class="status-badge status-${row.status}">${row.status}</span>
-                ${row.status === 'pending' ? `
+                <span class="status-badge status-${app.status}">${app.status}</span>
+                ${app.status === 'pending' ? `
                   <div class="action-btns">
-                    <button class="action-btn btn-approve" onclick="handleApproveCreatorApp('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Approve</button>
-                    <button class="action-btn btn-reject" onclick="handleRejectCreatorApp('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reject</button>
+                    <button class="action-btn btn-approve" onclick="handleApproveCreatorApp('${app.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Approve</button>
+                    <button class="action-btn btn-reject" onclick="handleRejectCreatorApp('${app.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reject</button>
                   </div>
                 ` : ''}
               </div>
             </div>
-            <div class="app-card-meta">
-              <div class="app-card-meta-item">Shop ID: <strong>${brandApp?.shopId || '—'}</strong></div>
-              <div class="app-card-meta-item">RM: <strong>${rm}</strong></div>
-              <div class="app-card-meta-item">Category: <strong>${brandApp?.sellerType || '—'}</strong></div>
-              <div class="app-card-meta-item">Stream Month: <strong>${formatMonth(brandApp?.month)}</strong></div>
-            </div>
-            <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
-              <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(row.streamDate)} ${formatTime(row.streamTime)}${row.streamEndTime ? ' – ' + (row.streamEndDate && row.streamEndDate !== row.streamDate ? formatDate(row.streamEndDate) + ' ' : '') + formatTime(row.streamEndTime) : ''}</span></div></div>
-            </div>
             <div style="margin-top:8px;">
-              <span style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="state.expandedCards['ca-details-${row.id}'] = !state.expandedCards['ca-details-${row.id}']; render();">
-                ${isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
-              </span>
+              <div style="font-size:12px;color:#888;margin-bottom:4px;">Timeslots:</div>
+              ${slots.length > 0 ? slots.map(s => `
+                <span style="display:inline-block;padding:4px 10px;background:#f0f0ff;border-radius:6px;font-size:12px;color:#6c5ce7;margin:2px;">📅 ${formatDate(s.date)} ${formatTime(s.startTime || s.time)}${s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span>
+              `).join('') : `
+                <span style="font-size:13px;color:#888;">${formatDate(app.streamDate)} ${app.streamTime || ''}</span>
+              `}
             </div>
-            ${isExpanded ? `
-              <div style="margin-top:12px;padding:12px;background:#fff8f0;border-radius:8px;border:1px solid #fcddd4;">
-                <div style="font-size:12px;font-weight:700;color:#e67e22;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Brand Application</div>
-                <div class="app-card-detail-grid">
-                  <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandApp?.streamLocation || '—'}</div></div>
-                  ${(String(brandApp?.sellerSiteRequired) === 'true' || String(brandApp?.streamLocation).trim().toLowerCase() === 'seller site') ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${(brandApp?.sellerSiteAddress || '').trim() || '—'}</div></div>` : ''}
-                  <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${brandApp?.amsCommission ? brandApp.amsCommission + '%' : '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Products Sponsored</div><div class="value">${brandApp?.numProductsSponsored || '—'}</div></div>
-                  <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(brandApp?.voucherTier)}</div></div>
-                  <div class="app-card-detail"><div class="label">Package Activation</div><div class="value">${String(brandApp?.hasPackageActivation) === 'true' ? 'Yes' : 'No'}</div></div>
-                  <div class="app-card-detail"><div class="label">Preferred Date</div><div class="value">${brandApp?.preferredDate ? formatDate(brandApp.preferredDate) : '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Seller PIC</div><div class="value">${brandApp?.sellerPicName || '—'}${brandApp?.sellerPicMobile ? ' · ' + brandApp.sellerPicMobile : ''}</div></div>
-                  <div class="app-card-detail"><div class="label">Seller PIC Email</div><div class="value">${brandApp?.sellerPicEmail || '—'}</div></div>
-                  ${brandApp?.livestreamBrief ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Livestream Brief</div><div class="value"><a href="${brandApp.livestreamBrief}" target="_blank" style="color:#6c5ce7;text-decoration:underline;">View Brief</a></div></div>` : ''}
-                </div>
-              </div>
-              <div style="margin-top:8px;padding:12px;background:#f0faf4;border-radius:8px;border:1px solid #c3e6cb;">
-                <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Creator Application</div>
-                <div class="app-card-detail-grid">
-                  <div class="app-card-detail"><div class="label">Creator Telegram</div><div class="value">${row.telegram || '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Creator Mobile</div><div class="value">${displayPhone}</div></div>
-                  <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Creator Shipping Address</div><div class="value">${row.shippingAddress || '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Willing to Travel to Seller Site</div><div class="value">${String(row.willingToTravel) === 'true' ? 'Yes' : 'No'}</div></div>
-                </div>
-              </div>
-            ` : ''}
+            <div class="app-card-detail-grid">
+              <div class="app-card-detail"><div class="label">Affiliate Username</div><div class="value">${app.affiliateUsername}</div></div>
+              <div class="app-card-detail"><div class="label">Phone</div><div class="value">${app.phone}</div></div>
+              <div class="app-card-detail"><div class="label">Telegram</div><div class="value">${app.telegram}</div></div>
+              <div class="app-card-detail"><div class="label">Willing to Travel to Seller Site</div><div class="value">${String(app.willingToTravel) === 'true' ? 'Yes' : 'No'}</div></div>
+              <div class="app-card-detail" style="grid-column: span 2;"><div class="label">Shipping Address</div><div class="value">${app.shippingAddress}</div></div>
+              ${brandAppForRm ? `
+                <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandAppForRm.streamLocation || '—'}</div></div>
+                ${String(brandAppForRm.streamLocation).trim().toLowerCase() === 'seller site' ? `<div class="app-card-detail" style="grid-column: span 2;"><div class="label">Seller Site Address</div><div class="value">${(brandAppForRm.sellerSiteAddress || '').trim() || '—'}</div></div>` : ''}
+              ` : ''}
+            </div>
           </div>
         `;
       }).join('');
     };
 
-    // Internal: Pending Creator Confirmations (one card per row)
+    // Internal: Pending Creator Confirmations
     const renderInternalPendingConfirmations = () => {
       const pendingConfirm = filterCreatorAppsByDisplayWindow(state.creatorApplications).filter(a => a.status === 'approved');
       if (pendingConfirm.length === 0) {
         return `<div class="empty-state"><p style="color:#888;">No applications pending creator confirmation</p></div>`;
       }
 
-      return pendingConfirm.map(row => {
-        const brandApp = state.brandApplications.find(ba => ba.id === row.brandApplicationId);
-        const rm = getRmForShop(brandApp?.shopId);
-        const isExpanded = state.expandedCards['pc-details-' + row.id];
-        const phoneParsed = parseStoredPhone(row.phone);
+      return pendingConfirm.map(app => {
+        const slots = getTimeslots(app);
+        const phoneParsed = parseStoredPhone(app.phone);
         const displayPhone = '+' + phoneParsed.code + ' ' + phoneParsed.number;
+        const brandAppForRm2 = state.brandApplications.find(ba => ba.id === app.brandApplicationId);
+        const rm2 = getRmForShop(brandAppForRm2?.shopId);
         return `
           <div class="app-card creator-app">
             <div class="app-card-header">
               <div>
-                <div class="app-card-title">🏪 ${row.brandName || row.shopName}</div>
-                <div style="font-size:12px;color:#666;margin-top:4px;">🎬 ${row.creatorName}${row.affiliateUsername && row.affiliateUsername !== row.creatorName ? ' (@' + row.affiliateUsername + ')' : ''}</div>
+                <div class="app-card-title">🎬 ${app.creatorName}</div>
+                <div style="font-size:12px;color:#666;margin-top:4px;">Applied for 🏪 ${app.brandName || app.shopName} &nbsp;·&nbsp; RM: <strong>${rm2}</strong></div>
               </div>
               <span class="status-badge status-approved">Awaiting Confirmation</span>
             </div>
-            <div class="app-card-meta">
-              <div class="app-card-meta-item">Shop ID: <strong>${brandApp?.shopId || '—'}</strong></div>
-              <div class="app-card-meta-item">RM: <strong>${rm}</strong></div>
-              <div class="app-card-meta-item">Category: <strong>${brandApp?.sellerType || '—'}</strong></div>
-              <div class="app-card-meta-item">Stream Month: <strong>${formatMonth(brandApp?.month)}</strong></div>
-            </div>
-            <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
-              <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(row.streamDate)} ${formatTime(row.streamTime)}${row.streamEndTime ? ' – ' + (row.streamEndDate && row.streamEndDate !== row.streamDate ? formatDate(row.streamEndDate) + ' ' : '') + formatTime(row.streamEndTime) : ''}</span></div></div>
-            </div>
             <div style="margin-top:8px;">
-              <span style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="state.expandedCards['pc-details-${row.id}'] = !state.expandedCards['pc-details-${row.id}']; render();">
-                ${isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
-              </span>
+              <div style="font-size:12px;color:#888;margin-bottom:4px;">Timeslots:</div>
+              ${slots.length > 0 ? slots.map(s => `
+                <span style="display:inline-block;padding:4px 10px;background:#f0f0ff;border-radius:6px;font-size:12px;color:#6c5ce7;margin:2px;">📅 ${formatDate(s.date)} ${formatTime(s.startTime || s.time)}${s.endTime ? ' – ' + (s.endDate && s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span>
+              `).join('') : '—'}
             </div>
-            ${isExpanded ? `
-              <div style="margin-top:12px;padding:12px;background:#fff8f0;border-radius:8px;border:1px solid #fcddd4;">
-                <div style="font-size:12px;font-weight:700;color:#e67e22;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Brand Application</div>
-                <div class="app-card-detail-grid">
-                  <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandApp?.streamLocation || '—'}</div></div>
-                  ${(String(brandApp?.sellerSiteRequired) === 'true' || String(brandApp?.streamLocation).trim().toLowerCase() === 'seller site') ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${(brandApp?.sellerSiteAddress || '').trim() || '—'}</div></div>` : ''}
-                  <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${brandApp?.amsCommission ? brandApp.amsCommission + '%' : '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Products Sponsored</div><div class="value">${brandApp?.numProductsSponsored || '—'}</div></div>
-                  <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(brandApp?.voucherTier)}</div></div>
-                  <div class="app-card-detail"><div class="label">Package Activation</div><div class="value">${String(brandApp?.hasPackageActivation) === 'true' ? 'Yes' : 'No'}</div></div>
-                  <div class="app-card-detail"><div class="label">Preferred Date</div><div class="value">${brandApp?.preferredDate ? formatDate(brandApp.preferredDate) : '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Seller PIC</div><div class="value">${brandApp?.sellerPicName || '—'}${brandApp?.sellerPicMobile ? ' · ' + brandApp.sellerPicMobile : ''}</div></div>
-                  <div class="app-card-detail"><div class="label">Seller PIC Email</div><div class="value">${brandApp?.sellerPicEmail || '—'}</div></div>
-                  ${brandApp?.livestreamBrief ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Livestream Brief</div><div class="value"><a href="${brandApp.livestreamBrief}" target="_blank" style="color:#6c5ce7;text-decoration:underline;">View Brief</a></div></div>` : ''}
-                </div>
-              </div>
-              <div style="margin-top:8px;padding:12px;background:#f0faf4;border-radius:8px;border:1px solid #c3e6cb;">
-                <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Creator Application</div>
-                <div class="app-card-detail-grid">
-                  <div class="app-card-detail"><div class="label">Creator Telegram</div><div class="value">${row.telegram || '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Creator Mobile</div><div class="value">${displayPhone}</div></div>
-                  <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Creator Shipping Address</div><div class="value">${row.shippingAddress || '—'}</div></div>
-                  <div class="app-card-detail"><div class="label">Willing to Travel to Seller Site</div><div class="value">${String(row.willingToTravel) === 'true' ? 'Yes' : 'No'}</div></div>
-                </div>
-              </div>
-            ` : ''}
+            <div class="app-card-detail-grid">
+              <div class="app-card-detail"><div class="label">Affiliate Username</div><div class="value">${app.affiliateUsername}</div></div>
+              <div class="app-card-detail"><div class="label">Phone</div><div class="value">${displayPhone}</div></div>
+              <div class="app-card-detail"><div class="label">Telegram</div><div class="value">${app.telegram}</div></div>
+              <div class="app-card-detail" style="grid-column: span 2;"><div class="label">Shipping Address</div><div class="value">${app.shippingAddress || '—'}</div></div>
+              ${brandAppForRm2 ? `
+                <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandAppForRm2.streamLocation || '—'}</div></div>
+                ${String(brandAppForRm2.streamLocation).trim().toLowerCase() === 'seller site' ? `<div class="app-card-detail" style="grid-column: span 2;"><div class="label">Seller Site Address</div><div class="value">${(brandAppForRm2.sellerSiteAddress || '').trim() || '—'}</div></div>` : ''}
+              ` : ''}
+            </div>
           </div>
         `;
       }).join('');
@@ -3590,8 +3179,6 @@
             sellerPicMobile: brandApp?.sellerPicMobile || '',
             sellerPicEmail: brandApp?.sellerPicEmail || '',
             livestreamBrief: brandApp?.livestreamBrief || '',
-            sampleSentAt: ca.sampleSentAt || '',
-            sampleReceivedAt: ca.sampleReceivedAt || '',
           });
         });
       });
@@ -3690,15 +3277,7 @@
                 <div class="app-card-meta-item">Stream Month: <strong>${formatMonth(s.month)}</strong></div>
               </div>
               <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
-                <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(s.date)} ${formatTime(s.startTime)}${s.endTime ? ' – ' + (s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span></div></div>
-              </div>
-              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;">
-                ${s.sampleReceivedAt
-                  ? `<span style="background:#e3f2fd;color:#1565c0;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">📬 Sample Received — ${new Date(s.sampleReceivedAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })}</span>`
-                  : s.sampleSentAt
-                    ? `<span style="background:#fff8e1;color:#e65100;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">📦 Sample Sent — ${new Date(s.sampleSentAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })} · Awaiting creator confirmation</span>`
-                    : `<span style="background:#f5f5f5;color:#888;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">⏳ Sample Not Yet Sent</span>`
-                }
+                <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value">${formatDate(s.date)} ${formatTime(s.startTime)}${s.endTime ? ' – ' + (s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</div></div>
               </div>
               <div style="margin-top:8px;">
                 <span style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="state.expandedCards['${cardKey}'] = !state.expandedCards['${cardKey}']; render();">
@@ -3828,8 +3407,8 @@
       `;
     };
 
-    // Initialize — render landing page immediately, data loads after login
-    render();
+    // Initialize
+    loadAllData();
   </script>
 </body>
 </html>

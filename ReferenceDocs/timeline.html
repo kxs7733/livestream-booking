@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Livestream Booking App — Launch Timeline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .slide {
+      width: 100%;
+      max-width: 960px;
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 52px 60px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.1);
+    }
+
+    .header {
+      margin-bottom: 48px;
+    }
+
+    .header .label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #7c3aed;
+      margin-bottom: 8px;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+
+    .header h1 span {
+      color: #7c3aed;
+    }
+
+    /* Progress bar at top */
+    .progress-bar {
+      display: flex;
+      border-radius: 8px;
+      overflow: hidden;
+      height: 8px;
+      margin-bottom: 48px;
+      gap: 2px;
+    }
+
+    .progress-bar .seg {
+      height: 100%;
+      border-radius: 2px;
+    }
+
+    /* Timeline */
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 180px 28px 1fr;
+      align-items: stretch;
+      gap: 0 16px;
+      position: relative;
+    }
+
+    /* Date column */
+    .phase-date {
+      text-align: right;
+      padding: 18px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .phase-date .range {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      letter-spacing: 0.3px;
+    }
+
+    /* Center line + dot */
+    .phase-connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .phase-connector .dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      margin-top: 14px;
+      z-index: 1;
+      position: relative;
+    }
+
+    .phase-connector .line {
+      width: 2px;
+      flex: 1;
+      background: #cbd5e1;
+      margin-top: 4px;
+    }
+
+    .phase:last-child .phase-connector .line {
+      display: none;
+    }
+
+    /* Card */
+    .phase-card {
+      padding: 14px 20px 20px 20px;
+      border-radius: 12px;
+      margin: 8px 0 16px 0;
+      border-left: 3px solid transparent;
+      transition: transform 0.15s;
+    }
+
+    .phase-card:hover {
+      transform: translateX(4px);
+    }
+
+    .phase-card .title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .phase-card .desc {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    /* Milestone (single date) */
+    .phase.milestone .phase-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+    }
+
+    .phase.milestone .phase-card .title {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .milestone-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    /* Color themes per phase */
+    .p1 .dot { background: #dbeafe; color: #1d4ed8; }
+    .p1 .phase-card { background: #eff6ff; border-color: #3b82f6; }
+    .p1 .title { color: #1d4ed8; }
+
+    .p2 .dot { background: #ffedd5; color: #c2410c; }
+    .p2 .phase-card { background: #fff7ed; border-color: #f97316; }
+    .p2 .title { color: #c2410c; }
+
+    .p3 .dot { background: #f3e8ff; color: #7e22ce; }
+    .p3 .phase-card { background: #faf5ff; border-color: #a855f7; }
+    .p3 .title { color: #7e22ce; }
+
+    .p4 .dot { background: #d1fae5; color: #065f46; }
+    .p4 .phase-card { background: #ecfdf5; border-color: #10b981; }
+    .p4 .title { color: #065f46; }
+    .p4 .milestone-badge { background: #d1fae5; color: #065f46; }
+
+    .p5 .dot { background: #cffafe; color: #0e7490; }
+    .p5 .phase-card { background: #ecfeff; border-color: #06b6d4; }
+    .p5 .title { color: #0e7490; }
+
+    .p6 .dot { background: #fee2e2; color: #991b1b; }
+    .p6 .phase-card { background: #fef2f2; border-color: #ef4444; }
+    .p6 .title { color: #991b1b; }
+    .p6 .milestone-badge { background: #fee2e2; color: #991b1b; }
+
+    /* Progress segments */
+    .s1 { background: #3b82f6; flex: 14; }
+    .s2 { background: #f97316; flex: 5; }
+    .s3 { background: #a855f7; flex: 7; }
+    .s4 { background: #10b981; flex: 1; }
+    .s5 { background: #06b6d4; flex: 6; }
+    .s6 { background: #ef4444; flex: 1; }
+
+    .notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-left: 4px solid #f59e0b;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-top: 28px;
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.5;
+    }
+
+    .notice strong {
+      color: #92400e;
+    }
+
+    .notice-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .footer {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .footer .go-live {
+      color: #ef4444;
+      font-weight: 700;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="header">
+      <div class="label">Product Launch</div>
+      <h1>Livestream Booking App — <span>Go-Live Roadmap</span></h1>
+    </div>
+
+    <div class="progress-bar">
+      <div class="seg s1"></div>
+      <div class="seg s2"></div>
+      <div class="seg s3"></div>
+      <div class="seg s4"></div>
+      <div class="seg s5"></div>
+      <div class="seg s6"></div>
+    </div>
+
+    <div class="timeline">
+
+      <!-- Phase 1 -->
+      <div class="phase p1">
+        <div class="phase-date">
+          <div class="range">25 Feb – 11 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🧪</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Internal Testing</div>
+          <div class="desc">End-to-end validation across core flows by the internal team. Bug logging and initial feedback collection.</div>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="phase p2">
+        <div class="phase-date">
+          <div class="range">12 Mar – 17 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🔧</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Bug Fixes & Refinements</div>
+          <div class="desc">Address issues surfaced during internal testing. Polish UX and resolve blocking defects before stress testing.</div>
+        </div>
+      </div>
+
+      <!-- Phase 3 -->
+      <div class="phase p3">
+        <div class="phase-date">
+          <div class="range">18 Mar – 23 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">⚡</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Stress Testing</div>
+          <div class="desc">Simulate high load and concurrent bookings to validate performance, stability, and scalability under pressure.</div>
+        </div>
+      </div>
+
+      <!-- Phase 4 — Milestone -->
+      <div class="phase p4 milestone">
+        <div class="phase-date">
+          <div class="range">24 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🚀</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Technical Go-Live</div>
+          <span class="milestone-badge">Milestone</span>
+        </div>
+      </div>
+
+      <!-- Phase 5 -->
+      <div class="phase p5">
+        <div class="phase-date">
+          <div class="range">24 Mar – 29 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">📣</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Change Management</div>
+          <div class="desc">Onboard stakeholders and end users. Communications, training, and support readiness for the rollout.</div>
+        </div>
+      </div>
+
+      <!-- Phase 6 — Milestone -->
+      <div class="phase p6 milestone">
+        <div class="phase-date">
+          <div class="range">30 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🎯</div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Live — Open to Users</div>
+          <span class="milestone-badge">Go Live</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="notice">
+      <span class="notice-icon">⚠️</span>
+      <div>
+        <strong>No Parallel Run</strong> — Upon go-live on 30 March, the legacy creator-brand matching process will be fully retired. All matching will be handled exclusively through the new app from day one.
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Feb 25 – Mar 30, 2026 · 33 days total</span>
+      <span class="go-live">🔴 Live: 30 March 2026</span>
+    </div>
+  </div>
+</body>
+</html>
