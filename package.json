@@ -7,6 +7,7 @@
     "test:ui": "playwright test --ui"
   },
   "dependencies": {
+    "compression": "^1.8.1",
     "express": "^4.18.2"
   },
   "devDependencies": {
