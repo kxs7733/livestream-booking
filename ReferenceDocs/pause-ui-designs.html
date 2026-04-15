@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pause Toggle — Refined Options</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #ebebeb; color: #222; }
+
+    .page { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+    h1 { font-size: 21px; font-weight: 700; margin-bottom: 4px; }
+    .page-sub { font-size: 13px; color: #888; margin-bottom: 40px; }
+
+    .section { margin-bottom: 52px; }
+    .section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+      color: #bbb; margin-bottom: 18px; padding-bottom: 8px; border-bottom: 1px solid #d8d8d8;
+    }
+    .option-title {
+      font-size: 13px; font-weight: 700; color: #333; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .option-desc { font-size: 12px; color: #999; margin-bottom: 14px; }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 580px) { .grid2 { grid-template-columns: 1fr; } }
+
+    .state-label {
+      font-size: 10px; font-weight: 700; color: #bbb; letter-spacing: 0.8px;
+      text-transform: uppercase; margin-bottom: 7px;
+    }
+
+    /* ── Shared card shell ── */
+    .card {
+      background: #fff; border-radius: 12px;
+      border: 1px solid #e2e2e2;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      overflow: hidden;
+    }
+
+    /* ── Shared atoms ── */
+    .status-badge {
+      display: inline-block; padding: 3px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 700;
+    }
+    .s-approved { background: #e8f5e9; color: #27ae60; }
+    .s-pending  { background: #fff3e0; color: #e67e22; }
+
+    /* toggle */
+    .tswitch { position: relative; width: 38px; height: 21px; flex-shrink: 0; cursor: pointer; }
+    .ttrack  { position: absolute; inset: 0; border-radius: 11px; background: #ddd; }
+    .ttrack.on { background: #e67e22; }
+    .tthumb  { position: absolute; top: 3px; left: 3px; width: 15px; height: 15px;
+               border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .tthumb.on { left: 20px; }
+
+    /* ═══════════════════════════════
+       OPTION A — Stat line + footer toggle
+    ═══════════════════════════════ */
+    .a-body { padding: 16px 16px 12px; }
+    .a-month-label { font-size: 10px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
+    .a-month-val   { font-size: 17px; font-weight: 700; color: #222; }
+    .a-stats       { font-size: 12px; color: #888; margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .a-divider-dot { color: #ccc; }
+    .a-footer {
+      padding: 10px 16px;
+      border-top: 1px solid #f0f0f0;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: #fafafa;
+    }
+    .a-footer.paused { background: #fff8f0; border-top-color: #fde8d0; }
+    .a-footer-left { display: flex; flex-direction: column; gap: 1px; }
+    .a-footer-label { font-size: 12px; font-weight: 600; color: #555; }
+    .a-footer-label.paused { color: #e67e22; }
+    .a-footer-sub   { font-size: 11px; color: #bbb; line-height: 1.4; }
+
+    /* ═══════════════════════════════
+       OPTION B — Left accent border
+    ═══════════════════════════════ */
+    .b-card { border-left: 4px solid #27ae60; }
+    .b-card.paused { border-left-color: #e67e22; background: #fffcf8; }
+    .b-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+    .b-left { display: flex; flex-direction: column; gap: 4px; }
+    .b-month-label { font-size: 10px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.8px; }
+    .b-month-val   { font-size: 17px; font-weight: 700; color: #222; }
+    .b-stats       { font-size: 12px; color: #888; margin-top: 1px; }
+    .b-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+    .b-toggle-row  { display: flex; align-items: center; gap: 7px; }
+    .b-toggle-label { font-size: 12px; font-weight: 600; color: #777; }
+    .b-toggle-label.paused { color: #e67e22; }
+    .b-liner { font-size: 11px; color: #c0c0c0; max-width: 160px; text-align: right; line-height: 1.4; }
+    .b-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #fff3e0; color: #e67e22; border: 1px solid #fdd9b0; }
+    .b-row2 { padding: 0 16px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* ═══════════════════════════════
+       OPTION C — Stat grid + compact toggle row
+    ═══════════════════════════════ */
+    .c-header { padding: 14px 16px 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+    .c-month-label { font-size: 10px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
+    .c-month-val   { font-size: 17px; font-weight: 700; color: #222; }
+    .c-stats-grid  { display: flex; gap: 0; border-top: 1px solid #f0f0f0; }
+    .c-stat {
+      flex: 1; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px;
+      border-right: 1px solid #f0f0f0;
+    }
+    .c-stat:last-child { border-right: none; }
+    .c-stat-label { font-size: 10px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.6px; }
+    .c-stat-val   { font-size: 14px; font-weight: 700; color: #333; }
+    .c-toggle-row {
+      padding: 9px 16px; border-top: 1px solid #f0f0f0;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: #fafafa;
+    }
+    .c-toggle-row.paused { background: #fff8f0; border-top-color: #fde8d0; }
+    .c-toggle-label { font-size: 12px; font-weight: 600; color: #555; }
+    .c-toggle-label.paused { color: #e67e22; }
+    .c-toggle-liner { font-size: 11px; color: #bbb; max-width: 200px; text-align: right; line-height: 1.4; }
+    .c-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+
+    /* ═══════════════════════════════
+       OPTION D — Inline text, no pills
+    ═══════════════════════════════ */
+    .d-header { padding: 16px 16px 14px; display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+    .d-left { display: flex; flex-direction: column; gap: 3px; }
+    .d-eyebrow { font-size: 10px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 0.8px; }
+    .d-month { font-size: 17px; font-weight: 700; color: #222; margin-top: 1px; }
+    .d-meta  { font-size: 12px; color: #999; margin-top: 4px; }
+    .d-meta span { color: #333; font-weight: 600; }
+    .d-badge-row { display: flex; align-items: center; gap: 7px; margin-top: 7px; flex-wrap: wrap; }
+    .d-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+    .d-toggle-row { display: flex; align-items: center; gap: 7px; }
+    .d-toggle-label { font-size: 12px; font-weight: 600; color: #777; }
+    .d-toggle-label.paused { color: #e67e22; }
+    .d-liner { font-size: 11px; color: #c0c0c0; max-width: 155px; text-align: right; line-height: 1.4; }
+    .d-paused-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 600; background: #fff3e0; color: #e67e22; border: 1px solid #fdd9b0; }
+
+    /* Internal specifics */
+    .int-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+    .int-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn-app { padding: 5px 11px; background: #27ae60; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-rej { padding: 5px 11px; background: none; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-can { padding: 5px 11px; background: none; border: 1px solid #bbb; color: #888; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+    .hr { border: none; border-top: 1px dashed #d0d0d0; margin: 20px 0 28px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Pause Toggle — 4 Cleaner Options</h1>
+  <p class="page-sub">Each option shown for Seller (left col) and Internal (right col), open + paused states.</p>
+
+
+  <!-- ══════════════════════════════════════════════
+       OPTION A — Footer toggle strip
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Option A — Clean body + toggle in footer strip</div>
+    <div class="option-title">Idea: keep the card body clean (month + stat line), move the toggle + liner into a subtle footer strip below.</div>
+    <div class="option-desc">Paused state tints the footer amber. No pills — stats as readable inline text.</div>
+
+    <div class="grid2" style="margin-bottom:20px;">
+
+      <!-- SELLER OPEN -->
+      <div>
+        <div class="state-label">Seller · Open</div>
+        <div class="card">
+          <div class="a-body">
+            <div class="a-month-label">Stream Month</div>
+            <div class="a-month-val">May 2025</div>
+            <div class="a-stats">
+              <span class="status-badge s-approved">approved</span>
+              <span class="a-divider-dot">·</span>
+              <span>3 streams requested</span>
+              <span class="a-divider-dot">·</span>
+              <span>1 slot left</span>
+            </div>
+          </div>
+          <div class="a-footer">
+            <div class="a-footer-left">
+              <div class="a-footer-label">Pause new creator applications</div>
+              <div class="a-footer-sub">Existing applications will continue as normal.</div>
+            </div>
+            <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SELLER PAUSED -->
+      <div>
+        <div class="state-label">Seller · Paused</div>
+        <div class="card">
+          <div class="a-body">
+            <div class="a-month-label">Stream Month</div>
+            <div class="a-month-val">May 2025</div>
+            <div class="a-stats">
+              <span class="status-badge s-approved">approved</span>
+              <span class="a-divider-dot">·</span>
+              <span>3 streams requested</span>
+              <span class="a-divider-dot">·</span>
+              <span>1 slot left</span>
+            </div>
+          </div>
+          <div class="a-footer paused">
+            <div class="a-footer-left">
+              <div class="a-footer-label paused">⏸ Applications paused</div>
+              <div class="a-footer-sub">Existing applications will continue as normal.</div>
+            </div>
+            <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="grid2">
+
+      <!-- INTERNAL OPEN -->
+      <div>
+        <div class="state-label">Internal · Open · Pending</div>
+        <div class="card">
+          <div class="a-body">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              <div>
+                <div class="a-month-label">Stream Month</div>
+                <div class="a-month-val">May 2025</div>
+                <div style="font-size:12px;color:#888;margin-top:3px;">🏪 Shopee SG Official</div>
+                <div class="a-stats" style="margin-top:6px;">
+                  <span class="status-badge s-pending">pending</span>
+                  <span class="a-divider-dot">·</span>
+                  <span>3 requested · 1 left</span>
+                </div>
+              </div>
+              <div class="int-actions">
+                <button class="btn-app">Approve</button>
+                <button class="btn-rej">Reject</button>
+                <button class="btn-can">Cancel</button>
+              </div>
+            </div>
+          </div>
+          <div class="a-footer">
+            <div class="a-footer-label">Pause new creator applications</div>
+            <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INTERNAL PAUSED -->
+      <div>
+        <div class="state-label">Internal · Paused · Approved</div>
+        <div class="card">
+          <div class="a-body">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              <div>
+                <div class="a-month-label">Stream Month</div>
+                <div class="a-month-val">May 2025</div>
+                <div style="font-size:12px;color:#888;margin-top:3px;">🏪 Shopee SG Official</div>
+                <div class="a-stats" style="margin-top:6px;">
+                  <span class="status-badge s-approved">approved</span>
+                  <span class="a-divider-dot">·</span>
+                  <span>3 requested · 1 left</span>
+                </div>
+              </div>
+              <div class="int-actions">
+                <button class="btn-can">Cancel</button>
+              </div>
+            </div>
+          </div>
+          <div class="a-footer paused">
+            <div class="a-footer-label paused">⏸ Brand Application Paused</div>
+            <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       OPTION B — Left accent border
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Option B — Left accent border signals state</div>
+    <div class="option-title">Idea: green border = open, orange border + warm tint = paused. No separate badge needed — the card itself signals state.</div>
+    <div class="option-desc">Toggle and liner sit top-right. Stats as inline text below month.</div>
+
+    <div class="grid2" style="margin-bottom:20px;">
+
+      <!-- SELLER OPEN -->
+      <div>
+        <div class="state-label">Seller · Open</div>
+        <div class="card b-card">
+          <div class="b-header">
+            <div class="b-left">
+              <div class="b-month-label">Stream Month</div>
+              <div class="b-month-val">May 2025</div>
+              <div class="b-stats">3 streams requested · 1 slot left</div>
+            </div>
+            <div class="b-right">
+              <div class="b-toggle-row">
+                <span class="b-toggle-label">Pause applications</span>
+                <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+              </div>
+              <div class="b-liner">Stops new creators applying. Existing applications continue.</div>
+            </div>
+          </div>
+          <div class="b-row2"><span class="status-badge s-approved">approved</span></div>
+        </div>
+      </div>
+
+      <!-- SELLER PAUSED -->
+      <div>
+        <div class="state-label">Seller · Paused</div>
+        <div class="card b-card paused">
+          <div class="b-header">
+            <div class="b-left">
+              <div class="b-month-label">Stream Month</div>
+              <div class="b-month-val">May 2025</div>
+              <div class="b-stats">3 streams requested · 1 slot left</div>
+            </div>
+            <div class="b-right">
+              <div class="b-toggle-row">
+                <span class="b-toggle-label paused">Pause applications</span>
+                <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+              </div>
+              <div class="b-liner">Stops new creators applying. Existing applications continue.</div>
+            </div>
+          </div>
+          <div class="b-row2">
+            <span class="status-badge s-approved">approved</span>
+            <span class="b-badge">⏸ Paused</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="grid2">
+
+      <!-- INTERNAL OPEN -->
+      <div>
+        <div class="state-label">Internal · Open · Pending</div>
+        <div class="card b-card">
+          <div class="b-header">
+            <div class="b-left">
+              <div class="b-month-label">Stream Month</div>
+              <div class="b-month-val">May 2025</div>
+              <div style="font-size:12px;color:#888;margin-top:2px;">🏪 Shopee SG Official</div>
+              <div class="b-stats" style="margin-top:4px;">3 requested · 1 left</div>
+            </div>
+            <div class="int-right">
+              <div class="int-actions">
+                <button class="btn-app">Approve</button>
+                <button class="btn-rej">Reject</button>
+                <button class="btn-can">Cancel</button>
+              </div>
+              <div class="b-toggle-row">
+                <span class="b-toggle-label">Pause</span>
+                <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="b-row2"><span class="status-badge s-pending">pending</span></div>
+        </div>
+      </div>
+
+      <!-- INTERNAL PAUSED -->
+      <div>
+        <div class="state-label">Internal · Paused · Approved</div>
+        <div class="card b-card paused">
+          <div class="b-header">
+            <div class="b-left">
+              <div class="b-month-label">Stream Month</div>
+              <div class="b-month-val">May 2025</div>
+              <div style="font-size:12px;color:#888;margin-top:2px;">🏪 Shopee SG Official</div>
+              <div class="b-stats" style="margin-top:4px;">3 requested · 1 left</div>
+            </div>
+            <div class="int-right">
+              <div class="int-actions">
+                <button class="btn-can">Cancel</button>
+              </div>
+              <div class="b-toggle-row">
+                <span class="b-toggle-label paused">Pause</span>
+                <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="b-row2">
+            <span class="status-badge s-approved">approved</span>
+            <span class="b-badge">⏸ Brand Application Paused</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       OPTION C — Stat grid + toggle row
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Option C — Stat grid rows + toggle in its own row</div>
+    <div class="option-title">Idea: stats displayed in a clean 3-column grid (no pills). Toggle sits in a clearly separated row below.</div>
+    <div class="option-desc">Most structured. Easy to scan. Liner only for seller — internal gets just the toggle row.</div>
+
+    <div class="grid2" style="margin-bottom:20px;">
+
+      <!-- SELLER OPEN -->
+      <div>
+        <div class="state-label">Seller · Open</div>
+        <div class="card">
+          <div class="c-header">
+            <div>
+              <div class="c-month-label">Stream Month</div>
+              <div class="c-month-val">May 2025</div>
+            </div>
+          </div>
+          <div class="c-stats-grid">
+            <div class="c-stat">
+              <div class="c-stat-label">Status</div>
+              <div class="c-stat-val"><span class="status-badge s-approved" style="font-size:12px;">approved</span></div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Requested</div>
+              <div class="c-stat-val">3</div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Slots Left</div>
+              <div class="c-stat-val">1</div>
+            </div>
+          </div>
+          <div class="c-toggle-row">
+            <div>
+              <div class="c-toggle-label">Pause new creator applications</div>
+              <div class="c-toggle-liner" style="text-align:left;max-width:100%;">Existing applications will continue as normal.</div>
+            </div>
+            <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SELLER PAUSED -->
+      <div>
+        <div class="state-label">Seller · Paused</div>
+        <div class="card">
+          <div class="c-header">
+            <div>
+              <div class="c-month-label">Stream Month</div>
+              <div class="c-month-val">May 2025</div>
+            </div>
+          </div>
+          <div class="c-stats-grid">
+            <div class="c-stat">
+              <div class="c-stat-label">Status</div>
+              <div class="c-stat-val"><span class="status-badge s-approved" style="font-size:12px;">approved</span></div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Requested</div>
+              <div class="c-stat-val">3</div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Slots Left</div>
+              <div class="c-stat-val">1</div>
+            </div>
+          </div>
+          <div class="c-toggle-row paused">
+            <div>
+              <div class="c-toggle-label paused">⏸ Applications paused</div>
+              <div class="c-toggle-liner" style="text-align:left;max-width:100%;color:#e0a87a;">Existing applications will continue as normal.</div>
+            </div>
+            <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="grid2">
+
+      <!-- INTERNAL OPEN -->
+      <div>
+        <div class="state-label">Internal · Open · Pending</div>
+        <div class="card">
+          <div class="c-header">
+            <div>
+              <div class="c-month-label">Stream Month</div>
+              <div class="c-month-val">May 2025</div>
+              <div style="font-size:12px;color:#888;margin-top:3px;">🏪 Shopee SG Official</div>
+            </div>
+            <div class="int-actions">
+              <button class="btn-app">Approve</button>
+              <button class="btn-rej">Reject</button>
+              <button class="btn-can">Cancel</button>
+            </div>
+          </div>
+          <div class="c-stats-grid">
+            <div class="c-stat">
+              <div class="c-stat-label">Status</div>
+              <div class="c-stat-val"><span class="status-badge s-pending" style="font-size:12px;">pending</span></div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Requested</div>
+              <div class="c-stat-val">3</div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Slots Left</div>
+              <div class="c-stat-val">1</div>
+            </div>
+          </div>
+          <div class="c-toggle-row">
+            <div class="c-toggle-label">Pause new creator applications</div>
+            <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INTERNAL PAUSED -->
+      <div>
+        <div class="state-label">Internal · Paused · Approved</div>
+        <div class="card">
+          <div class="c-header">
+            <div>
+              <div class="c-month-label">Stream Month</div>
+              <div class="c-month-val">May 2025</div>
+              <div style="font-size:12px;color:#888;margin-top:3px;">🏪 Shopee SG Official</div>
+            </div>
+            <div class="int-actions">
+              <button class="btn-can">Cancel</button>
+            </div>
+          </div>
+          <div class="c-stats-grid">
+            <div class="c-stat">
+              <div class="c-stat-label">Status</div>
+              <div class="c-stat-val"><span class="status-badge s-approved" style="font-size:12px;">approved</span></div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Requested</div>
+              <div class="c-stat-val">3</div>
+            </div>
+            <div class="c-stat">
+              <div class="c-stat-label">Slots Left</div>
+              <div class="c-stat-val">1</div>
+            </div>
+          </div>
+          <div class="c-toggle-row paused">
+            <div class="c-toggle-label paused">⏸ Brand Application Paused</div>
+            <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       OPTION D — Inline text, no pills, badge on pause
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Option D — Inline text, badge only when paused</div>
+    <div class="option-title">Idea: no pills at all. Stats as natural prose. Toggle top-right. Paused state adds an orange badge inline with the status.</div>
+    <div class="option-desc">Quietest design — nothing screams for attention when open. Badge appears only when something needs action.</div>
+
+    <div class="grid2" style="margin-bottom:20px;">
+
+      <!-- SELLER OPEN -->
+      <div>
+        <div class="state-label">Seller · Open</div>
+        <div class="card">
+          <div class="d-header">
+            <div class="d-left">
+              <div class="d-eyebrow">Stream Month</div>
+              <div class="d-month">May 2025</div>
+              <div class="d-meta" style="margin-top:6px;"><span>3</span> streams requested · <span>1</span> slot left</div>
+              <div class="d-badge-row">
+                <span class="status-badge s-approved">approved</span>
+              </div>
+            </div>
+            <div class="d-right">
+              <div class="d-toggle-row">
+                <span class="d-toggle-label">Pause</span>
+                <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+              </div>
+              <div class="d-liner">Stops new creators applying. Existing continue as normal.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SELLER PAUSED -->
+      <div>
+        <div class="state-label">Seller · Paused</div>
+        <div class="card">
+          <div class="d-header">
+            <div class="d-left">
+              <div class="d-eyebrow">Stream Month</div>
+              <div class="d-month">May 2025</div>
+              <div class="d-meta" style="margin-top:6px;"><span>3</span> streams requested · <span>1</span> slot left</div>
+              <div class="d-badge-row">
+                <span class="status-badge s-approved">approved</span>
+                <span class="d-paused-badge">⏸ Paused</span>
+              </div>
+            </div>
+            <div class="d-right">
+              <div class="d-toggle-row">
+                <span class="d-toggle-label paused">Pause</span>
+                <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+              </div>
+              <div class="d-liner">Stops new creators applying. Existing continue as normal.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="grid2">
+
+      <!-- INTERNAL OPEN -->
+      <div>
+        <div class="state-label">Internal · Open · Pending</div>
+        <div class="card">
+          <div class="d-header">
+            <div class="d-left">
+              <div class="d-eyebrow">Stream Month</div>
+              <div class="d-month">May 2025</div>
+              <div style="font-size:12px;color:#888;margin-top:3px;">🏪 Shopee SG Official</div>
+              <div class="d-meta" style="margin-top:5px;"><span>3</span> requested · <span>1</span> left</div>
+              <div class="d-badge-row">
+                <span class="status-badge s-pending">pending</span>
+              </div>
+            </div>
+            <div class="int-right">
+              <div class="int-actions">
+                <button class="btn-app">Approve</button>
+                <button class="btn-rej">Reject</button>
+                <button class="btn-can">Cancel</button>
+              </div>
+              <div class="d-toggle-row">
+                <span class="d-toggle-label">Pause</span>
+                <div class="tswitch"><div class="ttrack"></div><div class="tthumb"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INTERNAL PAUSED -->
+      <div>
+        <div class="state-label">Internal · Paused · Approved</div>
+        <div class="card">
+          <div class="d-header">
+            <div class="d-left">
+              <div class="d-eyebrow">Stream Month</div>
+              <div class="d-month">May 2025</div>
+              <div style="font-size:12px;color:#888;margin-top:3px;">🏪 Shopee SG Official</div>
+              <div class="d-meta" style="margin-top:5px;"><span>3</span> requested · <span>1</span> left</div>
+              <div class="d-badge-row">
+                <span class="status-badge s-approved">approved</span>
+                <span class="d-paused-badge">⏸ Brand Paused</span>
+              </div>
+            </div>
+            <div class="int-right">
+              <div class="int-actions">
+                <button class="btn-can">Cancel</button>
+              </div>
+              <div class="d-toggle-row">
+                <span class="d-toggle-label paused">Pause</span>
+                <div class="tswitch"><div class="ttrack on"></div><div class="tthumb on"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

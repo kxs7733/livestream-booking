@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendar Click-to-Detail — Modal Preview</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; color: #333; }
+
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+    .section { margin-bottom: 48px; }
+    .section-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .section-title { font-size: 17px; font-weight: 700; color: #222; margin-bottom: 4px; }
+    .section-desc { font-size: 13px; color: #666; margin-bottom: 20px; max-width: 600px; }
+    .h-rule { border: none; border-top: 2px solid #e0e0e0; margin: 40px 0; }
+
+    /* ── Mini calendar ── */
+    .calendar-wrap { background: #fff; border-radius: 12px; padding: 16px; border: 1px solid #eee; max-width: 480px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 20px; }
+    .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .cal-header h3 { font-size: 15px; font-weight: 700; }
+    .cal-nav { background: none; border: 1px solid #ddd; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: #555; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-day-header { text-align: center; font-size: 10px; font-weight: 700; color: #aaa; padding: 4px 0; text-transform: uppercase; }
+    .cal-day { min-height: 64px; padding: 4px; border-radius: 4px; font-size: 11px; }
+    .cal-day.empty { background: transparent; }
+    .cal-day-num { font-size: 11px; color: #aaa; margin-bottom: 2px; font-weight: 500; }
+    .cal-day.has-event { background: #fafafa; border: 1px solid #f0f0f0; }
+    .cal-event {
+      border-radius: 3px; padding: 2px 4px; font-size: 9px; font-weight: 600;
+      cursor: pointer; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: opacity 0.15s;
+    }
+    .cal-event:hover { opacity: 0.8; }
+    .cal-event.confirmed { background: #e8f5e9; color: #27ae60; }
+    .cal-event.approved { background: #ede7f6; color: #6c5ce7; }
+    .cal-event.pending { background: #fff3e0; color: #e67e22; }
+    .click-hint { font-size: 12px; color: #aaa; margin-top: 8px; text-align: center; }
+
+    /* ── Modal overlay ── */
+    .modal-scene { position: relative; max-width: 480px; }
+    .modal-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.45);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+      z-index: 10;
+    }
+    .modal {
+      background: #fff; border-radius: 14px; width: 100%; max-height: 90%;
+      overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 16px 16px 12px; border-bottom: 1px solid #f0f0f0;
+      position: sticky; top: 0; background: #fff; border-radius: 14px 14px 0 0; z-index: 1;
+    }
+    .modal-title { font-size: 16px; font-weight: 700; color: #222; }
+    .modal-close {
+      background: #f5f5f5; border: none; border-radius: 50%; width: 28px; height: 28px;
+      font-size: 14px; cursor: pointer; color: #666; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-body { padding: 14px 16px 20px; }
+
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+    .badge-confirmed { background: #e8f5e9; color: #27ae60; }
+    .badge-approved { background: #ede7f6; color: #6c5ce7; }
+    .badge-pending { background: #fff3e0; color: #e67e22; }
+
+    .date-pill { display: inline-block; padding: 6px 14px; background: #f0f0ff; border-radius: 8px; font-size: 13px; color: #6c5ce7; font-weight: 600; margin: 10px 0 14px; }
+
+    .detail-section { margin-top: 14px; padding: 12px; border-radius: 8px; }
+    .detail-section.green { background: #f0faf4; border: 1px solid #c3e6cb; }
+    .detail-section.orange { background: #fff8f0; border: 1px solid #fcddd4; }
+    .detail-section.blue { background: #e3f2fd; border: 1px solid #90caf9; }
+    .detail-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+    .detail-section.green .detail-section-title { color: #27ae60; }
+    .detail-section.orange .detail-section-title { color: #e67e22; }
+    .detail-section.blue .detail-section-title { color: #1565c0; }
+
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .detail-item .label { font-size: 11px; color: #999; margin-bottom: 2px; }
+    .detail-item .value { font-size: 13px; color: #222; font-weight: 500; }
+    .detail-item.full { grid-column: 1 / -1; }
+
+    .sample-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-top: 8px; }
+    .sample-badge.waiting { background: #f5f5f5; color: #888; }
+    .sample-badge.sent { background: #fff8e1; color: #e65100; }
+    .sample-badge.received { background: #e3f2fd; color: #1565c0; }
+
+    .modal-action { display: block; width: 100%; background: #EE4D2D; color: white; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; margin-top: 14px; }
+
+    .tab-row { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+    .tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 2px solid transparent; background: #fff; color: #555; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .tab.active { border-color: #EE4D2D; color: #EE4D2D; }
+
+    .note { font-size: 12px; color: #888; background: #f9f9f9; border-radius: 8px; padding: 10px 14px; margin-top: 16px; border-left: 3px solid #ddd; }
+  </style>
+</head>
+<body>
+
+<h1>Calendar Click-to-Detail — Modal Preview</h1>
+<p class="subtitle">Click the tabs to switch between dashboards. The modal shows what appears when a creator taps a calendar event.</p>
+
+<div class="tab-row">
+  <div class="tab active" onclick="showTab('creator')">Creator Dashboard</div>
+  <div class="tab" onclick="showTab('brand')">Seller Dashboard</div>
+  <div class="tab" onclick="showTab('internal')">Internal Dashboard</div>
+</div>
+
+<!-- ══════════════ CREATOR ══════════════ -->
+<div id="tab-creator">
+  <div class="section">
+    <div class="section-label">Creator Dashboard — My Applications</div>
+    <div class="section-title">Tapping an event shows the brand slot details</div>
+    <div class="section-desc">Creator can quickly see what they applied for — brand, slot time, AMS, and location — without leaving the calendar.</div>
+
+    <div class="modal-scene">
+      <!-- Background: mini calendar -->
+      <div class="calendar-wrap">
+        <div class="cal-header">
+          <button class="cal-nav">← Prev</button>
+          <h3>April 2026</h3>
+          <button class="cal-nav">Next →</button>
+        </div>
+        <div class="cal-grid">
+          <div class="cal-day-header">Sun</div><div class="cal-day-header">Mon</div><div class="cal-day-header">Tue</div>
+          <div class="cal-day-header">Wed</div><div class="cal-day-header">Thu</div><div class="cal-day-header">Fri</div><div class="cal-day-header">Sat</div>
+          <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
+          <div class="cal-day"><div class="cal-day-num">1</div></div>
+          <div class="cal-day"><div class="cal-day-num">2</div></div>
+          <div class="cal-day has-event"><div class="cal-day-num">3</div><div class="cal-event confirmed" title="click me">Test Shop 2pm</div></div>
+          <div class="cal-day"><div class="cal-day-num">4</div></div>
+          <div class="cal-day"><div class="cal-day-num">5</div></div>
+          <div class="cal-day"><div class="cal-day-num">6</div></div>
+          <div class="cal-day"><div class="cal-day-num">7</div></div>
+          <div class="cal-day"><div class="cal-day-num">8</div></div>
+          <div class="cal-day"><div class="cal-day-num">9</div></div>
+          <div class="cal-day has-event"><div class="cal-day-num">10</div><div class="cal-event approved">Fashion Co 3pm</div></div>
+          <div class="cal-day"><div class="cal-day-num">11</div></div>
+        </div>
+        <div class="click-hint">👆 Tap any event chip to see details</div>
+      </div>
+
+      <!-- Modal overlay -->
+      <div class="modal-overlay">
+        <div class="modal">
+          <div class="modal-header">
+            <div>
+              <div class="modal-title">🏪 Test Shop</div>
+              <div style="margin-top:4px;"><span class="badge badge-confirmed">Confirmed</span></div>
+            </div>
+            <button class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div style="font-size:12px;color:#888;margin-bottom:2px;">Electronics &nbsp;·&nbsp; Apr 2026</div>
+            <div class="date-pill">📅 3 Apr 2026 &nbsp;14:00 – 15:30</div>
+
+            <div class="detail-section orange">
+              <div class="detail-section-title">Brand Details</div>
+              <div class="detail-grid">
+                <div class="detail-item"><div class="label">AMS Commission</div><div class="value">10%</div></div>
+                <div class="detail-item"><div class="label">Stream Location</div><div class="value">Creator Site</div></div>
+                <div class="detail-item"><div class="label">Seller PIC</div><div class="value">Alice · 91234567</div></div>
+                <div class="detail-item"><div class="label">Seller PIC Email</div><div class="value">alice@test.com</div></div>
+                <div class="detail-item full"><div class="label">Livestream Brief</div><div class="value"><a href="#" style="color:#6c5ce7;text-decoration:underline;">📄 View Brief</a></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">The modal shows the same fields as the expanded list card — no extra data is fetched. ✕ closes it and returns to the calendar.</div>
+  </div>
+</div>
+
+<!-- ══════════════ BRAND ══════════════ -->
+<div id="tab-brand" style="display:none;">
+  <div class="section">
+    <div class="section-label">Seller Dashboard — Confirmed Livestreams</div>
+    <div class="section-title">Tapping an event shows creator & sample status</div>
+    <div class="section-desc">Seller can see which creator is booked, their contact details, and whether samples have been sent — plus a quick action button if samples are still pending.</div>
+
+    <div class="modal-scene">
+      <div class="calendar-wrap">
+        <div class="cal-header">
+          <button class="cal-nav">← Prev</button>
+          <h3>April 2026</h3>
+          <button class="cal-nav">Next →</button>
+        </div>
+        <div class="cal-grid">
+          <div class="cal-day-header">Sun</div><div class="cal-day-header">Mon</div><div class="cal-day-header">Tue</div>
+          <div class="cal-day-header">Wed</div><div class="cal-day-header">Thu</div><div class="cal-day-header">Fri</div><div class="cal-day-header">Sat</div>
+          <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
+          <div class="cal-day"><div class="cal-day-num">1</div></div>
+          <div class="cal-day"><div class="cal-day-num">2</div></div>
+          <div class="cal-day has-event"><div class="cal-day-num">3</div><div class="cal-event confirmed">TestCreator 2pm</div></div>
+          <div class="cal-day"><div class="cal-day-num">4</div></div>
+          <div class="cal-day"><div class="cal-day-num">5</div></div>
+          <div class="cal-day"><div class="cal-day-num">6</div></div>
+          <div class="cal-day has-event"><div class="cal-day-num">7</div><div class="cal-event confirmed">AnotherCreator 10am</div></div>
+          <div class="cal-day"><div class="cal-day-num">8</div></div>
+          <div class="cal-day"><div class="cal-day-num">9</div></div>
+          <div class="cal-day"><div class="cal-day-num">10</div></div>
+          <div class="cal-day"><div class="cal-day-num">11</div></div>
+        </div>
+        <div class="click-hint">👆 Tap any event chip to see details</div>
+      </div>
+
+      <div class="modal-overlay">
+        <div class="modal">
+          <div class="modal-header">
+            <div>
+              <div class="modal-title">🎬 TestCreator <span style="font-size:13px;color:#888;font-weight:400;">@testcreator</span></div>
+              <div style="margin-top:4px;"><span class="badge badge-confirmed">Confirmed</span></div>
+            </div>
+            <button class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="date-pill">📅 3 Apr 2026 &nbsp;14:00 – 15:30</div>
+
+            <div class="sample-badge waiting">⏳ Samples not yet sent</div>
+
+            <div class="detail-section green">
+              <div class="detail-section-title">Creator Details</div>
+              <div class="detail-grid">
+                <div class="detail-item"><div class="label">Telegram</div><div class="value">@testcreator</div></div>
+                <div class="detail-item"><div class="label">Mobile</div><div class="value">91234567</div></div>
+                <div class="detail-item full"><div class="label">Shipping Address</div><div class="value">123 Test St, Singapore 123456</div></div>
+              </div>
+            </div>
+
+            <button class="modal-action">📦 Mark Sample as Sent</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">The action button (Mark Sample as Sent) is embedded in the modal so the seller can act immediately without switching to list view. Once sent, the modal updates to show the sent badge.</div>
+  </div>
+</div>
+
+<!-- ══════════════ INTERNAL ══════════════ -->
+<div id="tab-internal" style="display:none;">
+  <div class="section">
+    <div class="section-label">Internal Dashboard — Calendar</div>
+    <div class="section-title">Tapping an event shows full slot summary</div>
+    <div class="section-desc">Internal team gets a quick overview of both the brand application and creator details side-by-side, including sample status.</div>
+
+    <div class="modal-scene">
+      <div class="calendar-wrap">
+        <div class="cal-header">
+          <button class="cal-nav">← Prev</button>
+          <h3>April 2026</h3>
+          <button class="cal-nav">Next →</button>
+        </div>
+        <div class="cal-grid">
+          <div class="cal-day-header">Sun</div><div class="cal-day-header">Mon</div><div class="cal-day-header">Tue</div>
+          <div class="cal-day-header">Wed</div><div class="cal-day-header">Thu</div><div class="cal-day-header">Fri</div><div class="cal-day-header">Sat</div>
+          <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
+          <div class="cal-day"><div class="cal-day-num">1</div></div>
+          <div class="cal-day"><div class="cal-day-num">2</div></div>
+          <div class="cal-day has-event">
+            <div class="cal-day-num">3</div>
+            <div class="cal-event confirmed">TestCreator → Test Shop 2pm</div>
+          </div>
+          <div class="cal-day"><div class="cal-day-num">4</div></div>
+          <div class="cal-day"><div class="cal-day-num">5</div></div>
+          <div class="cal-day has-event">
+            <div class="cal-day-num">6</div>
+            <div class="cal-event pending">AnotherCreator → Fashion Co 10am</div>
+          </div>
+          <div class="cal-day"><div class="cal-day-num">7</div></div>
+          <div class="cal-day"><div class="cal-day-num">8</div></div>
+          <div class="cal-day has-event">
+            <div class="cal-day-num">9</div>
+            <div class="cal-event approved">Creator3 → Gadget Hub 4pm</div>
+          </div>
+          <div class="cal-day"><div class="cal-day-num">10</div></div>
+          <div class="cal-day"><div class="cal-day-num">11</div></div>
+        </div>
+        <div class="click-hint">👆 Tap any event chip to see details</div>
+      </div>
+
+      <div class="modal-overlay">
+        <div class="modal">
+          <div class="modal-header">
+            <div>
+              <div class="modal-title">🏪 Test Shop &nbsp;<span style="font-size:13px;color:#888;font-weight:400;">×</span>&nbsp; 🎬 TestCreator</div>
+              <div style="margin-top:4px;"><span class="badge badge-confirmed">Confirmed</span></div>
+            </div>
+            <button class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div style="font-size:12px;color:#888;margin-bottom:2px;">Electronics &nbsp;·&nbsp; Apr 2026 &nbsp;·&nbsp; RM Alice</div>
+            <div class="date-pill">📅 3 Apr 2026 &nbsp;14:00 – 15:30</div>
+
+            <div class="sample-badge sent">📦 Sample Sent — 10 Mar 2026</div>
+
+            <div class="detail-section orange">
+              <div class="detail-section-title">Brand Application</div>
+              <div class="detail-grid">
+                <div class="detail-item"><div class="label">AMS Commission</div><div class="value">10%</div></div>
+                <div class="detail-item"><div class="label">Stream Location</div><div class="value">Creator Site</div></div>
+                <div class="detail-item"><div class="label">Seller PIC</div><div class="value">Alice · 91234567</div></div>
+                <div class="detail-item"><div class="label">Seller PIC Email</div><div class="value">alice@test.com</div></div>
+              </div>
+            </div>
+
+            <div class="detail-section green">
+              <div class="detail-section-title">Creator Details</div>
+              <div class="detail-grid">
+                <div class="detail-item"><div class="label">Telegram</div><div class="value">@testcreator</div></div>
+                <div class="detail-item"><div class="label">Mobile</div><div class="value">91234567</div></div>
+                <div class="detail-item full"><div class="label">Shipping Address</div><div class="value">123 Test St, Singapore 123456</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">Internal modal is the most information-dense — shows both sides (brand + creator) so the team doesn't need to cross-reference list view.</div>
+  </div>
+</div>
+
+<script>
+  function showTab(name) {
+    ['creator', 'brand', 'internal'].forEach(t => {
+      document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+    });
+    document.querySelectorAll('.tab').forEach((el, i) => {
+      el.classList.toggle('active', ['creator','brand','internal'][i] === name);
+    });
+  }
+</script>
+</body>
+</html>

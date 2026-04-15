@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Livestream Booking App — User Journey</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f4f5f7;
+    color: #172b4d;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  /* ── Header ── */
+  .page-header {
+    background: linear-gradient(135deg, #ee4d2d 0%, #c0392b 100%);
+    color: #fff;
+    padding: 40px 48px;
+  }
+  .page-header h1 { font-size: 28px; font-weight: 700; }
+  .page-header p  { margin-top: 6px; opacity: .85; font-size: 15px; }
+
+  /* ── Layout ── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  /* ── Section titles ── */
+  h2 {
+    font-size: 20px; font-weight: 700;
+    margin: 40px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #dfe1e6;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 10px; color: #344563; }
+
+  /* ── Role cards ── */
+  .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 8px; }
+  .role-card {
+    border-radius: 10px; padding: 24px;
+    background: #fff; border: 1px solid #dfe1e6;
+    border-top: 4px solid var(--color);
+  }
+  .role-card .icon { font-size: 32px; margin-bottom: 10px; }
+  .role-card h3 { margin-top: 0; color: var(--color); font-size: 16px; }
+  .role-card p { color: #5e6c84; font-size: 13px; margin-top: 6px; }
+  .role-brand   { --color: #0052cc; }
+  .role-creator { --color: #36b37e; }
+  .role-internal{ --color: #6554c0; }
+
+  /* ── Status pill ── */
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .pill-pending   { background: #fff7d6; color: #974f0c; }
+  .pill-approved  { background: #e3fcef; color: #006644; }
+  .pill-confirmed { background: #deebff; color: #0747a6; }
+  .pill-rejected  { background: #ffebe6; color: #bf2600; }
+  .pill-cancelled { background: #f4f5f7; color: #42526e; }
+
+  /* ── Journey steps ── */
+  .journey { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: flex; gap: 16px; padding: 16px 0;
+  }
+  .step-number {
+    flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--step-color, #0052cc); color: #fff;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+  }
+  .step-connector {
+    flex-shrink: 0; width: 28px;
+    display: flex; justify-content: center;
+  }
+  .step-connector-line {
+    width: 2px; background: #dfe1e6; margin: -2px 0;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-weight: 600; font-size: 14px; }
+  .step-desc { color: #5e6c84; font-size: 13px; margin-top: 4px; }
+
+  .step-list { margin-top: 8px; padding-left: 18px; }
+  .step-list li { color: #5e6c84; font-size: 13px; margin-bottom: 3px; }
+
+  /* ── Status flow ── */
+  .status-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 12px 0 20px; }
+  .status-arrow { color: #97a0af; font-size: 16px; }
+
+  /* ── Grid section ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* ── Info box ── */
+  .info-box {
+    background: #fff; border: 1px solid #dfe1e6; border-radius: 8px; padding: 16px 20px;
+  }
+  .info-box.blue   { border-left: 4px solid #0052cc; }
+  .info-box.green  { border-left: 4px solid #36b37e; }
+  .info-box.purple { border-left: 4px solid #6554c0; }
+  .info-box.orange { border-left: 4px solid #ff8b00; }
+
+  /* ── Telegram callout ── */
+  .telegram-flow {
+    background: #e8f4ff; border: 1px solid #b3d4ff; border-radius: 8px; padding: 16px 20px;
+    font-size: 13px;
+  }
+  .telegram-flow strong { color: #0747a6; }
+
+  /* ── Feature table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 8px; overflow: hidden; }
+  th { background: #f4f5f7; text-align: left; padding: 10px 14px; font-weight: 600; color: #42526e; }
+  td { padding: 9px 14px; border-top: 1px solid #f4f5f7; color: #344563; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .check { color: #36b37e; font-weight: 700; }
+  .cross { color: #de350b; font-weight: 700; }
+
+  /* ── Journey color vars by role ── */
+  .journey-brand   .step-number { background: #0052cc; }
+  .journey-creator .step-number { background: #36b37e; }
+  .journey-internal .step-number { background: #6554c0; }
+
+  .section-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg); color: var(--fg);
+    padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px;
+  }
+  .label-brand    { --bg: #deebff; --fg: #0052cc; }
+  .label-creator  { --bg: #e3fcef; --fg: #006644; }
+  .label-internal { --bg: #eae6ff; --fg: #403294; }
+
+  /* ── Sample status legend ── */
+  .sample-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .sample-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .sb-gray   { background: #f4f5f7; color: #42526e; }
+  .sb-orange { background: #fff0b3; color: #974f0c; }
+  .sb-green  { background: #e3fcef; color: #006644; }
+  .sb-blue   { background: #deebff; color: #0747a6; }
+
+  .divider { border: none; border-top: 1px solid #dfe1e6; margin: 32px 0; }
+
+  @media print {
+    body { background: #fff; }
+    .page-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Livestream Booking App — User Journey</h1>
+  <p>Complete journey map for Brands, Creators, and Internal Team across the StreamMatch platform</p>
+</div>
+
+<div class="container">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 1. OVERVIEW -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>1. System Overview</h2>
+
+  <div class="roles">
+    <div class="role-card role-brand">
+      <div class="icon">🏪</div>
+      <h3>Brand (Seller)</h3>
+      <p>Shops that want creators to host their livestreams. Submit applications specifying their requirements and slot needs. Identified by <strong>Shop ID + Shop Name</strong>.</p>
+    </div>
+    <div class="role-card role-creator">
+      <div class="icon">🎙️</div>
+      <h3>Creator (Affiliate)</h3>
+      <p>Content creators who perform in brand livestreams. Browse available brands and apply with their preferred timeslots. Identified by <strong>Username + Phone</strong>.</p>
+    </div>
+    <div class="role-card role-internal">
+      <div class="icon">🛠️</div>
+      <h3>Internal Team (Admin)</h3>
+      <p>Shopee staff who approve/reject both brand and creator applications, monitor confirmed slots, and manage platform configuration. Authenticated by <strong>password</strong>.</p>
+    </div>
+  </div>
+
+  <br>
+  <div class="info-box orange">
+    <strong>High-level flow:</strong> Brand applies → Internal team approves brand → Creators apply to brand with timeslots → Internal team approves creator → Creator confirms via Telegram or App → Slot confirmed ✅
+  </div>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 2. BRAND JOURNEY -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>2. Brand Journey</h2>
+  <div class="section-label label-brand">🏪 Brand / Seller</div>
+
+  <div class="journey journey-brand">
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">1</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Login / Registration</div>
+        <div class="step-desc">Landing page → choose "Seller" role → enter Shop ID + Shop Name. System creates or retrieves brand record.</div>
+        <ul class="step-list">
+          <li>First-time users are redirected to Profile Setup before accessing the dashboard</li>
+          <li>Returning users land directly on the Brand Dashboard</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">2</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Profile Setup (first-time only)</div>
+        <div class="step-desc">Complete seller profile: site address. Required before submitting an application.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">3</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Submit Application</div>
+        <div class="step-desc">Dashboard → "My Applications" → "Create New Application". Fill out the full requirements form (Please verify the form fields by trying out the app):</div>
+        <ul class="step-list">
+          <li>Stream month — only months opened by the internal team appear in the dropdown</li>
+          <li>Number of livestreams — <strong>must be even</strong> (2, 4, 6…)</li>
+          <li>Product Nomination instructions — Link configurable by internal team</li>
+          <li>Stream location: <em>Creator Site</em> or <em>Seller Site</em></li>
+          <li>If <em>Seller Site</em>: brand must define exactly <code>streamCount</code> timeslots (one per stream, fixed at 2 hours each). These become the predefined slots creators choose from. Validations: within selected month, tomorrow or later, no overlap within the same application, no overlap with seller's other active brand applications</li>
+          <li>Package activation preference (dropdown configurable by internal team) + preferred date</li>
+          <li>Upload livestream brief (.xlsx, .xls, .csv, .ods, &lt;10 MB)</li>
+        </ul>
+        <div style="margin-top:10px">Status after submit: <span class="pill pill-pending">Pending</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">4</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Awaiting Internal Approval</div>
+        <div class="step-desc">Brand can monitor status from the dashboard. Can cancel the application at any time (but all linked creator applications will be cancelled too).</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">5</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Application Approved — Creators Can Now Apply</div>
+        <div class="step-desc">Status changes to <span class="pill pill-approved">Approved</span>. The brand becomes visible to creators in the "Available Brands" listing.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">6</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Monitor Confirmed Slots</div>
+        <div class="step-desc">Dashboard → "Confirmed Slots" tab shows all creator-brand confirmed matches:</div>
+        <ul class="step-list">
+          <li>Stream date/time, creator Telegram &amp; phone</li>
+          <li>Creator shipping address</li>
+          <li>Sample status per creator</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">7</div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Sample Dispatch</div>
+        <div class="step-desc">For creators who need samples, brand marks "Sample Sent" → Telegram notification goes to creator. Creator confirms receipt. Brand can undo the status if needed. Optional fields "Courier" and "Tracking ID" provided for brands to update as well.</div>
+        <div class="sample-badges">
+          <span class="sample-badge sb-gray">Not Yet Sent</span>
+          <span class="sample-badge sb-orange">Sample Sent</span>
+          <span class="sample-badge sb-green">Sample Received</span>
+          <span class="sample-badge sb-blue">Using Existing Samples</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /journey-brand -->
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 3. CREATOR JOURNEY -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>3. Creator Journey</h2>
+  <div class="section-label label-creator">🎙️ Creator / Affiliate</div>
+
+  <div class="journey journey-creator">
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">1</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Login / Registration</div>
+        <div class="step-desc">Landing page → choose "Creator" role → enter Affiliate Username + Phone. System creates or retrieves creator record.</div>
+        <ul class="step-list">
+          <li>First-time: redirected to Profile Setup (shipping address required)</li>
+          <li>Returning: land on Creator Dashboard</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">2</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Browse Available Brands</div>
+        <div class="step-desc">Dashboard → "Available" tab. Shows all <span class="pill pill-approved">Approved</span> brand applications in a list/calendar view.</div>
+        <ul class="step-list">
+          <li>Displays: brand name, stream month, slot count, category, AMS commission %, stream location etc.</li>
+          <li>Filter by category</li>
+          <li>Click any brand to view full details including the brief document</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">3</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Apply with Timeslots</div>
+        <div class="step-desc">Click a brand → "Apply" → Submit timeslot proposals:</div>
+        <ul class="step-list">
+          <li><strong>Creator Site brands:</strong> free-form picker — minimum <strong>2 timeslots</strong>, always an even count (2, 4, 6…), each ≥ 2 hours, start date tomorrow or later within the brand's designated month</li>
+          <li><strong>Seller Site brands:</strong> chip selector — creator picks from the brand's predefined timeslots (fixed 2-hour slots). Chips show as taken (grey, disabled) if already confirmed by another creator, or conflicting (yellow, disabled) if overlapping with the creator's own confirmed slots elsewhere. If all chips are taken, a "All Timeslots Filled" message is shown and no application can be submitted</li>
+          <li>System prevents overlap with other creators' slots (for same brand) and with your own confirmed slots at other brands — checked at chip selection and re-validated at submit on the backend (GAS) to guard against race conditions</li>
+        </ul>
+        <div style="margin-top:8px; font-size:13px; color:#5e6c84">Also fills in:</div>
+        <ul class="step-list">
+          <li>Telegram handle (required — used for approval notifications)</li>
+          <li>Shipping address (required — for sample delivery)</li>
+          <li>Willing to travel? (yes/no)</li>
+          <li>Using existing samples? (if yes, brand won't ship new ones)</li>
+        </ul>
+        <div style="margin-top:10px">Status after submit: <span class="pill pill-pending">Pending</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">4</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Awaiting Internal Approval</div>
+        <div class="step-desc">Dashboard → "My Applications" tab shows status. Creator can cancel at any time before the slot is confirmed.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">5</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Receive Telegram Notification</div>
+        <div class="step-desc">When internal team approves, a Telegram message is sent to the creator's handle:</div>
+        <div class="telegram-flow" style="margin-top:8px">
+          📩 <strong>"You have an approved livestream slot with [Brand Name]!"</strong><br>
+          Stream details shown → Two inline buttons:<br>
+          <strong>[✅ Confirm Slot]</strong> &nbsp;|&nbsp; <strong>[❌ Reject Slot]</strong>
+        </div>
+        <div style="margin-top:8px; font-size:13px; color:#5e6c84">Can also confirm/reject from the dashboard "Pending My Confirmation" tab.</div>
+        <div style="margin-top:8px">Status changes to: <span class="pill pill-approved">Approved</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">6</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Confirm or Reject the Slot</div>
+        <div class="step-desc">Creator taps a button in Telegram (or acts on dashboard):</div>
+        <ul class="step-list">
+          <li><strong>Confirm</strong> → Status: <span class="pill pill-confirmed">Confirmed</span> — slot locked in</li>
+          <li><strong>Reject</strong> → Status: <span class="pill pill-rejected">Rejected</span> — slot reopens for other creators</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">7</div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Confirmed — Track Slot &amp; Samples</div>
+        <div class="step-desc">Dashboard → "Confirmed" tab shows all locked slots (list + calendar).</div>
+        <ul class="step-list">
+          <li>View stream date/time and brand details</li>
+          <li>When brand sends samples → Telegram notification with receipt confirmation button</li>
+          <li>Tap "✅ Confirm Receipt" → sample status updates to Received</li>
+        </ul>
+      </div>
+    </div>
+
+  </div><!-- /journey-creator -->
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 4. INTERNAL TEAM JOURNEY -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>4. Internal Team Journey</h2>
+  <div class="section-label label-internal">🛠️ Internal Team / Admin</div>
+
+  <div class="journey journey-internal">
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">1</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Login</div>
+        <div class="step-desc">Landing page → "Admin" link (small, bottom of page) → enter password (to be shared later) + email → Internal Dashboard.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">2</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Review Brand Applications</div>
+        <div class="step-desc">Dashboard → "Brand Applications" tab. Stats card shows pending count.</div>
+        <ul class="step-list">
+          <li>Filter by status and month</li>
+          <li>View full application details (form, PIC info, brief link)</li>
+          <li><strong>Approve</strong> → Brand is visible to creators, internal notification sent</li>
+          <li><strong>Reject</strong> → Application closed; brand can resubmit</li>
+          <li><strong>Cancel</strong> → Will cancel all linked creator applications</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">3</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Review Creator Applications</div>
+        <div class="step-desc">Dashboard → "Creator Applications" tab. Stats card shows pending count.</div>
+        <ul class="step-list">
+          <li>See creator name, affiliate username, brand applied to, all proposed timeslots</li>
+          <li>See Telegram handle, travel willingness, sample preference</li>
+          <li><strong>Approve</strong> → Triggers Telegram notification to creator with Confirm/Reject buttons</li>
+          <li><strong>Reject</strong> → Creator notified; slot reopens for others</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">4</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Monitor Pending Confirmations</div>
+        <div class="step-desc">Dashboard → "Pending Confirmations" tab. Shows approved creator apps waiting for the creator to act.</div>
+        <ul class="step-list">
+          <li>List auto-clears when creator confirms or rejects</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">5</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">View All Confirmed Slots</div>
+        <div class="step-desc">Dashboard → "Confirmed Slots" tab. Full searchable, filterable list of all confirmed creator-brand matches.</div>
+        <ul class="step-list">
+          <li>Filters: shop, creator username, category, date range, month, RM</li>
+          <li>Click any slot → modal with brand details, creator contact info, sample status</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">6</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Calendar View</div>
+        <div class="step-desc">Dashboard → "Calendar" tab. Grid view of all slots across all statuses:</div>
+        <ul class="step-list">
+          <li>🟠 Pending &nbsp;|&nbsp; 🟡 Approved &nbsp;|&nbsp; 🟢 Confirmed &nbsp;|&nbsp; 🔴 Rejected</li>
+          <li>Navigate by month; click slot for full details modal</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">7</div>
+      </div>
+      <div class="step-body">
+        <div class="step-title">Manage Available Months &amp; Historical Data</div>
+        <div class="step-desc">Available months for brand applications are configured directly in the <strong>BusinessMappingValues</strong> Google Sheet (Type = <code>AvailableMonth</code>, Active = <code>ACTIVE</code>). Changes take effect immediately on next data load.</div>
+        <ul class="step-list">
+          <li>Dashboard defaults to showing <strong>current month onwards</strong> only</li>
+          <li>Toggle <strong>"Show Past Months"</strong> (top-right of dashboard) to load all historical data</li>
+          <li>Toggle off returns to current-onwards view</li>
+        </ul>
+      </div>
+    </div>
+
+  </div><!-- /journey-internal -->
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 5. STATUS FLOWS -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>5. Application Status Flows</h2>
+
+  <div class="two-col">
+    <div class="info-box blue">
+      <h3>Brand Application</h3>
+      <div class="status-flow">
+        <span class="pill pill-pending">Pending</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-approved">Approved</span>
+      </div>
+      <div class="status-flow">
+        <span class="pill pill-pending">Pending</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-rejected">Rejected</span>
+      </div>
+      <div class="status-flow">
+        <span class="pill pill-pending">Pending</span>
+        <span class="status-arrow">/</span>
+        <span class="pill pill-approved">Approved</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-cancelled">Cancelled</span>
+      </div>
+      <p style="font-size:12px;color:#5e6c84;margin-top:8px">Cancelling a brand application cascades to all linked creator applications.</p>
+    </div>
+
+    <div class="info-box green">
+      <h3>Creator Application</h3>
+      <div class="status-flow">
+        <span class="pill pill-pending">Pending</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-approved">Approved</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-confirmed">Confirmed</span>
+      </div>
+      <div class="status-flow">
+        <span class="pill pill-pending">Pending</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-approved">Approved</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-rejected">Rejected</span>
+        <span style="font-size:12px;color:#5e6c84">(by creator)</span>
+      </div>
+      <div class="status-flow">
+        <span class="pill pill-pending">Pending</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-rejected">Rejected</span>
+        <span style="font-size:12px;color:#5e6c84">(by internal)</span>
+      </div>
+      <div class="status-flow">
+        <span class="pill pill-pending">Pending</span>
+        <span class="status-arrow">/</span>
+        <span class="pill pill-approved">Approved</span>
+        <span class="status-arrow">→</span>
+        <span class="pill pill-cancelled">Cancelled</span>
+        <span style="font-size:12px;color:#5e6c84"></span>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 6. TELEGRAM NOTIFICATION FLOWS -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>6. Telegram Notification Flows</h2>
+
+  <div class="three-col">
+    <div class="telegram-flow">
+      <strong>🔔 Creator Approval</strong><br><br>
+      Internal team approves creator app<br>
+      ↓<br>
+      Telegram message to creator with stream details<br>
+      ↓<br>
+      Inline buttons: <strong>[✅ Confirm]</strong> | <strong>[❌ Reject]</strong><br>
+      ↓<br>
+      Creator taps → status updates in Sheet
+    </div>
+    <div class="telegram-flow">
+      <strong>📦 Sample Sent</strong><br><br>
+      Brand marks "Sample Sent" in dashboard<br>
+      ↓<br>
+      Telegram message to creator: "Sample dispatched on [date]"<br>
+      ↓<br>
+      Inline button: <strong>[✅ Confirm Receipt]</strong><br>
+      ↓<br>
+      Creator taps → <code>sampleReceivedAt</code> recorded
+    </div>
+    <div class="telegram-flow">
+      <strong>⚠️ Sample Undo</strong><br><br>
+      Brand undoes "Sample Sent" action<br>
+      ↓<br>
+      Telegram message to creator:<br>"⚠️ Disregard previous sample notification"<br>
+      ↓<br>
+      No action button needed
+    </div>
+  </div>
+
+  <div style="margin-top:16px" class="info-box orange">
+    <strong>Telegram → Chat ID mapping:</strong> Creator's Telegram username is stored on first interaction and mapped to their Chat ID in the <code>TelegramChatIds</code> sheet. The bot uses webhook callbacks to process button taps and update Google Sheets in real time.
+    <br><br>
+    <strong>Deduplication:</strong> Telegram updates are deduplicated via <code>update_id</code> stored in PropertiesService (<code>lastUpdateId</code>) to prevent double-processing.
+  </div>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 7. VALIDATION RULES -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>7. Key Validation Rules</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Rule</th>
+        <th>Applies To</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Stream count must be even</td>
+        <td>Brand Application</td>
+        <td>Must be 2, 4, 6, 8… Enforced at form submission</td>
+      </tr>
+      <tr>
+        <td>Timeslot count must be even</td>
+        <td>Creator Application</td>
+        <td>Minimum 2 timeslots; must be an even count</td>
+      </tr>
+      <tr>
+        <td>Minimum stream duration</td>
+        <td>Creator Timeslot</td>
+        <td>Each stream must be ≥ 2 hours</td>
+      </tr>
+      <tr>
+        <td>No same-day bookings</td>
+        <td>Creator Timeslot</td>
+        <td>Start date must be tomorrow or later</td>
+      </tr>
+      <tr>
+        <td>Stream within brand's month</td>
+        <td>Creator Timeslot</td>
+        <td>Stream start date must fall within the brand's designated YYYY-MM</td>
+      </tr>
+      <tr>
+        <td>No cross-creator slot overlap</td>
+        <td>Creator Timeslot</td>
+        <td>Cannot overlap with another creator's existing slots at the same brand</td>
+      </tr>
+      <tr>
+        <td>No creator self-overlap</td>
+        <td>Creator Timeslot</td>
+        <td>Cannot overlap with creator's own confirmed slots at other brands</td>
+      </tr>
+      <tr>
+        <td>Brand slot capacity</td>
+        <td>Creator Application</td>
+        <td>Total timeslots cannot exceed the brand's requested <code>streamCount</code></td>
+      </tr>
+      <tr>
+        <td>Telegram required</td>
+        <td>Creator Application</td>
+        <td>Handle is mandatory — used for all approval and sample notifications</td>
+      </tr>
+      <tr>
+        <td>Shipping address required</td>
+        <td>Creator Profile</td>
+        <td>Must be completed before applying to any brand</td>
+      </tr>
+      <tr>
+        <td>AMS commission &gt; 0</td>
+        <td>Brand Application</td>
+        <td>Must be a positive percentage</td>
+      </tr>
+      <tr>
+        <td>Products sponsored ≥ 1</td>
+        <td>Brand Application</td>
+        <td>At least one sponsored product per creator required</td>
+      </tr>
+      <tr>
+        <td>Seller site timeslot count matches stream count</td>
+        <td>Brand Application (Seller Site only)</td>
+        <td>Brand must add exactly <code>streamCount</code> predefined timeslots — one per stream. Cannot submit with fewer or more</td>
+      </tr>
+      <tr>
+        <td>Seller site timeslots within selected month</td>
+        <td>Brand Application (Seller Site only)</td>
+        <td>Each predefined timeslot date must fall within the brand's selected livestream month</td>
+      </tr>
+      <tr>
+        <td>Seller site timeslots tomorrow or later</td>
+        <td>Brand Application (Seller Site only)</td>
+        <td>No same-day or past timeslots allowed when defining seller site slots</td>
+      </tr>
+      <tr>
+        <td>No overlap within same brand application</td>
+        <td>Brand Application (Seller Site only)</td>
+        <td>Each predefined timeslot must not overlap with others in the same application (2-hour window, midnight crossing handled)</td>
+      </tr>
+      <tr>
+        <td>No overlap across brand applications</td>
+        <td>Brand Application (Seller Site only)</td>
+        <td>Predefined timeslots cannot overlap with seller site timeslots in the same seller's other active (non-rejected, non-cancelled) brand applications</td>
+      </tr>
+      <tr>
+        <td>Seller site chip selection — taken slots blocked</td>
+        <td>Creator Application (Seller Site only)</td>
+        <td>Chips already confirmed by another creator are shown as grey/disabled and cannot be selected</td>
+      </tr>
+      <tr>
+        <td>Seller site chip selection — conflict slots blocked</td>
+        <td>Creator Application (Seller Site only)</td>
+        <td>Chips that overlap with the applying creator's own confirmed slots elsewhere are shown as yellow/disabled and cannot be selected</td>
+      </tr>
+      <tr>
+        <td>Backend deconfliction at submit</td>
+        <td>Creator Application</td>
+        <td>GAS re-checks for taken slot conflicts server-side at write time, guarding against race conditions where two creators submit simultaneously. Returns a specific error message if a conflict is detected — application is not saved and creator is prompted to re-select</td>
+      </tr>
+      <tr>
+        <td>All seller site slots filled</td>
+        <td>Creator Application (Seller Site only)</td>
+        <td>If all predefined slots are confirmed by other creators, the apply form shows an "All Timeslots Filled" message instead of the chip selector — no further applications can be submitted for that brand</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 8. BUSINESSMAPPINGVALUES CONFIGURATION -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>8. BusinessMappingValues Configuration</h2>
+
+  <p style="color:#5e6c84;margin-bottom:20px;">The <strong>BusinessMappingValues</strong> Google Sheet tab is the central config table for dropdown options and system settings. Changes take effect immediately on the next data load — no redeployment required.</p>
+
+  <h3>Sheet Structure</h3>
+  <table style="margin-bottom:24px;">
+    <thead>
+      <tr><th>Column</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>Type</code></td><td>Config category (e.g. <code>VoucherTier</code>, <code>AvailableMonth</code>)</td></tr>
+      <tr><td><code>Code</code></td><td>Internal value stored in the database (e.g. <code>tier1</code>, <code>2026-05</code>)</td></tr>
+      <tr><td><code>Description</code></td><td>Human-readable label shown in the UI (e.g. <em>Tier 1 (10%)</em>, <em>May 2026</em>)</td></tr>
+      <tr><td><code>Active</code></td><td>Set to <code>ACTIVE</code> to enable; <code>INACTIVE</code> to disable</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Configurable Fields</h3>
+  <table style="margin-bottom:24px;">
+    <thead>
+      <tr><th>Type</th><th>Used For</th><th>Example Row</th><th>If Not Configured</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>AvailableMonth</code></td>
+        <td>Controls which months appear in the brand application form's "Livestream Period" dropdown</td>
+        <td>Type=<code>AvailableMonth</code> · Code=<code>2026-05</code> · Description=<code>May 2026</code> · Active=<code>ACTIVE</code></td>
+        <td>Brand form month dropdown shows <strong>no options</strong> — brands cannot submit applications</td>
+      </tr>
+      <tr>
+        <td><code>VoucherTier</code></td>
+        <td>Controls the voucher tier dropdown in the brand application form</td>
+        <td>Type=<code>VoucherTier</code> · Code=<code>tier1</code> · Description=<code>Tier 1 (10%)</code> · Active=<code>ACTIVE</code></td>
+        <td>Voucher tier dropdown shows <strong>no options</strong> — brands cannot select a tier</td>
+      </tr>
+      <tr>
+        <td><code>ProductNominationLink</code></td>
+        <td>Controls the product nomination link to be shown in the brand application based on the stream month selected</td>
+        <td>Type=<code>ProductNominationLink</code> · Code=<code>2026-04</code> · Description=<code>https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/2048114986/session/10000000044414</code> · Active=<code>ACTIVE</code></td>
+        <td>Brand form production nomination link shows as <code>https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset</code></td>
+      </tr>
+      <tr>
+        <td><code>InternalPIC</code></td>
+        <td>Controls the PIC name shown on the dashboard so that brands / creators can reach out if they face issues</td>
+        <td>Type=<code>InternalPIC</code> · Code=<code>+6590000000</code> · Description=<code>Kayla Ang</code> · Active=<code>ACTIVE</code></td>
+        <td>Will default to Kayla's contact details</td>
+      </tr>
+      <tr>
+        <td><code>BrandActivation</code></td>
+        <td>Controls the Brand Activation options available for brands to select in their application</td>
+        <td>Type=<code>BrandActivation</code> · Code=<code>SBD</code> · Description=<code>Super Brand Day</code> · Active=<code>ACTIVE</code></td>
+        <td>Will be empty</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>How to Update</h3>
+  <ol style="margin-left:20px;line-height:2;color:#344563;">
+    <li>Open the Google Sheet → <strong>BusinessMappingValues</strong> tab</li>
+    <li>To <strong>add</strong> a new entry: append a new row with all four columns filled, <code>Active=ACTIVE</code></li>
+    <li>To <strong>disable</strong> an entry: clear the <code>Active</code> column value (leave blank) or put as <code>INACTIVE</code></cod></li>
+    <li>To <strong>re-enable</strong>: set <code>Active</code> back to <code>ACTIVE</code></li>
+    <li>Changes are live on the next page load — no code changes or redeployment needed</li>
+  </ol>
+
+  <div style="margin-top:16px" class="info-box orange">
+    <strong>Dashboard display is independent of AvailableMonth config.</strong> All dashboards (brand, creator, internal) always show <em>current month onwards</em> regardless of what is configured in BusinessMappingValues. The <code>AvailableMonth</code> config only controls which months brands can <em>apply for</em> in the form.
+  </div>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- 9. ARCHITECTURE QUICK REFERENCE -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>9. Architecture Quick Reference - For BPM Reference</h2>
+
+  <div class="three-col">
+    <div class="info-box blue">
+      <h3>Frontend</h3>
+      <ul class="step-list" style="margin-top:6px">
+        <li><strong>shopee-live-creator-match.html</strong> — full brand + creator + internal system</li>
+        <li><strong>livestream-booking.html</strong> — simple slot booking UI</li>
+        <li>Session state in <code>sessionStorage</code> (key: <code>lbSession</code>)</li>
+      </ul>
+    </div>
+    <div class="info-box green">
+      <h3>Backend</h3>
+      <ul class="step-list" style="margin-top:6px">
+        <li><strong>livestream-booking-backend.gs</strong> — Google Apps Script</li>
+        <li>REST API via <code>doGet(e)</code> (GET-only, avoids CORS preflight)</li>
+        <li><code>doPost(e)</code> for Telegram webhook</li>
+        <li><code>keepWarm</code> trigger runs every 5 min on HEAD deployment</li>
+      </ul>
+    </div>
+    <div class="info-box purple">
+      <h3>Data</h3>
+      <ul class="step-list" style="margin-top:6px">
+        <li>Google Sheets: Sellers, Affiliates, Slots, Bookings, BrandApplications, CreatorApplications, TelegramUsers, InternalTeam, RMs, BusinessMappingValues</li>
+        <li>All data stored as plain text (@ format) to prevent date auto-formatting</li>
+        <li>3-month rolling data window for most views</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="margin-top:32px; color:#97a0af; font-size:12px; text-align:center;">
+    Generated April 2026 · Livestream Booking App — StreamMatch Platform
+  </div>
+
+</div><!-- /container -->
+</body>
+</html>

@@ -1,0 +1,330 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fnil\fcharset0 Menlo-Regular;\f2\fnil\fcharset0 HelveticaNeue;
+\f3\fnil\fcharset0 HelveticaNeue-Bold;\f4\froman\fcharset0 Times-Roman;\f5\fnil\fcharset0 .SFNS-Regular_wdth_opsz110000_GRAD_wght1F40000;
+}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red117\green117\blue117;\red255\green255\blue255;
+\red231\green54\blue35;\red255\green255\blue255;\red0\green0\blue0;\red255\green255\blue255;\red255\green255\blue255;
+\red44\green44\blue44;\red117\green117\blue117;\red38\green38\blue38;\red231\green54\blue35;\red52\green52\blue52;
+\red255\green245\blue242;\red0\green0\blue0;\red67\green67\blue67;\red252\green44\blue70;}
+{\*\expandedcolortbl;;\csgray\c0;\cssrgb\c53333\c53333\c53333;\cssrgb\c100000\c100000\c100000;
+\cssrgb\c93333\c30196\c17647;\csgray\c100000;\cssrgb\c0\c1\c1;\cssrgb\c100000\c100000\c99985\c0;\cspthree\c100000\c100000\c100000;
+\cspthree\c22745\c22745\c22745;\cssrgb\c53333\c53333\c53333;\cssrgb\c20000\c20000\c20000;\cssrgb\c93333\c30196\c17647;\cssrgb\c26667\c26667\c26667;
+\cssrgb\c100000\c96863\c96078;\cssrgb\c0\c0\c0;\cssrgb\c33333\c33333\c33333;\cssrgb\c100000\c27843\c34118;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww17380\viewh13220\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 More improvements:\
+1. Unavailable time slots should show the entire time slot and not just the start time. \
+2. There should be a validation on the stream date where I can only input a date within the stream month. Now it is only controlled by the calendar, but I am able to key in a date not within the stream month. \
+3. When submitting any application, there is a lag time because system is updating in the backend, but I am still Able to click submit or cancel which might cause duplication of application. Think of a solution for this. Similarly for approving applications, there is some lag time and I can keep clicking buttons which might result in some issues. Either show a loading sign or disable the buttons.\
+4. In the dashboards, if you are displaying the \'93Willing to Travel\'94 it should be \'93Willing to Travel to Seller Site\'94\
+\
+\
+More improvements:\
+1. when I confirm a slot as a creator, all the applications will then reflect as \'93confirming\'94 instead of just the one I clicked on, which might confuse some users. Only the one I clicked should show \'93confirming\'94, the rest of the buttons should be disabled.\
+2. Should we add a loading signal evertime the system is lagging/updating the backend, if not users might anyhow click around or be confused why is the page hanging.\
+3. For the internal dashboard confirmed slots count, should count the time slots and not just application. \
+\
+\
+More Improvements:\
+1. First question, Where is brief being saved??\
+2. When applying as a creator, phone number should be pulled from profile and not editable. Put a little liner that if the phone number is incorrect they need to update in their profile\
+3. In the calendar in the internal dashboard, include a legend for the colour\
+4. In the seller dashboard, for their applications, can we have a view more so that they can view the details that they submitted.\
+5. For all the placeholders in the forms input fields, make the font colour lighter, because it is not obvious that it is a placeholder and people might miss out in filling it up.\
+6. Instead of \'93This is a package activation\'94 change it to \'93I have a package activation (e.g. Super Brand Day).\
+\
+\
+Fe should filter up to 3 months data only so no perf issues\
+\
+\
+Now we need to trigger notifications to creators:\
+- When internal team approves their application, a telegram notification must be sent to them to ask them to confirm the slot. The message should include the shop name, stream date and time, shipping address. They can either respond via telegram and say \'93Confirmed\'94 or they can be promoted to login to the app to click confirm. Either way should work. \
+\
+\
+Need to send email to brands\
+Need to send email to internal team?\
+Need to ensure only internal team can login into internal team dashboard\
+\
+Ok now for more improvements:\
+1. The shopee logo is here /Users/SP15373/Documents/Claude_Projects/livestream-booking-app/Shopee_logo.png. please use this logo instead. but make sure it looks nice when used on the app.\
+2. Only internal team should have access to view the internal team dashboard. How should we set that up?\
+3. I also want to trigger email notifications:\
+3a. When brand application is submitted, trigger email to internal team\
+3b. When brand application is approved, trigger email to seller\
+3c. When creator application is submitted, trigger email to internal team\
+3d. When creator application is confirmed by creator, trigger email to seller\
+\
+Save application\
+If error should not clear fields if not user have to restart\
+What happens if not confirmed? - how many days before should we auto reject?\
+\
+Keep sending daily telegram notifications to creators if they have outstanding applications pending their confirmation. Include the option for creators to Reject Stream in both telegram and the app. If they reject it, then slot is opened up again for other creators to select.\
+\
+1. Creator login phone number field is overflowing on mobile view\
+2. Shop ID should not be visible to creators at all. Otherwise, creators will be able to login to brand accounts. \
+3. Livestream brief field should be mandatory. Also on mobile, the field is currently overflowing\
+4. When creators apply for livestream slots, each slot should minimally be 1.5 hours long, and their end date time should be able to be past midnight. Meaning, the field for stream start time and stream end time should actually be stream start date time and stream end date time. but of course when they key in the stream start date time, maybe the stream end date can be auto populated as what they selected in stream start date, then they can edit if they want to cross midnight. \
+5. When creators apply for livestream, they need to minimally select 2 timeslots as we have agreements with brands that one creator will do at least 2 livestreams for them. \
+\
+- don\'92t need to have the note under the stream end date time \'93Can go past midnight into the next day\'94. \
+- I realised the defaulting of the time is 2 hours. Can you default to 1.5h?\
+\
+\
+1. When filling up creator form, if there is an error thrown because the timeslot has already been taken, the rest of the fields are cleared and I have to fill up the entire form again.\
+2. In the internal dashboard, internal team wants to see the RM (Relationship Manager) tagged to the shop. So for all tabs, when there is a shop id or shop name, there should also be an RM field. I have added an RMs tab in the gsheet database, and it should map the RM to a shop id. Based on this mapping you can pull the RM into the RM field. If the mapping can\'92t be found, then just put \'93Not Found\'94 in the RM field.\
+3. In the internal dashboard, can we have a tab for Confirmed slots where we show the list of confirmed slots. And should be able to filter by shop name, creator username, category, stream date (from and to), stream month and RM. These confirmed slots should be on timeslot level and have all the relevant details. \
+\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f1\fs22 \cf2 \CocoaLigature0 - for the calendar checkbox, can we just have the coloured checkbox instead of the checkbox and the legend side by side? now it just looks like i have 2 boxes. \
+- the confirmed slots in the internal dashboard, I was thinking the list would be designed similar to the list view in creator or brand dashboard. \
+- the confirmed slots in the internal dashboard, the filter for category is overflowing and eating into stream month\
+- I think the RM logic is not picking up the RM, because I have shop id \'9312345\'94 mapped to test@gmail.com, but it is showing as \'93Not Found\'94 in the dashboard\
+- The internal dashboard headers kind of seem to be duplicating with the tabs. Like it\'92s just a repetition of \'93Brand Applications Pending Approval\'94, \'93Creator Applications Pending Approval\'94, \'93Pending Creator Confirmation\'94 and \'93Confirmed Slots\'94. The only difference is \'93Calendar\'94. Is there a nice way to Clean it up?\
+\
+\
+1. In the seller dashboard, under \'93my applications\'94 we show the details of the brand application. For Voucher Tier display can we show the value as the full description, for example \'93Tier 1 Regular: XXXXXXX\'94\
+2. In the seller dashboard, under \'93Confirmed Livestreams\'94 list view, can we rename the field from date to \'93Stream Date Time\'94 since now it can go past midnight. \
+3. In the seller dashboard, under \'93Confirmed Livestreams\'94 list view, there is creator and username showing the same data. Just show as \'93Creator Username\'94 and also include the shipping address. Can you also include details like: AMS Commission, Products Sponsored, Voucher Tier and Livestream Brief. You can do a similar show more details as what has been done in \'93My Applications\'94 so the card is not too long.\
+\
+For point 1, this is the info you require:\
+- Tier 1 Regular: 40 qty of 10% off, no min spend, cap $5 (ABS<$80 SGD)\
+- Tier 2 Lite: 20 qty of 10% off, min spend $80, cap $10 (ABS >$80 SGD)\
+For point 2, its not just renaming the name of the label but making sure the value in that field is also date and time\
+\
+\
+1. In seller dashboard, they have a profile. In the profile, allow them to add seller site address. If the login is a new seller (ie no profile created before), the next page should prompt them to set up their seller site address. This is mandatory. So when the brand is filling up the brand application, and they choose that the streaming site is to be at seller site, then there should be a field that appears for \'93Seller Site Address\'94. This will auto default to the seller site address in their profile. However, they will be able to edit the address in case the application this time has a different address from what\'92s in their profile. If they change it we will NOT update the address in their profile, but we will just save the different address in the brand application. Ensure seller site address field is displayed in seller dashboard \'93My applications\'94 for applications that require seller site, it should also display in creator dashboard in the \'93available brands\'94, \'93pending my confirmation\'94 and \'93My Applications\'94 list. It should also show in all the list views in the internal dashboard.\
+\
+\
+1. In the internal dashboard, for creator applications pending approval tab and pending creator confirmation tab, the seller site address is blank. \
+2. In the internal dashboard, for the confirmed slots, we want to make the following changes:\
+- Month label should be renamed to \'93Stream Month\'94\
+- Telegram should be renamed to \'93Creator Telegram\'94\
+- Phone should be renamed to \'93Creator Mobile\'94 (assuming its pulling the creator\'92s phone number)\
+- Shop ID can be put before RM\
+- I want to have both creator application details and brand application details in the card. But make sure it\'92s obviously separated. So for brand application details we can add in Stream Location, Seller Site Address, AMS Commission, Products Sponsored, Voucher Tier, Package Activation, Preferred Date, Seller PIC, Seller PIC Email and Livestream Brief. Then for creator application details, we can add in \'93Creator Shipping Address\'94 \
+3. For the telegram username field, when they input do they need to put @?\
+\
+\
+For the seller dashboard, under \'93Confirmed Livestreams\'94 tab, there needs to be another tab called \'93Pending Sending of Samples\'94. Then rename list view to \'93All Confirmed Livestreams (List View)\'94 and Calendar View to \'93All Confirmed Livestreams (Calendar View)\'94. In the \'93Pending Sending of Samples\'94 tab, \
+\
+2. THINK IF NEED TO SPLIT THE \'93Pending creator approval\'94 in internal dashboard into time slots?? But if we do, then the \'93my applications for creators\'94 should also be split. \
+\
+\
+\
+Let\'92s improve the creator dashboard: \
+Under \'93My Applications\'94, let\'92s have another tab called \'93Confirmed Livestreams\'94 similar to brand dashboard. In that tab, it should have all the confirmed livestreams and split into \'93Waiting for Sample to be sent out\'94 \'93Action Required - Pending Sample Received Confirmation\'94 (if you have better ideas for this header feel free to suggest) and \'93Sample Received\'94. There should also be a count to say how many pending action and a warning call out to say they are waiting for creator to say sample received. \
+\
+Somme stuff I noticed about the seller dashboard:\
+For the fields present in the seller dashboard confirmed streams tab, please use the same label name as the one in the internal dashboard. And actually just copy all the fields and style of the confirmed streams tab in internal dashboard for the confirmed streams in seller dashboard. (Of course still include the fields for sample sent and received). But put creator application (rename to creator details) on top of brand application\
+\
+Once again confirm your understanding first before we proceed\
+\
+\
+TO UPDATE:\
+1. Seller PIC number in brand applications is confusing if they should add the country code. Maybe have a field for country code like how we do for the creators login.\
+2. For the ones that have one slot left, actually creators cannot apply..how? Get them to apply in even numbers?\
+3. Creator dashboard my applications, should have filtering?\
+4. Creator dashboard, pending my confirmation should have the same details as confirmed livestreams. And they should be able to edit their shipping address.\
+\
+1. In the brand application form, there is this field: 
+\f2\fs26 \cf3 \cb4 \expnd0\expndtw0\kerning0
+\CocoaLigature1 Please confirm that you have submitted your product nominations via the following link:\'a0{\field{\*\fldinst{HYPERLINK "https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset"}}{\fldrslt \cf5 \ul \ulc5 https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset}}\cf5 \ul \ulc5 . For the link itself, we need to make it configurable by internal users. It updates based on stream month. I was thinking that they can use the BusinessMappingValues tab to configure. So if Type = ProductNominationLink, Code = Stream Month and year (i.e., Code: MAR2026 is for stream month March) and Active = Active, then we will display the description as the link. If it cannot be mapped, then default to {\field{\*\fldinst{HYPERLINK "https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset"}}{\fldrslt https://seller.shopee.sg/portal/marketing/cmt-live-stream/campaign/Inset}}. 
+\f1\fs22 \cf2 \cb1 \kerning1\expnd0\expndtw0 \ulnone \CocoaLigature0 \
+2. For seller PIC mobile number in the brand application form, can we do a country code and phone number field like what we have for the creator application?\
+\
+\
+1. Preferred stream date date picker when clicking the calendar should open on the stream month selected. Also we should have a validation that it can only be tomorrow onwards.\
+2. For brand applications, they should only be allowed to apply for livestream slots in even numbers, since creators must min apply 2 livestream slots. And creators must also apply in even numbers. \
+3. For creator applications, the start time can be in 30min slots instead of every minute. \
+\
+1. 
+\fs24 \'a0Seller PIC Name and Seller PIC Number in brand application form is bleediing off the page slightly in mobile version. \cf6 \cb2  \
+2. What are the supported documents allowed for the livestream brief? Can we clearly put down what is supported? Not just \'93spreadsheets\'94\
+3. Stream Start and End date in creator application form is bleeding off the page slightly too in mobile version.\
+4. The email notification to internal team when creator submits an application has \'93Affiliate Username\'94 and \'93Creator\'94. It\'92s actually duplicate fields. Let\'92s just keep \'93Affiliate Username\'94\
+5. Can  I check, are we sending any email notifications to brands\
+\
+\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+\cf7 \cb8 For the livestream month, we currently show up to 3 months. But actually we want to let internal team dictate which months are shown. I was wondering if we should do it via the businessmappingvalues tab or should we have a way for internal team to edit the form by themselves. Give me some of your thoughts. Also any concern because now we show up to 3 months worth of data in all the dashboards. Does this mean we need to show everything in the future rather than cap at 3 months. Any concern on performance? Please do a deep impact analysis for this request and provide some recommendations.\
+\
+\
+Internal team should be able to apply on behalf of brands and creators. However, there will be less restrictions on their form. These are the validations they can bypass:\
+Brand Application:\
+1. Livestream Period: They can input whatever month they want\
+Creator Application:\
+1. Should follow existing validations.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\fs22 \cf2 \cb1 ok now for a bigger improvement. Currently, creators need to confirm or reject after internal team approves their creator application. Now I actually want to remove the reject slot option and allow them to reschedule instead. Suggest how we can implement this. And dont forget we have to update for telegram too. And note, this reschedule should be for those creator that are approved/confirmed. And once the slot has been rescheduled, the timeslot previously booked will be opened up. Also they can only reschedule slots that are 3 or more days away from today\'92s date. I\'92m thinking let\'92s just have the reschedule button under \'93Pending My confirmation\'94 and \'93Confirmed Livestreams\'94 tab in creator dashboard. Ok please suggest how you will implement and where will be updated. Gotta make sure all the impact analysis is done. And also all validations for reschedule are in place: making sure existing timeslot validations are in place, they can only reschedule within the same month. They won\'92t be able to reschedule to another month\'92s date. (And because of the 3 days validation, for example they won\'92t be able to reschedule on the last 3 days of every month because there is no other date to reschedule to, get what I mean? Anything else I\'92m missing out?)\cf6 \cb2  \cf2 \cb1     \
+\
+A few things:\
+1. When creator clicks reschedule, it should just be a timeslot for them to select their dates. Kind of like the regular CA form (but only the date time start and end field), and upon submit we will validate if that slot can be taken by them. Then they should also be able to see what time slots are taken up already + their own time slots so it\'92s easier to make a decision. Get what I mean?\
+2. Telegram app just ask them to confirm slot. And can put a note, if they want to reschedule, they can do it on the app. Dont need a button to say \'93Reschedule on App\'94         \
+3. Dont need to block if samples already dispatched. They can still reschedule those.\
+4. No status updates required when they reschedule. If it was approved, stay as approved. If it was confirmed, stay as confirmed.\
+5. Notifs: send email to internal team, brands (seller PIC email) and RM (if any)\
+\
+After much consideration, we no longer need to have the flow where creator confirms the application after internal team has approved. Once internal team approves, a telegram message will be sent to the creators to let them know their creator application has been approved and confirmed by shopee. If they want to reschedule, they can proceed to reschedule on the app. This means the changes will be:\
+1. No more \'93Confirmed\'94 Status. Status \'93Approved\'94 means the stream is confirmed. We can keep the naming conventions in the frontend as \'93Confirmed Slots\'94 or \'93Confirmed Streams\'94 but in the backend, we just save the status as \'93Approved\'94\
+2. In the creator dashboard, we no longer need the tab \'93Pending My Confirmation\'94. \
+3. In the telegram message to creators, we no longer need the confirm slot button. \
+4. In the internal dashboard, we no longer need the \'93Pending Creator Confirmation\'94 tab\
+Do an analysis to see if I missed out anything else, and let me know what you are going to implement before implementing\
+\
+- do I still need a telegram fallback message since I dont have confirm nor reject anymore\
+- In the dashboards, all approved creator applications can just show as approved (any filter as well, just show as \'93Approved\'94) I dont want it to show as Approved (Confirmed). We no longer have this concept of confirmed.\
+- do I need a session safeguard? I haven\'92t actually lived the app\
+\
+1. when creator application is approved, no need to send email to internal team\
+\
+\
+Another change\
+- When seller indicates that seller stream is required, they will need to indicate the timeslots they want the creators to come down to seller site to stream. They can add as many time slots as they like (each timeslot is 2 hours and cannot be overlapping with each other). But the number of time slots must minimally be the number of livestream slots they requested for. So if they change the number of livestream slots they requested for, the validation must kick in with the new value. \
+- so when creators apply for these seller site livestreams, they will see the time slots they can select and choose them. They should not be able to indicate their own time slots. Same validations apply though, if they have an overlapping livestream with another / same brand, we will throw an error. If the brand has an overlapping timeslot with another creator/same creator, we should also throw an error. \
+Please let me know how you plan to implement this and how it will look like. There are alot of permutations to consider.\
+\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+\cf9 \cb10 We are working on this project: \cf2                                               \cb1 \
+\cb10   \cf9 /Users/SP15373/Documents/Claude_Projects/livestream-booking-app. Lets make \cf2    \cb1 \
+\cb10   \cf9 some changes. Currently, when sellers input their address, it is only one \cf2     \cb1 \
+\cb10   \cf9 address field. Can we do it such that we capture their postal code separately\cf2  \cb1 \
+\cb10   \cf9  too. (Validation, it needs to be 6 numbers). So we will store their postal \cf2   \cb1 \
+\cb10   \cf9 code separately. This is because, when creators first see "Available Brands" \cf2  \cb1 \
+\cb10   \cf9 in their dashboard, if seller site is required, we only want them to see \cf2      \cb1 \
+\cb10   \cf9 postal code. we dont want them to see the full address. and to make the \cf2       \cb1 \
+\cb10   \cf9 creator shipping address consistent, we should also save their postal code \cf2    \cb1 \
+\cb10   \cf9 separately. confirm your understanding.\cf2   \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+\cb1 A few changes to make (please confirm your understanding before implementing anything):\
+1. In seller dashboard When sellers mark \'93Samples have been sent\'94, there is a courier, tracking id and shopee promo code field. I no longer need the shopee promo code field (I also want to remove this from the google sheet). And then make courier and tracking id mandatory before they can click \'93Samples have been sent\'94. Can also add a liner to say \'93If samples are delivery by yourself, just indicate in both fields as \'93Self Delivery\'94\'94 (done)\
+2. Instead of the words \'93Seller Site Required\'94 on all the dashboards, can we change it to \'93Seller Site Stream Only\'94. (Done)\
+3. In creator dashboard, under \'93Available Brands\'94, remove the livestream brief (they can only see this brief once their stream has been approved/confirmed). Additionally, include the Package Activation and Brand Activation in that card. They should be able to see it in \'93Available Brands\'94 (done)\
+4. Rename \'93Package Activation\'94 to \'93Brand Activation\'94 and \'93Brand Activation\'94 to \'93Brand Activation Type\'94 in all dashboards. (Done)\
+5. In the creator applications, include one more field \'93Shipping Recipient Name\'94. This should be shown in all dashboards where there is shipping address.  (Done)\
+6. In creator applications, phone number should be editable, but will not be updated to their profile. It will only impact that single creator application. (Done)\
+7. In brand applications, \'93Number of products to be sponsored by Creator\'94 should have a validation of min. 3. (Done)\
+8. In brand applications, \'93Preferred Stream Date\'94 should have a validation to only fall within the livestream month.(Done)\
+9. In brand application, \'93AMS\'94 field should be minimum 6 and should be whole numbers only.(Done)\
+10. I realised in brand applications, for all the fields that are numbers, there is a scroll where I can click up or down to decrease or increase the amount. I dont want that function. I want users to key the number in only. If they want to change it, they need to backspace and key in the new number. (Done)\
+\
+\
+A few more changes, please confirm your understanding before implementing:\
+1. In brand application, this line \'93
+\f2\fs26 \cf11 \cb4 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec11 1.\'a0
+\f3\b \cf12 \strokec12 Product Sponsorship:
+\f2\b0 \cf11 \strokec11 \'a0Sponsor min. 8 product samples, up to 2 KOLs (min. 5 for Electronics category)\'94 
+\f1\fs22 \cf2 \cb1 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 change to \'93
+\f2\fs26 \cf11 \cb4 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec11 1.\'a0
+\f3\b \cf12 \strokec12 Product Samples:
+\f2\b0 \cf11 \strokec11 \'a0Sponsor/Loan min. 8 product samples, up to 2 KOLs (min. 5 for Electronics category)\'94\
+
+\f1\fs22 \cf2 \cb1 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 2. In brand application, there is this line \'93
+\f2\fs26 \cf11 \cb4 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec11 Please browse through the list of Shopee's Creators\'a0{\field{\*\fldinst{HYPERLINK "https://bit.ly/ShopeeLiveKOLs"}}{\fldrslt \cf13 \cb4 \ul \ulc13 \strokec13 here}}\'a0for your visibility.\'94. 
+\f1\fs22 \cf2 \cb1 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 Remove it.\
+3. In brand application, there is this checkbox \'93 
+\f2\fs28 \cf14 \cb15 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec14 I understood that Shopee will assign a suitable Creator to me based on my brand's image and product category and I'll liaise directly with the assigned Creator on product sample delivery\'94 
+\f1\fs22 \cf2 \cb1 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 Change it to \'93You acknowledge and agree that creators will be assigned by the Shopee Talent Management Team, and you are required to commit to providing products to the allocated streamers.\'94\
+4. In brand application, if sellers select \'93Seller Site\'94 as stream location, after they input the seller site address and postal code, we need a checkbox for them to consent to their address being shared: \'93
+\f4\fs24 \cf0 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec16 I hearby agree that seller location / full address and contact information will be shared with creator upon stream confirmation.\'94. \
+
+\f1\fs22 \cf2 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 5.In brand application, after sellers confirm that they have submitted their product nominations, we need another field \'93Product Sponsored or on Loan?\'94 And the dropdown fields are \'93
+\f4\fs24 \cf0 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec16 Product samples on loan* to creators\'94 and  \'93Product samples* can be kept by creators\'94. If \outl0\strokewidth0 Product samples on loan* to creators, the backend should save as \'93Loan\'94, if Product samples* can be kept by creators, the backend should save as \'93Sponsored\'94. But dashboards should all reflect as the 
+\f1\fs22 \cf2 \kerning1\expnd0\expndtw0 \CocoaLigature0 \'93
+\f4\fs24 \cf0 \expnd0\expndtw0\kerning0
+\CocoaLigature1 Product samples on loan* to creators\'94 or  \'93Product samples* can be kept by creators\'94. This field should be shown on all dashboards that have the field \'93Products Sponsored/Loaned\'94. Also, There should also be a liner \'93\outl0\strokewidth0 \strokec16 *shipping / delivery charges for product samples will be borne by sellers\'94 in the brand application. \
+6. In brand application, the field 
+\f5\fs28 \cf17 \cb4 \strokec17 Number of products to be sponsored per Creator\'a0\cf18 \strokec18  
+\f4\fs24 \cf0 \cb1 \outl0\strokewidth0 should be updated to \'93Number of products to be sponsored/loaned per creator\'94\
+7. If application (either creator or brand) is rejected, we should show the rejection reason on the creator or brand dashboard. Rejection notifications should also include the rejection reason. Style in the creator or brand dashboard for rejection reason can be the same as what was done for internal dashboard.
+\f1\fs22 \cf2 \cb10 \kerning1\expnd0\expndtw0 \CocoaLigature0 \
+\
+\
+\
+\cb1 Let\'92s work on /Users/SP15373/Documents/Claude_Projects/livestream-booking-app. I want to make a few changes. Please confirm your understanding before implementing:\
+1. For seller and brand dashboard, under \'93My Applications\'94 and \'93Confirmed Livestreams\'94 we only show data that is this month onwards. However, I want to include a toggle (similar to internal dashboard) called \'93Show Past 2 Months\'94. If they toggle this on, they will be able to see records where stream month was 2 months before + current month onwards.\
+2. In the creator dashboard, under the \'93Available Brands\'94, now creators can only filter by Category. I want to allow them to search via Livestream Month, Brands and Category. Implement a search like what was done in the internal dashboard \'93Confirmed Slots\'94.\
+3. In the internal dashboard, under \'93Brand Applications Pending Approval\'94, I want a similar search filter as \'93Confirmed Slots\'94. The search fields should be \'93Shop Name\'94, \'93Category\'94, \'93Stream Month\'94 and \'93RM\'94. We can keep the status pill filters, and the search bar should come after it. So the search filters based on the pill selected. \
+4. In the internal dashboard, under \'93Creator Applications Pending Approval\'94, I want a similar search filter as \'93Confirmed Slots\'94. The search fields should be the same as the one in \'93Confirmed Slots\'94. We can keep the status pill filters, and the search bar should come after it. So the search filters based on the pill selected. \
+5. Currently, all livestream briefs are being stored in a specific google drive folder, can I update the google drive folder so that it will get stored here instead: https://drive.google.com/drive/folders/1hAlgJfaTVhz7qtaWXwXCIySv-PlxHIfF\
+6. In the internal dashboard, I want to flag out brand applications where the brand is a managed seller or not. In the backend google sheet, there is a \'93Managed Sellers\'94 tab. If Shop id exists in that tab, means the brand is a managed seller. So in the \'93Brand Applications Pending Approval\'94 tab, next to the shop name, have a tag that indicates \'93Managed Seller\'94 (can use green) and \'93Unmanaged Seller\'94 (can use red). Managed seller = if you can find the shop id in the \'93Managed Sellers\'94 tab. Unmanaged seller = if you cannot find the shop id in the \'93Managed Sellers\'94 tab. The field in the google sheet in \'93Managed Sellers\'94 tab that contains the shop id is \'93Shopid\'94\
+7. Moving forward, all places that pull RM (in the dashboard or when sending email notifications) should pull from \'93Managed Sellers\'94 tab under the field called \'93RM email\'94. I will remove the tab called \'93RMs\'94. So make sure you get update all the places that is pulling RM. \
+\
+\
+A few more things to change, please confirm your understanding before implementing:\
+1. In brand application: \'93
+\f2\fs26 \cf11 \cb4 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec11 1.\'a0
+\f3\b \cf12 \strokec12 Product Samples:
+\f2\b0 \cf11 \strokec11 \'a0Sponsor/Loan min. 8 product samples, up to 2 KOLs (min. 5 for Electronics category)\'94 change to \'931.\'a0
+\f3\b \cf12 \strokec12 Product Samples:
+\f2\b0 \cf11 \strokec11 \'a0Sponsor/Loan min. 8 product samples, (min. 5 for Electronics category)\'94\
+2. In brand application, the hyper link in \'93{\field{\*\fldinst{HYPERLINK "https://seller.shopee.sg/portal/marketing/cmt/campaign?source=2"}}{\fldrslt \cf13 \cb4 \ul \ulc13 \strokec13 (Seller Centre > Marketing Centre > Campaign)}}\cf13 \cb4 \ul \ulc13 \strokec13 \'94 change to\cf11 \cb4 \ulnone \strokec11  
+\f4\fs24 \cf0 \cb1 \strokec16 https://seller.shopee.sg/portal/marketing/cmt/campaign?source=2&is_from_login=true&type=CAMPAIGN_SCENE_LIVE_STREAM\
+
+\f1\fs22 \cf2 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 3. In brand application, remove the checkbox that says \'93
+\f2\fs28 \cf14 \cb15 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec14 I hereby agree that seller location / full address and contact information will be shared with creator upon stream confirmation.\'94. Instead, this checkbox should be at the end of the application (before submit application) and it should be \'93By proceeding, you consent to the disclosure of your brand\'92s contact details and address to matched creators for campaign purposes in compliance with PDPA.\'94. Currently the field in the backend that stores the former checkbox is \'93sellerSiteConsentGiven\'94. I want to rename it to \'93sellerPdpaConsentGiven\'94 and store the latter declaration here. This is a mandatory declaration.\
+4. We can remove this \'93
+\f5 \cf17 \cb4 \strokec17 Product Sponsored or on Loan?\'a0\cf18 \strokec18 *\'94 field in the brand application. Will also remove from the google sheet - currently saved as \'93sampleType\'94. No need to display this anywhere on any dashboards anymore. This is a redundant field. \
+5. Before the PDPA checkbox, have one more declaration checkbox \'93By proceeding, you agree that for any loaned products, the brand will arrange and bear all costs for return collection from the creator.\'94. This is just a declaration we need to store in backend but no need to show anywhere. It is mandatory. \
+\
+
+\f1\fs22 \cf2 \cb1 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 Another thing to change, please confirm your understanding before implementing\
+1. Currently, if slots left in a brand application = 0, we do not allow anymore creators to apply for the brand application anymore. If I am not wrong, as long as any creator application for that brand application is pending or approved, we will consider it as 1 slot taken. Now, only if it\'92s approved, then we consider it as taken. On the creator dashboard, we will still show how many slots left, just that the calculation is the number of streams requested by brand minus the approved creator applications for that brand application. In the internal dashboard, under creator applications pending approval, if the creator application is pending or approved, we need to show that for the brand application of that creator application, how many slots left (e.g., 1/4 slots left) and how many more creator applications for that brand application are left (including the one in question) \'9310 creator applications under review\'94.\
+\
+Let\'92s continue working on: /Users/SP15373/Documents/Claude_Projects/livestream-booking-app\
+1. In the internal dashboard, \'93Creator Application Pending Approval\'94 - the pending pill should be in line with the approve and reject button.\
+2. In the internal dashboard, \'93Confirmed Slots\'94 should also show the CA ID, and have shop name and creator name in line with each other. Similar to the \'93Creator Applications Pending Approval\'94 style\
+3. In the internal dashboard, for \'93Creator Application Pending Approval\'94 if number of slots left = 0, then the \'93Approve\'94 button should be disabled. Internal team can only reject or cancel. \
+\
+A few more enhancements, confirm your understanding before implementing:\
+1. I no longer want to send any emails to internal team when brand app, creator app is submitted. I also dont want any emails to internal team when stream is rescheduled. \
+2. I need to send out cancellation emails when internal team cancels the stream. If brand app is cancelled, it should send email to RM and seller. If creator app is cancelled, it should send to creators.\
+3. Actually, is it possible for all emails to sellers, it cc-es the RMs (if any) so that RMs dont receive a separate email. \
+549877\
+\
+A few more changes to make, confirm your understanding before implementing:\
+1. Currently, in the internal dashboard, we flag our \'93Managed Sellers\'94 and \'93Unmanaged Sellers\'94 based on whether the shop id exists in \'93Managed Sellers\'94 tab in the google sheet. Now we have to do the same thing for creators for \'93creator applications pending approval\'94 in the internal dashboard. If the \'93creatorId\'94 in the \'93CreatorApplications\'94 sheet cannot be found in the \'93Managed Affiliates\'94 tab under \'93affiliat_id\'94, flag the creator application as \'93Unapproved Affiliate\'94 in Red. If can be found then flag as \'93Approved Affiliate\'94.\
+2. When brands login they need to input their shop id. We need to provide instructions on how to find their shop id in the login page:\
+\'93Instructions to find your Shopee Shop ID\
+Step 1: Go to your shop page on Shopee\
+Step 2: Click on any of your product listings\
+<Input image /Users/SP15373/Documents/Claude_Projects/livestream-booking-app/ReferenceDocs/find_shop_id.png>\'94\
+3. When creators login they need to input their affiliate id. We need to provide instructions on how to find their affiliate id in the login page: \'93You may find your affiliate link here\'94 and hyperlink \'93here\'94 with 
+\f4\fs24 \cf0 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec16 https://shopee.sg/universal-link?redir=https%3A%2F%2Faffiliate.shopee.sg%3FrnPath%3DACCOUNT_SETTING&deep_and_deferred=1\
+
+\f1\fs22 \cf2 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 \
+I have a few more requirements, but I wanna understand how we are going to implement first because this is more of a trigger:\
+1. I have another requirement where for each approved creator application, I will need to trigger an email 7 days before the stream and 5 days before the stream where we say:\
+\'93Your livestream is coming up in [X] days! \
+\
+Creator:\
+Shop:\
+Slot:\
+\
+Kindly send out the product samples and set up your AMS if you haven\'92t done so. \
+\
+Thank you!\'94\
+2. Then another requirement where for each approved creator application, I will need to trigger telegram notification 1 day before the stream to creator to remind them that their stream is the next day.\
+\
+\
+\
+\
+\
+\
+=IMPORTRANGE("1WZfDlb9btTioJgAvxjVsau6loPXlLJ30Bs0TixAypss","Seller Masterlist!A2:F")}
