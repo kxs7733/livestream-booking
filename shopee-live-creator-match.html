@@ -251,6 +251,7 @@
       border: 1px solid #e0e0e0; border-radius: 8px;
       color: #222; font-size: 14px; font-family: inherit; outline: none;
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      width: 100%; box-sizing: border-box;
     }
     .form-input::placeholder, .form-textarea::placeholder, .login-input::placeholder { color: #bbb; }
     .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #EE4D2D; box-shadow: 0 0 0 2px rgba(238,77,45,0.1); }
@@ -428,8 +429,9 @@
       .logo-icon svg { width: 22px; height: 22px; }
       .logo-text { font-size: 16px; }
       .logo-badge { font-size: 9px; padding: 1px 4px; }
-      .user-name { font-size: 12px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .logout-btn { padding: 6px 12px; font-size: 12px; }
+      .header-right { min-width: 0; overflow: hidden; }
+      .user-name { font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .logout-btn { padding: 6px 12px; font-size: 12px; flex-shrink: 0; }
 
       /* Main container */
       .main { padding: 24px 14px; }
@@ -553,7 +555,7 @@
       .hero-subtitle { font-size: 14px; }
       .hero-section { margin-bottom: 28px; }
       .header-right { gap: 10px; }
-      .user-name { max-width: 80px; }
+      .user-name { max-width: 120px; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .form-section-title { font-size: 13px; }
       .login-icon { width: 56px; height: 56px; font-size: 26px; }
@@ -651,6 +653,9 @@
       creatorAppsFilters: { creatorUsername: '', category: '', month: '', rm: '', affiliateStatus: '' },
       brandAppStatusFilter: 'pending',
       creatorAppStatusFilter: 'pending',
+      internalBrandAppsPage: 0,
+      internalCreatorAppsPage: 0,
+      internalConfirmedSlotsPage: 0,
       creatorMyAppsStatusFilter: 'all',
       creatorMyAppsCalendarFilter: { pending: true, approved: true, rejected: true },
       calendarModal: null,
@@ -1115,13 +1120,22 @@
       setTimeout(() => notif.remove(), 3000);
     };
 
+    // Silent background prefetch — no loading state, no render. Call after login validates to overlap with PIN entry.
+    const prefetchAllData = () => {
+      state._dataPrefetch = apiCall('getAllData', {});
+    };
+
     // Load all data (filtered to 3-month window by default; allMonths=true for internal dashboard)
     const loadAllData = async (pastMonths = 0, allMonths = false) => {
       state.isLoading = true;
       render();
       try {
         const params = allMonths ? { allMonths: 'true' } : (pastMonths > 0 ? { pastMonths: pastMonths.toString() } : {});
-        const data = await apiCall('getAllData', params);
+        // Use prefetch promise if it was started with default params (login flow)
+        const data = await (state._dataPrefetch && pastMonths === 0 && !allMonths
+          ? state._dataPrefetch
+          : apiCall('getAllData', params));
+        state._dataPrefetch = null;
         if (data) {
           state.brands = data.brands || data.sellers || [];
           state.creators = data.creators || data.affiliates || [];
@@ -1137,6 +1151,7 @@
           if (state.currentUser?.type === 'creator') {
             state.brandApplications = state.brandApplications.map(({ shopId, ...rest }) => rest);
           }
+          rebuildInternalDisplayArrays();
         }
       } catch (err) {
         console.error('Error loading data:', err);
@@ -1247,6 +1262,8 @@
         return;
       }
 
+      prefetchAllData(); // start background fetch while user enters PIN
+
       let brand;
       if (validation.exists) {
         brand = validation.seller;
@@ -1279,6 +1296,8 @@
         render();
         return;
       }
+
+      prefetchAllData(); // start background fetch while user enters PIN
 
       let creator;
       if (validation.exists) {
@@ -1548,10 +1567,10 @@
       if (!result || result.error) {
         console.error('Failed to save brand application:', result);
         showNotification('Application saved locally but failed to sync to server. Please try again.', 'error');
-        state.brandApplications.push(application);
       } else {
         showNotification('Application submitted successfully!');
       }
+      state.brandApplications.push(application);
       state.brandFormDraft = null;
       state.brandFormTimeslots = [];
       state.isSubmitting = false;
@@ -1560,11 +1579,12 @@
         state.internalBrandApplyMode = false;
         state.internalSelectedSellerId = '';
         state.internalTab = 'brand-apps';
-        await loadAllData(0, state.internalShowPast);
+        await loadAllData(0, state.internalShowPast); // internal sees all brands — reload for freshness
       } else {
+        // Brand user only sees their own apps — push locally is sufficient, no reload needed
         state.showBrandForm = false;
         state.brandTab = 'my-applications';
-        await loadAllData();
+        render();
       }
     };
 
@@ -1931,14 +1951,18 @@
 
       const submittedAt = new Date().toISOString();
       const selectedCreator = isInternal ? state.creators.find(c => c.id === state.internalSelectedCreatorId) : null;
+      const creatorId = isInternal ? state.internalSelectedCreatorId : state.currentUser.id;
+      const creatorName = isInternal ? (selectedCreator?.name || '') : state.currentUser.name;
+      // Assign IDs on the frontend so we can push rows locally after success
+      const timeslotsWithIds = timeslots.map(slot => ({ ...slot, id: generateId() }));
       const application = {
         id: generateId(),
-        creatorId: isInternal ? state.internalSelectedCreatorId : state.currentUser.id,
-        creatorName: isInternal ? (selectedCreator?.name || '') : state.currentUser.name,
+        creatorId,
+        creatorName,
         brandApplicationId: brandAppId,
         brandName: brandApp.brandName,
         shopName: brandApp.shopName,
-        timeslots: timeslots,
+        timeslots: timeslotsWithIds,
         affiliateUsername,
         phone,
         telegram,
@@ -1982,9 +2006,52 @@
         state.internalTab = 'creator-apps';
         await loadAllData(0, state.internalShowPast);
       } else {
+        // Push one row per timeslot locally — avoids reloading 80K rows just to show new records
+        timeslotsWithIds.forEach(slot => {
+          state.creatorApplications.push({
+            id: slot.id,
+            creatorId,
+            creatorName,
+            brandApplicationId: brandAppId,
+            brandName: brandApp.brandName,
+            shopName: brandApp.shopName,
+            streamDate: slot.date || '',
+            streamTime: slot.startTime || '',
+            streamEndDate: slot.endDate || slot.date || '',
+            streamEndTime: slot.endTime || '',
+            affiliateUsername,
+            phone,
+            telegram,
+            shippingRecipientName,
+            shippingAddress,
+            shippingPostalCode,
+            deliveryInstructions,
+            willingToTravel,
+            status: 'pending',
+            createdAt: submittedAt,
+            sampleSentAt: hasSamples ? submittedAt : '',
+            sampleReceivedAt: hasSamples ? submittedAt : '',
+            hasSamples,
+          });
+        });
+        rebuildInternalDisplayArrays();
         state.showCreatorApplyForm = null;
         state.creatorTab = 'my-applications';
-        await loadAllData();
+        render();
+      }
+    };
+
+    // ── Pre-compute internal display arrays (called on data change, not on every render) ──
+    const rebuildInternalDisplayArrays = () => {
+      if (state.internalShowPast) {
+        state.internalDisplayBrandApps = state.brandApplications;
+        state.internalDisplayCreatorApps = state.creatorApplications;
+      } else {
+        const currentMonth = getCurrentMonthStr();
+        state.internalDisplayBrandApps = state.brandApplications.filter(a => String(a.month) >= currentMonth);
+        // Build a Set of valid brand app IDs — O(n+m) instead of O(n×m)
+        const validBrandAppIds = new Set(state.internalDisplayBrandApps.map(a => a.id));
+        state.internalDisplayCreatorApps = state.creatorApplications.filter(ca => validBrandAppIds.has(ca.brandApplicationId));
       }
     };
 
@@ -1992,10 +2059,12 @@
     const updateStateBA = (id, fields) => {
       const idx = state.brandApplications.findIndex(a => a.id === id);
       if (idx !== -1) state.brandApplications[idx] = Object.assign({}, state.brandApplications[idx], fields);
+      rebuildInternalDisplayArrays();
     };
     const updateStateCA = (id, fields) => {
       const idx = state.creatorApplications.findIndex(a => a.id === id);
       if (idx !== -1) state.creatorApplications[idx] = Object.assign({}, state.creatorApplications[idx], fields);
+      rebuildInternalDisplayArrays();
     };
 
     const handleApproveBrandApp = async (appId) => {
@@ -2443,6 +2512,7 @@
         dateTo: document.getElementById('csf-date-to')?.value || '',
         rm: document.getElementById('csf-rm')?.value || '',
       };
+      state.internalConfirmedSlotsPage = 0;
       render();
     };
 
@@ -2463,6 +2533,7 @@
         rm: document.getElementById('baf-rm')?.value || '',
         managed: document.getElementById('baf-managed')?.value || '',
       };
+      state.internalBrandAppsPage = 0;
       render();
     };
 
@@ -2474,6 +2545,7 @@
         rm: document.getElementById('caf-rm')?.value || '',
         affiliateStatus: document.getElementById('caf-affiliate')?.value || '',
       };
+      state.internalCreatorAppsPage = 0;
       render();
     };
 
@@ -5393,11 +5465,8 @@
     // ========================
 
     const renderInternalDashboard = () => {
-      // Store filtered arrays on state so tab render functions can share them without re-filtering
-      state.internalDisplayBrandApps = state.internalShowPast ? state.brandApplications : filterBrandAppsByDisplayWindow(state.brandApplications);
-      state.internalDisplayCreatorApps = state.internalShowPast ? state.creatorApplications : filterCreatorAppsByDisplayWindow(state.creatorApplications);
-      const displayBrandApps = state.internalDisplayBrandApps;
-      const displayCreatorApps = state.internalDisplayCreatorApps;
+      const displayBrandApps = state.internalDisplayBrandApps || [];
+      const displayCreatorApps = state.internalDisplayCreatorApps || [];
       const pendingBrandApps = displayBrandApps.filter(a => a.status === 'pending').length;
       const pendingCreatorApps = displayCreatorApps.filter(a => a.status === 'pending').length;
       const confirmedSlots = displayCreatorApps.filter(a => a.status === 'approved').length;
@@ -5564,7 +5633,7 @@
           <label style="font-size:13px;color:#888;white-space:nowrap;">Status:</label>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${[['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['cancelled','Cancelled'],['','All']].map(([val, label]) => `
-              <button onclick="state.brandAppStatusFilter = '${val}'; render();"
+              <button onclick="state.brandAppStatusFilter = '${val}'; state.internalBrandAppsPage = 0; render();"
                 class="status-filter-pill"
                 style="padding:5px 14px;border-radius:20px;border:1px solid ${sf === val ? '#6c5ce7' : '#ddd'};background:${sf === val ? '#6c5ce7' : '#fff'};color:${sf === val ? '#fff' : '#555'};font-size:13px;cursor:pointer;font-weight:${sf === val ? '600' : '400'};">
                 ${label}${val ? ` (${statusCounts[val] || 0})` : ` (${all.length})`}
@@ -5611,7 +5680,7 @@
           <div style="display:flex;gap:8px;margin-top:12px;">
             <button class="btn-primary" style="font-size:13px;padding:8px 20px;" onclick="applyBrandAppsFilters();">Search</button>
             ${hasFilters ? `<button class="btn-secondary" style="font-size:13px;padding:8px 16px;"
-              onclick="state.brandAppsFilters = { shopName:'', category:'', month:'', rm:'', managed:'' }; render();">
+              onclick="state.brandAppsFilters = { shopName:'', category:'', month:'', rm:'', managed:'' }; state.internalBrandAppsPage = 0; render();">
               Clear Filters
             </button>` : ''}
           </div>
@@ -5627,7 +5696,26 @@
 
       const sorted = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      return filterBar + sorted.map(app => {
+      const PAGE_SIZE = 50;
+      const page = state.internalBrandAppsPage;
+      const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+      const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+      const from = page * PAGE_SIZE + 1;
+      const to = Math.min((page + 1) * PAGE_SIZE, sorted.length);
+      const paginationBar = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:13px;color:#888;">Showing <strong>${from}–${to}</strong> of <strong>${sorted.length}</strong> applications</div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="state.internalBrandAppsPage--; render();" ${page === 0 ? 'disabled' : ''}
+              style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;background:${page === 0 ? '#f5f5f5' : '#fff'};color:${page === 0 ? '#bbb' : '#333'};font-size:13px;cursor:${page === 0 ? 'default' : 'pointer'};">← Prev</button>
+            <span style="font-size:13px;color:#555;padding:6px 4px;">Page ${page + 1} of ${totalPages}</span>
+            <button onclick="state.internalBrandAppsPage++; render();" ${page >= totalPages - 1 ? 'disabled' : ''}
+              style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;background:${page >= totalPages - 1 ? '#f5f5f5' : '#fff'};color:${page >= totalPages - 1 ? '#bbb' : '#333'};font-size:13px;cursor:${page >= totalPages - 1 ? 'default' : 'pointer'};">Next →</button>
+          </div>
+        </div>
+      `;
+
+      return filterBar + paginationBar + paginated.map(app => {
         const isExpanded = state.expandedCards['int-' + app.id];
         return `
           <div class="app-card">
@@ -5751,7 +5839,7 @@
           <label style="font-size:13px;color:#888;white-space:nowrap;">Status:</label>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${[['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['cancelled','Cancelled'],['','All']].map(([val, label]) => `
-              <button onclick="state.creatorAppStatusFilter = '${val}'; render();"
+              <button onclick="state.creatorAppStatusFilter = '${val}'; state.internalCreatorAppsPage = 0; render();"
                 class="status-filter-pill"
                 style="padding:5px 14px;border-radius:20px;border:1px solid ${sf === val ? '#6c5ce7' : '#ddd'};background:${sf === val ? '#6c5ce7' : '#fff'};color:${sf === val ? '#fff' : '#555'};font-size:13px;cursor:pointer;font-weight:${sf === val ? '600' : '400'};">
                 ${label} (${val === 'approved' ? approvedCount : val ? (statusCounts[val] || 0) : all.length})
@@ -5798,7 +5886,7 @@
           <div style="display:flex;gap:8px;margin-top:12px;">
             <button class="btn-primary" style="font-size:13px;padding:8px 20px;" onclick="applyCreatorAppsFilters();">Search</button>
             ${hasFilters ? `<button class="btn-secondary" style="font-size:13px;padding:8px 16px;"
-              onclick="state.creatorAppsFilters = { creatorUsername:'', category:'', month:'', rm:'', affiliateStatus:'' }; render();">
+              onclick="state.creatorAppsFilters = { creatorUsername:'', category:'', month:'', rm:'', affiliateStatus:'' }; state.internalCreatorAppsPage = 0; render();">
               Clear Filters
             </button>` : ''}
           </div>
@@ -5814,7 +5902,26 @@
 
       const rows = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      return filterBar + rows.map(row => {
+      const PAGE_SIZE = 50;
+      const page = state.internalCreatorAppsPage;
+      const totalPages = Math.ceil(rows.length / PAGE_SIZE);
+      const paginated = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+      const from = page * PAGE_SIZE + 1;
+      const to = Math.min((page + 1) * PAGE_SIZE, rows.length);
+      const paginationBar = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:13px;color:#888;">Showing <strong>${from}–${to}</strong> of <strong>${rows.length}</strong> applications</div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="state.internalCreatorAppsPage--; render();" ${page === 0 ? 'disabled' : ''}
+              style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;background:${page === 0 ? '#f5f5f5' : '#fff'};color:${page === 0 ? '#bbb' : '#333'};font-size:13px;cursor:${page === 0 ? 'default' : 'pointer'};">← Prev</button>
+            <span style="font-size:13px;color:#555;padding:6px 4px;">Page ${page + 1} of ${totalPages}</span>
+            <button onclick="state.internalCreatorAppsPage++; render();" ${page >= totalPages - 1 ? 'disabled' : ''}
+              style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;background:${page >= totalPages - 1 ? '#f5f5f5' : '#fff'};color:${page >= totalPages - 1 ? '#bbb' : '#333'};font-size:13px;cursor:${page >= totalPages - 1 ? 'default' : 'pointer'};">Next →</button>
+          </div>
+        </div>
+      `;
+
+      return filterBar + paginationBar + paginated.map(row => {
         const brandApp = state.brandApplications.find(ba => ba.id === row.brandApplicationId);
         const rm = getRmForShop(brandApp?.shopId);
         const isExpanded = state.expandedCards['ca-details-' + row.id];
@@ -5906,10 +6013,13 @@
     const renderInternalConfirmedSlots = () => {
       const f = state.confirmedSlotsFilters;
 
+      // Build a Map for O(1) brand app lookup instead of O(n) find inside the loop
+      const brandAppMap = new Map(state.brandApplications.map(ba => [ba.id, ba]));
+
       // Expand approved (confirmed) creator applications to individual timeslots
       const allSlots = [];
       state.creatorApplications.filter(ca => ca.status === 'approved').forEach(ca => {
-        const brandApp = state.brandApplications.find(ba => ba.id === ca.brandApplicationId);
+        const brandApp = brandAppMap.get(ca.brandApplicationId);
         const rm = getRmForShop(brandApp?.shopId);
         getTimeslots(ca).forEach(slot => {
           allSlots.push({
@@ -6016,7 +6126,7 @@
           <div style="display:flex;gap:8px;margin-top:12px;">
             <button class="btn-primary" style="font-size:13px;padding:8px 20px;" onclick="applyConfirmedSlotsFilters();">Search</button>
             ${hasFilters ? `<button class="btn-secondary" style="font-size:13px;padding:8px 16px;"
-              onclick="state.confirmedSlotsFilters = { shopName:'', creatorUsername:'', category:'', dateFrom:'', dateTo:'', month:'', rm:'' }; render();">
+              onclick="state.confirmedSlotsFilters = { shopName:'', creatorUsername:'', category:'', dateFrom:'', dateTo:'', month:'', rm:'' }; state.internalConfirmedSlotsPage = 0; render();">
               Clear Filters
             </button>` : ''}
           </div>
@@ -6028,10 +6138,26 @@
             <h3 class="empty-title">${allSlots.length > 0 ? 'No slots match filters' : 'No confirmed slots yet'}</h3>
             <p class="empty-text">${allSlots.length > 0 ? 'Try adjusting your filters' : 'Slots will appear here once creators confirm'}</p>
           </div>
-        ` : `
-          <div style="font-size:13px;color:#888;margin-bottom:12px;">${filtered.length} slot${filtered.length !== 1 ? 's' : ''} found</div>
-          ${filtered.map((s, idx) => {
-            const cardKey = 'ics-' + idx;
+        ` : (() => {
+          const PAGE_SIZE = 50;
+          const page = state.internalConfirmedSlotsPage;
+          const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+          const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+          const from = page * PAGE_SIZE + 1;
+          const to = Math.min((page + 1) * PAGE_SIZE, filtered.length);
+          return `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+            <div style="font-size:13px;color:#888;">Showing <strong>${from}–${to}</strong> of <strong>${filtered.length}</strong> slot${filtered.length !== 1 ? 's' : ''}</div>
+            <div style="display:flex;gap:8px;">
+              <button onclick="state.internalConfirmedSlotsPage--; render();" ${page === 0 ? 'disabled' : ''}
+                style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;background:${page === 0 ? '#f5f5f5' : '#fff'};color:${page === 0 ? '#bbb' : '#333'};font-size:13px;cursor:${page === 0 ? 'default' : 'pointer'};">← Prev</button>
+              <span style="font-size:13px;color:#555;padding:6px 4px;">Page ${page + 1} of ${totalPages}</span>
+              <button onclick="state.internalConfirmedSlotsPage++; render();" ${page >= totalPages - 1 ? 'disabled' : ''}
+                style="padding:6px 14px;border-radius:6px;border:1px solid #ddd;background:${page >= totalPages - 1 ? '#f5f5f5' : '#fff'};color:${page >= totalPages - 1 ? '#bbb' : '#333'};font-size:13px;cursor:${page >= totalPages - 1 ? 'default' : 'pointer'};">Next →</button>
+            </div>
+          </div>
+          ${paginated.map((s, idx) => {
+            const cardKey = 'ics-' + (page * PAGE_SIZE + idx);
             const isExpanded = state.expandedCards[cardKey];
             return `
             <div class="app-card" style="border-left-color:#27ae60;">
@@ -6102,7 +6228,8 @@
               ` : ''}
             </div>
           `}).join('')}
-        `}
+          `;
+        })()}
       `;
     };
 

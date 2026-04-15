@@ -240,8 +240,63 @@ function getAllData(allMonths, pastMonths) {
   var affiliates = sheetToObjects(getSheet('Affiliates'));
   var slots = sheetToObjects(getSheet('Slots'));
   var bookings = sheetToObjects(getSheet('Bookings'));
-  var brandApplications = sheetToObjects(getSheet('BrandApplications'));
-  var creatorApplications = sheetToObjects(getSheet('CreatorApplications'));
+  // Compute filter cutoff upfront so raw-scan reads can skip rows inline
+  var filterMonth = null;
+  if (!allMonths) {
+    filterMonth = getCurrentMonthStr();
+    if (pastMonths && pastMonths > 0) {
+      var _d = new Date();
+      _d.setMonth(_d.getMonth() - pastMonths);
+      filterMonth = _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0');
+    }
+  }
+
+  // Raw-scan BrandApplications — skip rows outside month window during read instead of after
+  var brandApplications = (function() {
+    var sheet = getSheet('BrandApplications');
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    var headers = data[0];
+    var idIdx = headers.indexOf('id');
+    var monthIdx = headers.indexOf('month');
+    var result = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][idIdx]) continue;
+      if (filterMonth !== null && monthIdx !== -1 && String(data[i][monthIdx]) < filterMonth) continue;
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) obj[headers[j]] = data[i][j];
+      result.push(obj);
+    }
+    return result;
+  })();
+
+  // Build brandAppIds set for CA filtering
+  var brandAppIds = null;
+  if (filterMonth !== null) {
+    brandAppIds = {};
+    brandApplications.forEach(function(a) { brandAppIds[String(a.id)] = true; });
+  }
+
+  // Raw-scan CreatorApplications — skip rows whose brandApplicationId isn't in the filtered BA set
+  var creatorApplications = (function() {
+    var sheet = getSheet('CreatorApplications');
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    var headers = data[0];
+    var idIdx = headers.indexOf('id');
+    var baIdIdx = headers.indexOf('brandApplicationId');
+    var result = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][idIdx]) continue;
+      if (brandAppIds !== null && baIdIdx !== -1 && !brandAppIds[String(data[i][baIdIdx])]) continue;
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) obj[headers[j]] = data[i][j];
+      result.push(obj);
+    }
+    return result;
+  })();
   var managedSellers = (function() {
     var sheet = getSheet('Managed Sellers');
     if (!sheet) return [];
@@ -286,27 +341,6 @@ function getAllData(allMonths, pastMonths) {
     }
     return result;
   })();
-
-  if (!allMonths) {
-    var currentMonth = getCurrentMonthStr();
-    var filterMonth = currentMonth;
-
-    // If pastMonths is specified, calculate the cutoff month (past N months from current)
-    if (pastMonths && pastMonths > 0) {
-      var d = new Date();
-      d.setMonth(d.getMonth() - pastMonths);
-      filterMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    }
-
-    brandApplications = brandApplications.filter(function(a) {
-      return String(a.month) >= filterMonth;
-    });
-    var brandAppIds = {};
-    brandApplications.forEach(function(a) { brandAppIds[a.id] = true; });
-    creatorApplications = creatorApplications.filter(function(ca) {
-      return brandAppIds[String(ca.brandApplicationId)] === true;
-    });
-  }
 
   return {
     sellers: sellers,
@@ -411,11 +445,34 @@ function addCreatorApplication(data) {
   const sheet = getSheet('CreatorApplications');
   const timeslots = Array.isArray(data.timeslots) ? data.timeslots : [];
 
-  // Conflict check: ensure none of the submitted timeslots are already taken for this brand app
-  var existingRows = sheetToObjects(sheet).filter(function(r) {
-    return String(r.brandApplicationId) === String(data.brandApplicationId)
-      && r.status !== 'rejected' && r.status !== 'cancelled';
-  });
+  // Single read — used for both conflict check and batched write
+  var sheetData = sheet.getDataRange().getValues();
+  var headers = sheetData[0];
+
+  // Conflict check: scan raw rows for matching brandApplicationId without converting all to objects
+  var baIdCol = headers.indexOf('brandApplicationId');
+  var statusCol = headers.indexOf('status');
+  var dateCol = headers.indexOf('streamDate');
+  var timeCol = headers.indexOf('streamTime');
+  var endDateCol = headers.indexOf('streamEndDate');
+  var endTimeCol = headers.indexOf('streamEndTime');
+
+  var existingRows = [];
+  for (var r = 1; r < sheetData.length; r++) {
+    var row = sheetData[r];
+    if (String(row[baIdCol]) === String(data.brandApplicationId)) {
+      var st = String(row[statusCol]);
+      if (st !== 'rejected' && st !== 'cancelled') {
+        existingRows.push({
+          streamDate: row[dateCol],
+          streamTime: row[timeCol],
+          streamEndDate: row[endDateCol],
+          streamEndTime: row[endTimeCol]
+        });
+      }
+    }
+  }
+
   for (var i = 0; i < timeslots.length; i++) {
     for (var j = 0; j < existingRows.length; j++) {
       if (timeslotsOverlapGS(timeslots[i], existingRows[j])) {
@@ -424,9 +481,11 @@ function addCreatorApplication(data) {
     }
   }
 
-  timeslots.forEach(function(slot) {
-    const rowId = Math.random().toString(36).substr(2, 9);
-    appendRowByHeaders(sheet, {
+  // Batch all timeslot rows into a single setValues call
+  var lastRow = sheet.getLastRow();
+  var newRows = timeslots.map(function(slot) {
+    var rowId = slot.id || Math.random().toString(36).substr(2, 9);
+    var rowData = {
       id: rowId,
       creatorId: data.creatorId,
       creatorName: data.creatorName,
@@ -450,10 +509,15 @@ function addCreatorApplication(data) {
       sampleSentAt: data.sampleSentAt || '',
       sampleReceivedAt: data.sampleReceivedAt || '',
       hasSamples: data.hasSamples || false,
-    });
+    };
+    return headers.map(function(h) { return rowData.hasOwnProperty(h) ? (rowData[h] == null ? '' : String(rowData[h])) : ''; });
   });
 
-  // No longer sending submission emails to internal team
+  if (newRows.length > 0) {
+    var range = sheet.getRange(lastRow + 1, 1, newRows.length, headers.length);
+    range.setNumberFormat('@');
+    range.setValues(newRows);
+  }
 
   return { success: true, count: timeslots.length };
 }
@@ -499,37 +563,55 @@ function cancelBrandApplication(id, cancelReason) {
 function updateBrandApplication(id, data) {
   const sheet = getSheet('BrandApplications');
 
-  // Read current state before updating
-  if (data.status) {
-    var apps = sheetToObjects(sheet);
-    var currentApp = null;
-    for (var i = 0; i < apps.length; i++) {
-      if (String(apps[i].id) === String(id)) { currentApp = apps[i]; break; }
-    }
+  // Single read for status check, row lookup, and header mapping
+  const sheetData = sheet.getDataRange().getValues();
+  const headers = sheetData[0];
 
-    if (currentApp) {
-      var currentStatus = String(currentApp.status);
-      var newStatus = String(data.status);
-
-      // No-op if status hasn't changed
-      if (currentStatus === newStatus) {
-        return { success: true };
-      }
-
-      // Block conflicting status changes
-      if (currentStatus === 'approved' && newStatus === 'rejected') {
-        return { success: false, error: 'This application has already been approved by another user. Please refresh.' };
-      }
-      if (currentStatus === 'rejected' && newStatus === 'approved') {
-        return { success: false, error: 'This application has already been rejected by another user. Please refresh.' };
-      }
+  var rowIndex = -1;
+  var currentApp = null;
+  for (var i = 1; i < sheetData.length; i++) {
+    if (String(sheetData[i][0]) === String(id)) {
+      rowIndex = i + 1; // 1-based sheet row
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) { obj[headers[j]] = sheetData[i][j]; }
+      currentApp = obj;
+      break;
     }
   }
 
-  const success = updateRowById(sheet, id, data);
+  if (rowIndex < 0) return { success: false, error: 'Application not found' };
+
+  // Status conflict check
+  if (data.status && currentApp) {
+    var currentStatus = String(currentApp.status);
+    var newStatus = String(data.status);
+    if (currentStatus === newStatus) return { success: true };
+    if (currentStatus === 'approved' && newStatus === 'rejected') {
+      return { success: false, error: 'This application has already been approved by another user. Please refresh.' };
+    }
+    if (currentStatus === 'rejected' && newStatus === 'approved') {
+      return { success: false, error: 'This application has already been rejected by another user. Please refresh.' };
+    }
+  }
+
+  // Batch all field updates into a single row write
+  var rowValues = sheetData[rowIndex - 1].map(String);
+  var updated = false;
+  for (var key in data) {
+    var colIndex = headers.indexOf(key);
+    if (colIndex >= 0) {
+      rowValues[colIndex] = data[key] == null ? '' : String(data[key]);
+      updated = true;
+    }
+  }
+  if (updated) {
+    var range = sheet.getRange(rowIndex, 1, 1, rowValues.length);
+    range.setNumberFormat('@');
+    range.setValues([rowValues]);
+  }
 
   // Email seller + RM when brand application is approved
-  if (success && String(data.status) === 'approved') {
+  if (updated && String(data.status) === 'approved') {
     try {
       var updatedApp = Object.assign({}, currentApp, data);
       sendEmailToSeller_BrandAppApproved(updatedApp);
@@ -537,14 +619,14 @@ function updateBrandApplication(id, data) {
   }
 
   // Email seller + RM when brand application is rejected
-  if (success && String(data.status) === 'rejected' && currentApp && String(currentApp.status) !== 'rejected') {
+  if (updated && String(data.status) === 'rejected' && currentApp && String(currentApp.status) !== 'rejected') {
     try {
       var rejectedApp = Object.assign({}, currentApp, data);
       sendRejectionEmailToBrandApp(rejectedApp, data.rejectionReason || '');
     } catch (e) { Logger.log('Email error on brand rejection: ' + e); }
   }
 
-  return { success: success };
+  return { success: updated };
 }
 
 // Toggle isPaused on a brand application
@@ -565,25 +647,31 @@ function toggleBrandPause(id) {
 function updateCreatorApplication(id, data) {
   const sheet = getSheet('CreatorApplications');
 
-  // Read sheet once — reused for undo check and all notifications
-  var allRows = sheetToObjects(sheet);
+  // Single read for status check, row lookup, and header mapping
+  var sheetData = sheet.getDataRange().getValues();
+  var headers = sheetData[0];
+  var rowIndex = -1;
   var currentRow = null;
-  for (var i = 0; i < allRows.length; i++) {
-    if (String(allRows[i].id) === String(id)) { currentRow = allRows[i]; break; }
+  for (var i = 1; i < sheetData.length; i++) {
+    if (String(sheetData[i][0]) === String(id)) {
+      rowIndex = i + 1; // 1-based sheet row
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) { obj[headers[j]] = sheetData[i][j]; }
+      currentRow = obj;
+      break;
+    }
   }
 
+  if (rowIndex < 0) return { success: false, error: 'Application not found' };
+
   // Guard against conflicting status changes
+  var byCreator = String(data.rejectedBy || '') === 'creator';
   if (data.status && currentRow) {
     var currentStatus = String(currentRow.status);
     var newStatus = String(data.status);
-    var byCreator = String(data.rejectedBy || '') === 'creator';
 
-    // No-op if status hasn't changed
-    if (currentStatus === newStatus) {
-      return { success: true };
-    }
+    if (currentStatus === newStatus) return { success: true };
 
-    // Block internal team conflict: approved ↔ rejected (but allow creator rejecting their own approved slot)
     if (currentStatus === 'approved' && newStatus === 'rejected' && !byCreator) {
       return { success: false, error: 'This application has already been approved by another user. Please refresh.' };
     }
@@ -609,46 +697,59 @@ function updateCreatorApplication(id, data) {
     data.sampleReceivedAt = '';
   }
 
-  const success = updateRowById(sheet, id, data);
+  // Batch all field updates into a single row write
+  var rowValues = sheetData[rowIndex - 1].map(String);
+  var updated = false;
+  for (var key in data) {
+    var colIndex = headers.indexOf(key);
+    if (colIndex >= 0) {
+      rowValues[colIndex] = data[key] == null ? '' : String(data[key]);
+      updated = true;
+    }
+  }
+  if (updated) {
+    var range = sheet.getRange(rowIndex, 1, 1, rowValues.length);
+    range.setNumberFormat('@');
+    range.setValues([rowValues]);
+  }
 
-  if (success && currentRow) {
-    // Merge updated fields into the row object for notification context
+  if (updated && currentRow) {
     var row = Object.assign({}, currentRow, data);
 
-    // Send Telegram approval notification for this timeslot (only on actual status change)
     if (String(data.status) === 'approved' && String(currentRow.status) !== 'approved') {
       try { sendApprovalNotificationForRow(row); } catch (err) { Logger.log('Telegram notification error: ' + err.toString()); }
     }
 
-    // Telegram + email when internal team rejects a creator application
     if (String(data.status) === 'rejected' && String(currentRow.status) !== 'rejected' && !byCreator) {
       try { sendRejectionNotifications_CreatorApp(row, data.rejectionReason || ''); } catch (err) { Logger.log('Rejection notification error: ' + err.toString()); }
     }
 
-    // Email seller when internal team approves a creator application (approval = confirmation)
     if (String(data.status) === 'approved' && String(currentRow.status) !== 'approved') {
       try { sendEmailToSeller_CreatorConfirmed(row); } catch (err) { Logger.log('Email notification error: ' + err.toString()); }
     }
 
-    // Telegram notification to creator when seller marks sample as sent
     if (data.sampleSentAt) {
       try { sendSampleSentNotification(row); } catch (err) { Logger.log('Sample sent notification error: ' + err.toString()); }
     }
 
-    // Telegram notification to creator when seller undoes sample sent
     if (data.sampleSentAt === '') {
       try { sendSampleUndoNotification(row); } catch (err) { Logger.log('Sample undo notification error: ' + err.toString()); }
     }
 
-    // Email + Telegram notification when creator application is cancelled
+    // Cancellation: targeted scan of BrandApplications instead of full sheetToObjects
     if (String(data.status) === 'cancelled' && String(currentRow.status) !== 'cancelled') {
       try {
-        // Get the brand application for email context
         var baSheet = getSheet('BrandApplications');
-        var brandApps = sheetToObjects(baSheet);
+        var baData = baSheet.getDataRange().getValues();
+        var baHeaders = baData[0];
         var brandApp = null;
-        for (var i = 0; i < brandApps.length; i++) {
-          if (String(brandApps[i].id) === String(row.brandApplicationId)) { brandApp = brandApps[i]; break; }
+        for (var k = 1; k < baData.length; k++) {
+          if (String(baData[k][0]) === String(row.brandApplicationId)) {
+            var baObj = {};
+            for (var l = 0; l < baHeaders.length; l++) { baObj[baHeaders[l]] = baData[k][l]; }
+            brandApp = baObj;
+            break;
+          }
         }
         sendCancellationEmail_CreatorApp(row, brandApp, data.cancelReason || '');
       } catch (err) { Logger.log('Cancellation notification error: ' + err.toString()); }
@@ -689,7 +790,7 @@ function updateCreatorApplication(id, data) {
     }
   }
 
-  return { success: success };
+  return { success: updated };
 }
 
 
@@ -708,10 +809,20 @@ function timeslotsOverlapBackend(a, b) {
 // Reschedule a creator application to a new date/time
 function rescheduleCreatorApplication(id, data) {
   var sheet = getSheet('CreatorApplications');
-  var allRows = sheetToObjects(sheet);
+
+  // Single read — reused for row lookup, conflict check, and batch write
+  var sheetData = sheet.getDataRange().getValues();
+  var headers = sheetData[0];
+  var rowIndex = -1;
   var currentRow = null;
-  for (var i = 0; i < allRows.length; i++) {
-    if (String(allRows[i].id) === String(id)) { currentRow = allRows[i]; break; }
+  for (var i = 1; i < sheetData.length; i++) {
+    if (String(sheetData[i][0]) === String(id)) {
+      rowIndex = i + 1; // 1-based sheet row
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) { obj[headers[j]] = sheetData[i][j]; }
+      currentRow = obj;
+      break;
+    }
   }
 
   if (!currentRow) return { success: false, error: 'Application not found.' };
@@ -730,12 +841,18 @@ function rescheduleCreatorApplication(id, data) {
     return { success: false, error: 'This slot is too close to today and cannot be rescheduled. Slots must be at least 3 days away.' };
   }
 
-  // Look up brand application and build shop-wide brand app ID list
+  // Look up brand application — targeted scan, stop at first match
   var baSheet = getSheet('BrandApplications');
-  var brandApps = sheetToObjects(baSheet);
+  var baData = baSheet.getDataRange().getValues();
+  var baHeaders = baData[0];
   var brandApp = null;
-  for (var i = 0; i < brandApps.length; i++) {
-    if (String(brandApps[i].id) === String(currentRow.brandApplicationId)) { brandApp = brandApps[i]; break; }
+  for (var i = 1; i < baData.length; i++) {
+    if (String(baData[i][0]) === String(currentRow.brandApplicationId)) {
+      var baObj = {};
+      for (var j = 0; j < baHeaders.length; j++) { baObj[baHeaders[j]] = baData[i][j]; }
+      brandApp = baObj;
+      break;
+    }
   }
 
   var isSellerSite = brandApp && String(brandApp.sellerSiteRequired || '').trim().toLowerCase() === 'true';
@@ -780,25 +897,46 @@ function rescheduleCreatorApplication(id, data) {
   if ((newEnd - newStart) < 2 * 60 * 60 * 1000) {
     return { success: false, error: 'Each stream must be at least 2 hours long.' };
   }
+
+  // Build shop brand app ID set from raw BrandApplications data
   var shopId = brandApp ? String(brandApp.shopId || brandApp.brandId || '') : '';
-  var shopBrandAppIds = [];
-  for (var i = 0; i < brandApps.length; i++) {
-    if (shopId && String(brandApps[i].shopId || brandApps[i].brandId || '') === shopId) {
-      shopBrandAppIds.push(String(brandApps[i].id));
+  var shopBrandAppIdSet = {};
+  if (shopId) {
+    var shopIdColIdx = baHeaders.indexOf('shopId') >= 0 ? baHeaders.indexOf('shopId') : baHeaders.indexOf('brandId');
+    for (var i = 1; i < baData.length; i++) {
+      if (shopIdColIdx >= 0 && String(baData[i][shopIdColIdx]) === shopId) {
+        shopBrandAppIdSet[String(baData[i][0])] = true;
+      }
     }
   }
-  if (shopBrandAppIds.length === 0) shopBrandAppIds = [String(currentRow.brandApplicationId)];
+  if (Object.keys(shopBrandAppIdSet).length === 0) shopBrandAppIdSet[String(currentRow.brandApplicationId)] = true;
 
-  // Conflict check: same shop (any creator) OR creator's own slots at other shops
+  // Conflict check using raw sheetData — no object conversion for non-matching rows
   var newSlot = { date: data.newDate, startTime: data.newStartTime, endDate: data.newEndDate || data.newDate, endTime: data.newEndTime || '' };
-  for (var i = 0; i < allRows.length; i++) {
-    var r = allRows[i];
-    if (String(r.id) === String(id)) continue;
-    if (r.status === 'rejected' || r.status === 'cancelled') continue;
-    var isSameShop = shopBrandAppIds.indexOf(String(r.brandApplicationId)) >= 0;
-    var isOwnSlot  = String(r.creatorId) === String(currentRow.creatorId);
+  var idColIdx         = 0;
+  var brandAppIdColIdx = headers.indexOf('brandApplicationId');
+  var creatorIdColIdx  = headers.indexOf('creatorId');
+  var statusColIdx     = headers.indexOf('status');
+  var streamDateColIdx = headers.indexOf('streamDate');
+  var streamTimeColIdx = headers.indexOf('streamTime');
+  var streamEndDateColIdx = headers.indexOf('streamEndDate');
+  var streamEndTimeColIdx = headers.indexOf('streamEndTime');
+
+  for (var i = 1; i < sheetData.length; i++) {
+    var row = sheetData[i];
+    if (String(row[idColIdx]) === String(id)) continue;
+    var rowStatus = String(row[statusColIdx] || '');
+    if (rowStatus === 'rejected' || rowStatus === 'cancelled') continue;
+    var rowBaId = String(row[brandAppIdColIdx] || '');
+    var isSameShop = shopBrandAppIdSet[rowBaId] === true;
+    var isOwnSlot  = String(row[creatorIdColIdx] || '') === String(currentRow.creatorId);
     if (!isSameShop && !isOwnSlot) continue;
-    var existing = { date: String(r.streamDate), startTime: String(r.streamTime || ''), endDate: String(r.streamEndDate || r.streamDate), endTime: String(r.streamEndTime || '') };
+    var existing = {
+      date:      String(row[streamDateColIdx] || ''),
+      startTime: String(row[streamTimeColIdx] || ''),
+      endDate:   String(row[streamEndDateColIdx] || row[streamDateColIdx] || ''),
+      endTime:   String(row[streamEndTimeColIdx] || '')
+    };
     if (timeslotsOverlapBackend(newSlot, existing)) {
       return { success: false, error: isSameShop
         ? 'This timeslot overlaps with an existing booking for this shop. Please choose a different time.'
@@ -819,7 +957,15 @@ function rescheduleCreatorApplication(id, data) {
     streamEndTime: data.newEndTime || ''
   };
 
-  updateRowById(sheet, id, updateData);
+  // Batch write — single setValues call using the already-known rowIndex
+  var rowValues = sheetData[rowIndex - 1].map(String);
+  for (var key in updateData) {
+    var colIdx = headers.indexOf(key);
+    if (colIdx >= 0) rowValues[colIdx] = String(updateData[key]);
+  }
+  var range = sheet.getRange(rowIndex, 1, 1, rowValues.length);
+  range.setNumberFormat('@');
+  range.setValues([rowValues]);
 
   var rm = null;
   var managedSellersSheet = getSheet('Managed Sellers');
@@ -1470,17 +1616,19 @@ function sendApprovalNotificationForRow(row) {
 
   var time = row.streamTime || '';
   if (row.streamEndTime) time += ' – ' + row.streamEndTime;
-  var slotText = '📅 ' + formatDateDDMMMYYYY(row.streamDate) + (time ? ' ' + time : '');
+  var dateTimeText = formatDateDDMMMYYYY(row.streamDate) + (time ? ' ' + time : '');
 
   var contactString = getInternalPicContactString();
 
-  var message = '🎉 <b>Your livestream slot has been confirmed by Shopee!</b>\n\n'
-    + '🏪 <b>Shop:</b> ' + (row.brandName || row.shopName) + '\n'
-    + slotText + '\n'
-    + '📦 <b>Shipping Address:</b> ' + (row.shippingAddress || 'N/A') + (row.shippingPostalCode ? ', S' +row.shippingPostalCode : '') + '\n\n'
-    + 'No action needed — your slot is confirmed.\n\n'
-    + 'If you would like to reschedule, you can do so on the Shopee Live Creator Match app.\n\n'
-    + 'If you have any questions, please contact ' + contactString + '.';
+  var message = '<b>📢 Shopee Livestream Confirmation</b>\n\n'
+    + 'Hi! Your livestream slot has been confirmed by Shopee. Please see the details below:\n\n'
+    + '<b>Shop:</b> ' + (row.brandName || row.shopName) + '\n\n'
+    + '<b>Date, Time:</b> ' + dateTimeText + '\n\n'
+    + '<b>Shipping Address:</b> ' + (row.shippingAddress || 'N/A') + (row.shippingPostalCode ? ', S' + row.shippingPostalCode : '') + '\n\n'
+    + '<b>Important Reminders:</b>\n'
+    + '✅ Please adhere strictly to the confirmed stream date and time.\n'
+    + '⚠️ Rescheduling: If you need to reschedule, you may do so on the Shopee Live Creator portal and kindly notify the Shopee Livestream Talent Management Team at: ' + contactString + ' at least 3 working days in advance.\n\n'
+    + 'Thank you for your cooperation!';
 
   telegramSend('sendMessage', {
     chat_id: chatId,
@@ -1497,14 +1645,13 @@ function sendRescheduledApprovalNotification(row, chatId, oldDate, oldStartTime,
   var newTime = row.streamTime || '';
   if (row.streamEndTime) newTime += ' \u2013 ' + row.streamEndTime;
   var newSlot = formatDateDDMMMYYYY(row.streamDate) + (newTime ? ' ' + newTime : '');
-  var contactString = getInternalPicContactString();
 
-  var message = '🔄 <b>Your livestream slot has been rescheduled.</b>\n\n'
-    + '🏪 <b>Shop:</b> ' + (row.brandName || row.shopName) + '\n'
-    + '📅 <b>Previous slot:</b> ' + oldSlot + '\n'
-    + '📅 <b>New slot:</b> ' + newSlot + '\n\n'
-    + 'If you would like to reschedule again, you can do so on the Shopee Live Creator Match app.\n\n'
-    + 'If you have any questions, please contact ' + contactString + '.';
+  var message = '<b>Your livestream application has been rescheduled.</b>\n\n'
+    + '<b>Shop:</b> ' + (row.brandName || row.shopName) + '\n'
+    + '<b>Previous slot:</b> Date, Time: ' + oldSlot + '\n'
+    + '<b>New slot:</b> Date, Time: ' + newSlot + '\n\n'
+    + 'Please adhere strictly to the confirmed stream date and time.\n\n'
+    + 'Thank you!';
 
   telegramSend('sendMessage', {
     chat_id: chatId,
@@ -1927,11 +2074,14 @@ function sendCancellationEmail_CreatorApp(creatorApp, brandApp, reason) {
   }
 
   // Telegram notification to creator
-  var creatorTelegramBody = '❌ <b>Your livestream slot has been cancelled.</b>\n\n'
-    + '🏪 <b>Shop:</b> ' + (creatorApp.brandName || creatorApp.shopName || '') + '\n'
-    + '📅 <b>Date & Time:</b> ' + formatDateDDMMMYYYY(creatorApp.streamDate) + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + '\n'
-    + (reason ? '<b>Reason:</b> ' + reason + '\n' : '')
-    + '\nIf you have any questions, please contact ' + contactString + '.';
+  var creatorTelegramBody = '<b>Your livestream application has been cancelled.</b>\n\n'
+    + '<b>Shop:</b> ' + (creatorApp.brandName || creatorApp.shopName || '') + '\n'
+    + '<b>Date, Time:</b> ' + formatDateDDMMMYYYY(creatorApp.streamDate) + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + '\n\n'
+    + '<b>Reason:</b>\n' + (reason || '') + '\n\n'
+    + '<b>Next Steps:</b>\n'
+    + 'Please check the Brand Match Portal for other available campaigns. We\'d love to see you apply for other brands!\n\n'
+    + 'Thank you.\n\n'
+    + '*If you have any questions, please reach out to ' + contactString + '.';
 
   try {
     var chatId = getTelegramChatId(creatorApp.telegram);
@@ -1954,13 +2104,15 @@ function sendRejectionNotifications_CreatorApp(creatorApp, reason) {
   }
   var time = creatorApp.streamTime || '';
   if (creatorApp.streamEndTime) time += ' – ' + creatorApp.streamEndTime;
-  var slotText = '📅 ' + formatDateDDMMMYYYY(creatorApp.streamDate) + (time ? ' ' + time : '');
   var contactString = getInternalPicContactString();
-  var message = '❌ <b>Your livestream application has been rejected.</b>\n\n'
-    + '🏪 <b>Shop:</b> ' + (creatorApp.brandName || creatorApp.shopName || '') + '\n'
-    + slotText + '\n'
-    + (reason ? '\n<b>Reason:</b> ' + reason + '\n' : '')
-    + '\nIf you have any questions, please contact ' + contactString + '.';
+  var message = '<b>Your livestream application has been rejected.</b>\n\n'
+    + '<b>Shop:</b> ' + (creatorApp.brandName || creatorApp.shopName || '') + '\n'
+    + '<b>Date, Time:</b> ' + formatDateDDMMMYYYY(creatorApp.streamDate) + (time ? ' ' + time : '') + '\n\n'
+    + '<b>Reason:</b>\n' + (reason || '') + '\n\n'
+    + '<b>Next Steps:</b>\n'
+    + 'Please check the Brand Match Portal for other available campaigns. We\'d love to see you apply for other brands!\n\n'
+    + 'Thank you.\n\n'
+    + '*If you have any questions, please reach out to ' + contactString + '.';
   try {
     telegramSend('sendMessage', { chat_id: chatId, text: message, parse_mode: 'HTML' });
   } catch(e) { Logger.log('Failed to send Telegram rejection to creator: ' + e); }
