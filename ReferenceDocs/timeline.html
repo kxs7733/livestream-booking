@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Livestream Booking App — Launch Timeline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .slide {
+      width: 100%;
+      max-width: 960px;
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 52px 60px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.1);
+    }
+
+    .header {
+      margin-bottom: 48px;
+    }
+
+    .header .label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #7c3aed;
+      margin-bottom: 8px;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+
+    .header h1 span {
+      color: #7c3aed;
+    }
+
+    /* Progress bar at top */
+    .progress-bar {
+      display: flex;
+      border-radius: 8px;
+      overflow: hidden;
+      height: 8px;
+      margin-bottom: 48px;
+      gap: 2px;
+    }
+
+    .progress-bar .seg {
+      height: 100%;
+      border-radius: 2px;
+    }
+
+    /* Timeline */
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 180px 28px 1fr;
+      align-items: stretch;
+      gap: 0 16px;
+      position: relative;
+    }
+
+    .phase.has-callout {
+      grid-template-columns: 180px 28px 1fr 240px;
+    }
+
+    .phase-callout {
+      margin: 8px 0 16px 8px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1.5px dashed #6366f1;
+      background: #eef2ff;
+      position: relative;
+      align-self: center;
+    }
+
+    .phase-callout::before {
+      content: '';
+      position: absolute;
+      left: -10px;
+      top: 50%;
+      width: 10px;
+      height: 1.5px;
+      background: #6366f1;
+    }
+
+    .phase-callout .callout-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #3730a3;
+      margin-bottom: 8px;
+    }
+
+    .phase-callout ul {
+      list-style: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .phase-callout ul li {
+      font-size: 11.5px;
+      color: #3730a3;
+      line-height: 1.4;
+      padding-left: 14px;
+      position: relative;
+    }
+
+    .phase-callout ul li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: #6366f1;
+      font-size: 11px;
+    }
+
+    .phase-callout .callout-more {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #6366f1;
+      font-style: italic;
+    }
+
+    /* Date column */
+    .phase-date {
+      text-align: right;
+      padding: 18px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .phase-date .range {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      letter-spacing: 0.3px;
+    }
+
+    /* Center line + dot */
+    .phase-connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .phase-connector .dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      margin-top: 14px;
+      z-index: 1;
+      position: relative;
+    }
+
+    .phase-connector .line {
+      width: 2px;
+      flex: 1;
+      background: #cbd5e1;
+      margin-top: 4px;
+    }
+
+    .phase:last-child .phase-connector .line {
+      display: none;
+    }
+
+    /* Card */
+    .phase-card {
+      padding: 14px 20px 20px 20px;
+      border-radius: 12px;
+      margin: 8px 0 16px 0;
+      border-left: 3px solid transparent;
+      transition: transform 0.15s;
+    }
+
+    .phase-card:hover {
+      transform: translateX(4px);
+    }
+
+    .phase-card .title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .phase-card .desc {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    /* Milestone (single date) */
+    .phase.milestone .phase-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+    }
+
+    .phase.milestone .phase-card .title {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .milestone-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    /* Divider label */
+    .timeline-divider {
+      display: grid;
+      grid-template-columns: 180px 28px 1fr;
+      gap: 0 16px;
+      align-items: center;
+      margin: 8px 0 4px;
+    }
+
+    .timeline-divider .divider-line {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 0 0 196px;
+    }
+
+    .divider-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    .divider-rule {
+      flex: 1;
+      height: 1px;
+      background: #e2e8f0;
+    }
+
+    /* Color themes per phase */
+    .p1 .dot { background: #dbeafe; color: #1d4ed8; }
+    .p1 .phase-card { background: #eff6ff; border-color: #3b82f6; }
+    .p1 .title { color: #1d4ed8; }
+
+    .p2 .dot { background: #ffedd5; color: #c2410c; }
+    .p2 .phase-card { background: #fff7ed; border-color: #f97316; }
+    .p2 .title { color: #c2410c; }
+
+    .p3 .dot { background: #f3e8ff; color: #7e22ce; }
+    .p3 .phase-card { background: #faf5ff; border-color: #a855f7; }
+    .p3 .title { color: #7e22ce; }
+
+    /* Amber — stakeholder milestone */
+    .p4 .dot { background: #fef3c7; color: #92400e; }
+    .p4 .phase-card { background: #fffbeb; border-color: #f59e0b; }
+    .p4 .title { color: #92400e; }
+    .p4 .milestone-badge { background: #fef3c7; color: #92400e; }
+
+    /* Indigo — additional dev */
+    .p5 .dot { background: #e0e7ff; color: #3730a3; }
+    .p5 .phase-card { background: #eef2ff; border-color: #6366f1; }
+    .p5 .title { color: #3730a3; }
+
+    /* Cyan — stress testing round 2 */
+    .p6 .dot { background: #cffafe; color: #0e7490; }
+    .p6 .phase-card { background: #ecfeff; border-color: #06b6d4; }
+    .p6 .title { color: #0e7490; }
+
+    /* Slate — minor changes + internal change mgmt */
+    .p7 .dot { background: #f1f5f9; color: #475569; }
+    .p7 .phase-card { background: #f8fafc; border-color: #64748b; }
+    .p7 .title { color: #334155; }
+
+    /* Rose — brand onboarding */
+    .p8 .dot { background: #ffe4e6; color: #9f1239; }
+    .p8 .phase-card { background: #fff1f2; border-color: #f43f5e; }
+    .p8 .title { color: #9f1239; }
+
+    /* Green — pilot milestone */
+    .p9 .dot { background: #d1fae5; color: #065f46; }
+    .p9 .phase-card { background: #ecfdf5; border-color: #10b981; }
+    .p9 .title { color: #065f46; }
+    .p9 .milestone-badge { background: #d1fae5; color: #065f46; }
+
+    /* Red — full rollout */
+    .p10 .dot { background: #fee2e2; color: #991b1b; }
+    .p10 .phase-card { background: #fef2f2; border-color: #ef4444; }
+    .p10 .title { color: #991b1b; }
+    .p10 .milestone-badge { background: #fee2e2; color: #991b1b; }
+
+    /* Progress segments */
+    .s1  { background: #3b82f6; flex: 15; }
+    .s2  { background: #f97316; flex: 6; }
+    .s3  { background: #a855f7; flex: 6; }
+    .s4  { background: #f59e0b; flex: 1; }
+    .s5  { background: #6366f1; flex: 13; }
+    .s6  { background: #06b6d4; flex: 4; }
+    .s7  { background: #64748b; flex: 2; }
+    .s8  { background: #f43f5e; flex: 3; }
+    .s9  { background: #10b981; flex: 1; }
+    .s10 { background: #ef4444; flex: 2; }
+
+    .notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-left: 4px solid #f59e0b;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-top: 28px;
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.5;
+    }
+
+    .notice strong {
+      color: #92400e;
+    }
+
+    .notice-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .footer {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .footer .go-live {
+      color: #10b981;
+      font-weight: 700;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="slide">
+    <div class="header">
+      <div class="label">Product Launch — Revised</div>
+      <h1>Livestream Booking App — <span>Go-Live Roadmap</span></h1>
+    </div>
+
+    <div class="progress-bar">
+      <div class="seg s1"></div>
+      <div class="seg s2"></div>
+      <div class="seg s4"></div>
+      <div class="seg s5"></div>
+      <div class="seg s6"></div>
+      <div class="seg s7"></div>
+      <div class="seg s8"></div>
+      <div class="seg s9"></div>
+      <div class="seg s10"></div>
+    </div>
+
+    <div class="timeline">
+
+      <!-- Phase 1 -->
+      <div class="phase p1">
+        <div class="phase-date">
+          <div class="range">25 Feb – 11 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🧪</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Internal Testing</div>
+          <div class="desc">End-to-end validation across core flows by the internal team. Bug logging and initial feedback collection.</div>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="phase p2">
+        <div class="phase-date">
+          <div class="range">12 Mar – 17 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🔧</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Bug Fixes & Refinements</div>
+          <div class="desc">Address issues surfaced during internal testing. Polish UX and resolve blocking defects before stress testing.</div>
+        </div>
+      </div>
+
+      <!-- Phase 4 — Stakeholder milestone -->
+      <div class="phase p4 milestone">
+        <div class="phase-date">
+          <div class="range">24 Mar</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">📋</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Stakeholder Requirements Review — Additional scope identified, timeline extended</div>
+        </div>
+      </div>
+
+      <!-- Phase 5 -->
+      <div class="phase p5 has-callout">
+        <div class="phase-date">
+          <div class="range">25 Mar – 6 Apr</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🛠️</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Updated App Development</div>
+          <div class="desc">Incorporate additional requirements finalised with stakeholders. Deliver updated, feature-complete app by 6 April.</div>
+        </div>
+        <div class="phase-callout">
+          <div class="callout-title">Key Changes</div>
+          <ul>
+            <li>Reschedule flow — creators can reschedule without cancelling & reapplying</li>
+            <li>Password / PIN to secure brand and creator accounts</li>
+            <li>Flag managed sellers & approved affiliates for faster internal approvals</li>
+            <li>Mass delivery update via Excel/CSV with D-7 reminder prompt</li>
+            <li>Promo code dissemination for brands to share shop codes with KOLs</li>
+          </ul>
+          <div class="callout-more">...and more</div>
+        </div>
+      </div>
+
+      <!-- Phase 6 -->
+      <div class="phase p6">
+        <div class="phase-date">
+          <div class="range">7 Apr – 10 Apr</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">⚡</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Stress Testing</div>
+          <div class="desc">Re-run load and performance tests against the updated build to confirm stability before pilot launch.</div>
+        </div>
+      </div>
+
+      <!-- Phase 7 -->
+      <div class="phase p7">
+        <div class="phase-date">
+          <div class="range">13 Apr – 14 Apr</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">📝</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Minor Changes & Internal Change Management</div>
+          <div class="desc">Address any final fixes from stress testing. Begin internal team readiness — comms, training, and support prep.</div>
+        </div>
+      </div>
+
+      <!-- Phase 8 -->
+      <div class="phase p8">
+        <div class="phase-date">
+          <div class="range">15 Apr – 17 Apr</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🤝</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Brand Onboarding</div>
+          <div class="desc">Onboard selected brand partners ahead of the Livestream Academy session. Set up profiles, review matching flows, and confirm readiness.</div>
+        </div>
+      </div>
+
+      <!-- Phase 9 — Pilot milestone -->
+      <div class="phase p9">
+        <div class="phase-date">
+          <div class="range">19 Apr</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🎓</div>
+          <div class="line"></div>
+        </div>
+        <div class="phase-card">
+          <div class="title">Livestream Academy — Pilot Session</div>
+          <div class="desc">Livestream Academy is an onboarding session for a small cohort of new creators onto Shopee Livestream. Serves as our test bed before full rollout.</div>
+        </div>
+      </div>
+
+      <!-- Phase 10 — Full rollout milestone -->
+      <div class="phase p10 milestone">
+        <div class="phase-date">
+          <div class="range">20 Apr</div>
+        </div>
+        <div class="phase-connector">
+          <div class="dot">🎯</div>
+        </div>
+        <div class="phase-card">
+          <div class="title">100% Rollout — pending positive pilot feedback</div>
+          <span class="milestone-badge">Go Live</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="notice">
+      <span class="notice-icon">⚠️</span>
+      <div>
+        <strong>Phased Launch Approach</strong> — The 19 April Livestream Academy session serves as a controlled pilot with a small group of new creators. Full rollout to all users will proceed only after validating pilot feedback. The legacy creator-brand matching process will be retired upon full go-live.
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Feb 25 – Apr 20, 2026 · Revised timeline +21 days</span>
+      <span class="go-live">🔴 Live: 20 April 2026</span>
+    </div>
+  </div>
+</body>
+</html>

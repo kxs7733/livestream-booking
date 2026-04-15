@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timeslot Picker — UI Mock</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; color: #333; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+    .h-rule { border: none; border-top: 2px solid #e0e0e0; margin: 40px 0; }
+    .section { margin-bottom: 48px; }
+    .section-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .section-title { font-size: 17px; font-weight: 700; color: #222; margin-bottom: 16px; }
+
+    /* Form container */
+    .form-container { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #eee; max-width: 520px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .form-label { font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; display: block; }
+    .form-hint { font-size: 12px; color: #999; margin-top: 4px; }
+
+    /* The new split picker row */
+    .time-picker-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: end; }
+    .time-picker-row .field-group { display: flex; flex-direction: column; }
+    .time-picker-row .field-label { font-size: 11px; color: #888; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+
+    .form-input {
+      border: 1px solid #ddd; border-radius: 8px; padding: 9px 12px;
+      font-size: 14px; color: #333; background: #fff; width: 100%;
+      appearance: none; -webkit-appearance: none;
+    }
+    .form-input:focus { outline: none; border-color: #EE4D2D; box-shadow: 0 0 0 3px rgba(238,77,45,0.1); }
+
+    select.form-input { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+
+    .time-sep { font-size: 18px; color: #bbb; padding-bottom: 8px; align-self: end; }
+
+    /* Timeslot label row */
+    .slot-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .slot-label { font-size: 13px; font-weight: 700; color: #6c5ce7; }
+
+    /* The two slot blocks */
+    .slot-block { background: #fafafa; border: 1px solid #eee; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+
+    /* Add button */
+    .btn-secondary {
+      border: 1.5px solid #ddd; background: #fff; border-radius: 8px;
+      padding: 9px 18px; font-size: 13px; font-weight: 600; color: #555;
+      cursor: pointer; margin-top: 12px; width: 100%; transition: background 0.15s;
+    }
+    .btn-secondary:hover { background: #f5f5f5; }
+
+    /* Selected timeslot chips */
+    .selected-list { margin-top: 16px; }
+    .selected-header { font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .slot-chip { display: flex; align-items: center; justify-content: space-between; background: #f0f0ff; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; color: #6c5ce7; font-weight: 600; }
+    .slot-chip .remove { font-size: 16px; color: #bbb; cursor: pointer; line-height: 1; }
+    .slot-chip .remove:hover { color: #e74c3c; }
+
+    /* Mobile */
+    @media (max-width: 480px) {
+      .time-picker-row { grid-template-columns: 1fr; }
+      .time-sep { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Timeslot Picker — UI Mock</h1>
+  <p class="subtitle">Comparing current (native datetime) vs proposed (split date + hour + minute dropdowns).</p>
+
+  <!-- ── CURRENT ── -->
+  <div class="section">
+    <div class="section-label">Current</div>
+    <div class="section-title">Native datetime-local input</div>
+    <div class="form-container">
+      <div style="margin-bottom:16px;">
+        <label class="form-label">Stream Start Date & Time</label>
+        <input type="datetime-local" class="form-input" style="width:100%;">
+        <div class="form-hint">Minutes not restricted — user can type any value</div>
+      </div>
+      <div>
+        <label class="form-label">Stream End Date & Time</label>
+        <input type="datetime-local" class="form-input" style="width:100%;">
+      </div>
+    </div>
+  </div>
+
+  <hr class="h-rule">
+
+  <!-- ── PROPOSED ── -->
+  <div class="section">
+    <div class="section-label">Proposed</div>
+    <div class="section-title">Split date + hour + minute dropdowns</div>
+    <div class="form-container">
+
+      <!-- Start -->
+      <div style="margin-bottom:16px;">
+        <label class="form-label">Stream Start</label>
+        <div class="time-picker-row">
+          <div class="field-group">
+            <span class="field-label">Date</span>
+            <input type="date" class="form-input">
+          </div>
+          <div class="field-group">
+            <span class="field-label">Hour</span>
+            <select class="form-input" style="width:80px;">
+              <option>08</option><option>09</option><option>10</option>
+              <option>11</option><option>12</option><option>13</option>
+              <option selected>14</option><option>15</option><option>16</option>
+              <option>17</option><option>18</option><option>19</option><option>20</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Min</span>
+            <select class="form-input" style="width:70px;">
+              <option selected>00</option>
+              <option>30</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- End -->
+      <div style="margin-bottom:16px;">
+        <label class="form-label">Stream End</label>
+        <div class="time-picker-row">
+          <div class="field-group">
+            <span class="field-label">Date</span>
+            <input type="date" class="form-input">
+          </div>
+          <div class="field-group">
+            <span class="field-label">Hour</span>
+            <select class="form-input" style="width:80px;">
+              <option>08</option><option>09</option><option>10</option>
+              <option>11</option><option>12</option><option>13</option>
+              <option>14</option><option>15</option><option selected>16</option>
+              <option>17</option><option>18</option><option>19</option><option>20</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Min</span>
+            <select class="form-input" style="width:70px;">
+              <option selected>00</option>
+              <option>30</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-secondary">+ Add Timeslot</button>
+
+      <!-- Selected timeslots preview -->
+      <div class="selected-list">
+        <div class="selected-header">Selected Timeslots (2)</div>
+        <div class="slot-chip">
+          📅 5 Apr 2026 &nbsp; 14:00 – 16:00
+          <span class="remove">×</span>
+        </div>
+        <div class="slot-chip">
+          📅 12 Apr 2026 &nbsp; 14:00 – 16:00
+          <span class="remove">×</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="h-rule">
+
+  <!-- ── MOBILE ── -->
+  <div class="section">
+    <div class="section-label">Proposed — Mobile (max-width 480px)</div>
+    <div class="section-title">Stacked layout on small screens</div>
+    <div class="form-container" style="max-width:320px;">
+
+      <div style="margin-bottom:16px;">
+        <label class="form-label">Stream Start</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="field-group">
+            <span class="field-label">Date</span>
+            <input type="date" class="form-input">
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div class="field-group" style="flex:1;">
+              <span class="field-label">Hour</span>
+              <select class="form-input">
+                <option selected>14</option>
+              </select>
+            </div>
+            <div class="field-group" style="flex:1;">
+              <span class="field-label">Min</span>
+              <select class="form-input">
+                <option selected>00</option>
+                <option>30</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label class="form-label">Stream End</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div class="field-group">
+            <span class="field-label">Date</span>
+            <input type="date" class="form-input">
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div class="field-group" style="flex:1;">
+              <span class="field-label">Hour</span>
+              <select class="form-input">
+                <option selected>16</option>
+              </select>
+            </div>
+            <div class="field-group" style="flex:1;">
+              <span class="field-label">Min</span>
+              <select class="form-input">
+                <option selected>00</option>
+                <option>30</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-secondary">+ Add Timeslot</button>
+    </div>
+  </div>
+
+</body>
+</html>

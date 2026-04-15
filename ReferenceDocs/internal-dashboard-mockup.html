@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Internal Dashboard Mockup - Card Styling</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f5f5f5;
+      color: #222;
+      padding: 40px 20px;
+    }
+
+    .demo-section {
+      max-width: 800px;
+      margin: 0 auto 60px;
+    }
+
+    h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: #333;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 12px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════ */
+    /* OPTION 1: Current Design (Clunky) */
+    /* ═══════════════════════════════════════════════════════════ */
+
+    .card-v1 {
+      background: #fff;
+      border-radius: 12px;
+      border-left: 4px solid #e67e22;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .card-v1 .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .card-v1 .left {
+      flex: 1;
+    }
+
+    .card-v1 .title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #222;
+      margin-bottom: 8px;
+    }
+
+    .card-v1 .subtitle {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 6px;
+    }
+
+    .card-v1 .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: #fff8f0;
+      border: 1px solid #ffe0b2;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #e67e22;
+      margin-top: 4px;
+    }
+
+    .card-v1 .right {
+      text-align: right;
+    }
+
+    .card-v1 .action-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .card-v1 .btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .card-v1 .btn-approve {
+      background: #e8f5e9;
+      color: #27ae60;
+    }
+
+    .card-v1 .btn-reject {
+      background: #ffebee;
+      color: #e74c3c;
+    }
+
+    /* ═══════════════════════════════════════════════════════════ */
+    /* OPTION 2: Improved Design - ID in corner + better layout */
+    /* ═══════════════════════════════════════════════════════════ */
+
+    .card-v2 {
+      background: #fff;
+      border-radius: 12px;
+      border-left: 4px solid #e67e22;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      position: relative;
+    }
+
+    .card-v2 .id-badge {
+      position: absolute;
+      top: 12px;
+      left: 16px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: #f9f9f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #eee;
+    }
+
+    .card-v2 .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 14px;
+      margin-top: 4px;
+    }
+
+    .card-v2 .left {
+      flex: 1;
+    }
+
+    .card-v2 .title-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .card-v2 .shop-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #222;
+    }
+
+    .card-v2 .creator-name {
+      font-size: 15px;
+      font-weight: 500;
+      color: #666;
+    }
+
+    .card-v2 .meta {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 10px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .card-v2 .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-v2 .right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .card-v2 .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: #fff8f0;
+      border: 1px solid #ffe0b2;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #e67e22;
+    }
+
+    .card-v2 .action-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .card-v2 .btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .card-v2 .btn-approve {
+      background: #e8f5e9;
+      color: #27ae60;
+    }
+
+    .card-v2 .btn-reject {
+      background: #ffebee;
+      color: #e74c3c;
+    }
+
+    /* ═══════════════════════════════════════════════════════════ */
+    /* OPTION 3: Cleaner Design - Compact header, better spacing */
+    /* ═══════════════════════════════════════════════════════════ */
+
+    .card-v3 {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #eee;
+      border-left: 4px solid #e67e22;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .card-v3 .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .card-v3 .left {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-v3 .id-badge {
+      font-size: 10px;
+      font-weight: 700;
+      color: #bbb;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .card-v3 .title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card-v3 .shop-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #222;
+      white-space: nowrap;
+    }
+
+    .card-v3 .creator-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+    }
+
+    .card-v3 .meta {
+      font-size: 12px;
+      color: #888;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .card-v3 .right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .card-v3 .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: #fff8f0;
+      border: 1px solid #ffe0b2;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #e67e22;
+      white-space: nowrap;
+    }
+
+    .card-v3 .action-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .card-v3 .btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .card-v3 .btn-approve {
+      background: #e8f5e9;
+      color: #27ae60;
+    }
+
+    .card-v3 .btn-reject {
+      background: #ffebee;
+      color: #e74c3c;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .comparison-item {
+      padding: 16px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border: 1px solid #eee;
+    }
+
+    .comparison-item h4 {
+      font-size: 12px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .pros, .cons {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #555;
+    }
+
+    .pros {
+      margin-bottom: 12px;
+    }
+
+    .pros li, .cons li {
+      margin-left: 20px;
+      margin-bottom: 4px;
+    }
+
+    .pros li:before {
+      content: "✓ ";
+      color: #27ae60;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+
+    .cons li:before {
+      content: "✗ ";
+      color: #e74c3c;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="demo-section">
+  <h2>Brand Applications Pending Approval</h2>
+
+  <h3 style="font-size: 13px; color: #888; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Option 1: Current Design (Clunky)</h3>
+  <div class="card-v1">
+    <div class="header">
+      <div class="left">
+        <div class="title">🏪 Test Shop Singapore</div>
+        <div class="subtitle">Submitted Mar 10, 2026</div>
+        <div class="status-badge">pending</div>
+      </div>
+      <div class="right">
+        <div class="action-btns">
+          <button class="btn btn-approve">Approve</button>
+          <button class="btn btn-reject">Reject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size: 13px; color: #888; margin-bottom: 12px; font-weight: 600; margin-top: 24px; text-transform: uppercase; letter-spacing: 0.5px;">Option 2: Improved - ID Badge + Better Layout</h3>
+  <div class="card-v2">
+    <div class="id-badge">BA ID: bapp_001</div>
+    <div class="header">
+      <div class="left">
+        <div class="title-row">
+          <div class="shop-name">🏪 Test Shop Singapore</div>
+        </div>
+        <div class="meta">
+          <div class="meta-item">📅 Mar 2026</div>
+          <div class="meta-item">📊 4 streams</div>
+          <div class="meta-item">🏷️ Electronics</div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="status-badge">pending</div>
+        <div class="action-btns">
+          <button class="btn btn-approve">Approve</button>
+          <button class="btn btn-reject">Reject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size: 13px; color: #888; margin-bottom: 12px; font-weight: 600; margin-top: 24px; text-transform: uppercase; letter-spacing: 0.5px;">Option 3: Cleanest - Compact & Scannable</h3>
+  <div class="card-v3">
+    <div class="header-row">
+      <div class="left">
+        <div class="id-badge">BA ID: bapp_001</div>
+        <div class="title-row">
+          <div class="shop-name">🏪 Test Shop Singapore</div>
+        </div>
+        <div class="meta">
+          <span>📅 Mar 2026</span>
+          <span>📊 4 streams</span>
+          <span>🏷️ Electronics</span>
+        </div>
+      </div>
+      <div class="right">
+        <div class="status-badge">pending</div>
+        <div class="action-btns">
+          <button class="btn btn-approve">Approve</button>
+          <button class="btn btn-reject">Reject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Creator Applications -->
+<div class="demo-section">
+  <h2>Creator Applications Pending Approval (with side-by-side names)</h2>
+
+  <h3 style="font-size: 13px; color: #888; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Option 1: Current Design</h3>
+  <div class="card-v1">
+    <div class="header">
+      <div class="left">
+        <div class="title">🏪 Test Shop Singapore</div>
+        <div class="subtitle">🎬 Sarah Creator (@sarahcreates)</div>
+        <div style="font-size:12px;color:#888;margin-top:6px;display:flex;gap:16px;flex-wrap:wrap;">
+          <span>📊 1/4 slots left</span>
+          <span>⏳ 2 creator applications pending review</span>
+        </div>
+        <div class="status-badge" style="margin-top: 8px;">pending</div>
+      </div>
+      <div class="right">
+        <div class="action-btns">
+          <button class="btn btn-approve">Approve</button>
+          <button class="btn btn-reject">Reject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size: 13px; color: #888; margin-bottom: 12px; font-weight: 600; margin-top: 24px; text-transform: uppercase; letter-spacing: 0.5px;">Option 2: Improved - Side by Side Names</h3>
+  <div class="card-v2">
+    <div class="id-badge">CA ID: ca_row_001</div>
+    <div class="header">
+      <div class="left">
+        <div class="title-row">
+          <div class="shop-name">🏪 Test Shop Singapore</div>
+          <span style="color: #ccc;">•</span>
+          <div class="creator-name">🎬 Sarah Creator (@sarahcreates)</div>
+        </div>
+        <div class="meta">
+          <div class="meta-item">📅 Mar 10, 2026 • 8:00 PM</div>
+          <div class="meta-item">📊 1/4 slots left</div>
+          <div class="meta-item">⏳ 2 pending</div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="status-badge">pending</div>
+        <div class="action-btns">
+          <button class="btn btn-approve">Approve</button>
+          <button class="btn btn-reject">Reject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size: 13px; color: #888; margin-bottom: 12px; font-weight: 600; margin-top: 24px; text-transform: uppercase; letter-spacing: 0.5px;">Option 3: Cleanest</h3>
+  <div class="card-v3">
+    <div class="header-row">
+      <div class="left">
+        <div class="id-badge">CA ID: ca_row_001</div>
+        <div class="title-row">
+          <div class="shop-name">🏪 Test Shop Singapore</div>
+          <span style="color: #ddd;">•</span>
+          <div class="creator-name">🎬 Sarah Creator</div>
+          <span style="color: #aaa; font-size: 12px;">(@sarahcreates)</span>
+        </div>
+        <div class="meta">
+          <span>📅 Mar 10 • 8:00 PM</span>
+          <span>📊 1/4 slots</span>
+          <span>⏳ 2 pending</span>
+        </div>
+      </div>
+      <div class="right">
+        <div class="status-badge">pending</div>
+        <div class="action-btns">
+          <button class="btn btn-approve">Approve</button>
+          <button class="btn btn-reject">Reject</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Comparison -->
+<div class="demo-section">
+  <h2>Design Comparison</h2>
+  <div class="comparison">
+    <div class="comparison-item">
+      <h4>Option 1 (Current)</h4>
+      <ul class="cons">
+        <li>Vertical stack feels cramped</li>
+        <li>ID not visible at a glance</li>
+        <li>Multiple pieces of info stacked</li>
+        <li>Hard to scan quickly</li>
+      </ul>
+    </div>
+    <div class="comparison-item">
+      <h4>Option 2 (Improved)</h4>
+      <ul class="pros">
+        <li>ID badge in corner</li>
+        <li>Better horizontal layout</li>
+        <li>Shop and creator info clearer</li>
+        <li>Easier to scan</li>
+      </ul>
+    </div>
+    <div class="comparison-item">
+      <h4>Option 3 (Cleanest)</h4>
+      <ul class="pros">
+        <li>Most compact design</li>
+        <li>ID prominent at top</li>
+        <li>Tighter spacing</li>
+        <li>Better info hierarchy</li>
+      </ul>
+      <ul class="cons">
+        <li>Less breathing room</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div style="max-width: 800px; margin: 60px auto 0; padding: 20px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #1976d2;">
+  <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #1976d2;">Recommendation</h3>
+  <p style="font-size: 13px; color: #555; line-height: 1.6;">
+    <strong>Option 3 (Cleanest)</strong> is recommended. It:
+    <ul style="margin-top: 8px; margin-left: 20px; color: #555;">
+      <li>Shows ID prominently (BA ID: / CA ID: at top left)</li>
+      <li>Side-by-side shop + creator names (much less clunky)</li>
+      <li>Compact metadata in single line</li>
+      <li>Status & actions clearly visible on right</li>
+      <li>Better overall scan ability</li>
+    </ul>
+  </p>
+</div>
+
+</body>
+</html>

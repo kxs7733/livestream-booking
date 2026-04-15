@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm/Reject UI Suggestions</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; color: #333; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+
+    .cols { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+    .col { flex: 0 0 auto; }
+    .col-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; text-align: center; }
+
+    .section { margin-bottom: 48px; }
+    .section-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .section-title { font-size: 17px; font-weight: 700; color: #222; margin-bottom: 4px; }
+    .section-desc { font-size: 13px; color: #666; margin-bottom: 16px; max-width: 560px; }
+
+    .h-rule { border: none; border-top: 2px solid #e0e0e0; margin: 40px 0; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #eee;
+      border-left: 4px solid #6c5ce7;
+      width: 320px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .card.confirmed-state { border-left-color: #27ae60; }
+    .card.rejected-state { border-left-color: #c62828; opacity: 0.7; }
+
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .card-title { font-size: 15px; font-weight: 700; color: #222; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
+    .badge-approved { background: #ede7f6; color: #6c5ce7; }
+    .badge-confirmed { background: #e8f5e9; color: #27ae60; }
+    .badge-rejected { background: #ffebee; color: #c62828; }
+    .badge-loading { background: #f5f5f5; color: #999; }
+    .card-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: #666; margin-bottom: 10px; }
+    .card-meta strong { color: #333; }
+    .date-pill { display: inline-block; padding: 5px 12px; background: #f0f0ff; border-radius: 6px; font-size: 13px; color: #6c5ce7; font-weight: 600; margin-bottom: 12px; }
+    .divider { border: none; border-top: 1px solid #eee; margin: 12px 0; }
+
+    /* Option B — idle */
+    .split-footer { display: grid; grid-template-columns: 1fr 1fr; border-radius: 8px; overflow: hidden; border: 1px solid #eee; }
+    .split-confirm { background: #e8f5e9; color: #27ae60; border: none; padding: 14px 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; transition: background 0.15s, color 0.15s; }
+    .split-confirm:hover { background: #27ae60; color: white; }
+    .split-reject { background: #fff5f5; color: #c62828; border: none; border-left: 1px solid #eee; padding: 14px 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; transition: background 0.15s, color 0.15s; }
+    .split-reject:hover { background: #c62828; color: white; }
+
+    /* Option B — loading */
+    .split-footer-loading { display: grid; grid-template-columns: 1fr 1fr; border-radius: 8px; overflow: hidden; border: 1px solid #eee; }
+    .split-loading-active { background: #27ae60; color: white; border: none; padding: 14px 8px; font-size: 13px; font-weight: 700; text-align: center; opacity: 0.7; }
+    .split-loading-disabled { background: #f5f5f5; color: #ccc; border: none; border-left: 1px solid #eee; padding: 14px 8px; font-size: 13px; font-weight: 700; text-align: center; cursor: not-allowed; }
+
+    /* Post-confirm state */
+    .confirmed-banner {
+      display: flex; align-items: center; gap: 10px;
+      background: #e8f5e9; border-radius: 8px; padding: 12px 14px;
+      font-size: 13px; color: #27ae60; font-weight: 600;
+    }
+
+    /* Post-reject state */
+    .rejected-banner {
+      display: flex; align-items: center; gap: 10px;
+      background: #ffebee; border-radius: 8px; padding: 12px 14px;
+      font-size: 13px; color: #c62828; font-weight: 600;
+    }
+
+    .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-left: 6px; }
+    .tag-note { background: #e3f2fd; color: #1565c0; }
+
+    .arrow { font-size: 22px; color: #bbb; align-self: center; padding-top: 32px; }
+  </style>
+</head>
+<body>
+
+  <h1>Option B — States</h1>
+  <p class="subtitle">What the split-footer card looks like at each stage of the flow.</p>
+
+  <!-- ── CONFIRM FLOW ── -->
+  <div class="section">
+    <div class="section-label">Confirm flow</div>
+    <div class="section-title">Creator taps ✅ Confirm Slot</div>
+    <div class="section-desc">Three states: idle → loading (API call in progress) → confirmed (card updates in place before moving to Confirmed Livestreams tab).</div>
+
+    <div class="cols">
+
+      <!-- 1. Idle -->
+      <div class="col">
+        <div class="col-label">1 · Idle</div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🏪 Test Shop</div>
+            <span class="badge badge-approved">Awaiting Confirmation</span>
+          </div>
+          <div class="card-meta">
+            <span>Category: <strong>Electronics</strong></span>
+            <span>Month: <strong>Apr 2026</strong></span>
+            <span>Location: <strong>Creator Site</strong></span>
+          </div>
+          <div class="date-pill">📅 3 Apr 2026 14:00 – 15:30</div>
+          <hr class="divider">
+          <div class="split-footer">
+            <button class="split-confirm">✅ Confirm Slot</button>
+            <button class="split-reject">✕ Reject Slot</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <!-- 2. Loading -->
+      <div class="col">
+        <div class="col-label">2 · Loading</div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🏪 Test Shop</div>
+            <span class="badge badge-loading">Confirming...</span>
+          </div>
+          <div class="card-meta">
+            <span>Category: <strong>Electronics</strong></span>
+            <span>Month: <strong>Apr 2026</strong></span>
+            <span>Location: <strong>Creator Site</strong></span>
+          </div>
+          <div class="date-pill">📅 3 Apr 2026 14:00 – 15:30</div>
+          <hr class="divider">
+          <div class="split-footer-loading">
+            <div class="split-loading-active">⏳ Confirming...</div>
+            <div class="split-loading-disabled">✕ Reject Slot</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <!-- 3. Confirmed -->
+      <div class="col">
+        <div class="col-label">3 · Confirmed <span class="tag tag-note">then moves to Confirmed tab</span></div>
+        <div class="card confirmed-state">
+          <div class="card-header">
+            <div class="card-title">🏪 Test Shop</div>
+            <span class="badge badge-confirmed">Confirmed</span>
+          </div>
+          <div class="card-meta">
+            <span>Category: <strong>Electronics</strong></span>
+            <span>Month: <strong>Apr 2026</strong></span>
+            <span>Location: <strong>Creator Site</strong></span>
+          </div>
+          <div class="date-pill">📅 3 Apr 2026 14:00 – 15:30</div>
+          <hr class="divider">
+          <div class="confirmed-banner">
+            ✅ Slot confirmed! Check Confirmed Livestreams.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="h-rule">
+
+  <!-- ── REJECT FLOW ── -->
+  <div class="section">
+    <div class="section-label">Reject flow</div>
+    <div class="section-title">Creator taps ✕ Reject Slot</div>
+    <div class="section-desc">Three states: idle → loading → rejected (card stays briefly then disappears from the list, since rejected slots move out of Pending My Confirmation).</div>
+
+    <div class="cols">
+
+      <!-- 1. Idle -->
+      <div class="col">
+        <div class="col-label">1 · Idle</div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🏪 Test Shop</div>
+            <span class="badge badge-approved">Awaiting Confirmation</span>
+          </div>
+          <div class="card-meta">
+            <span>Category: <strong>Electronics</strong></span>
+            <span>Month: <strong>Apr 2026</strong></span>
+            <span>Location: <strong>Creator Site</strong></span>
+          </div>
+          <div class="date-pill">📅 3 Apr 2026 14:00 – 15:30</div>
+          <hr class="divider">
+          <div class="split-footer">
+            <button class="split-confirm">✅ Confirm Slot</button>
+            <button class="split-reject">✕ Reject Slot</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <!-- 2. Loading -->
+      <div class="col">
+        <div class="col-label">2 · Loading</div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🏪 Test Shop</div>
+            <span class="badge badge-loading">Rejecting...</span>
+          </div>
+          <div class="card-meta">
+            <span>Category: <strong>Electronics</strong></span>
+            <span>Month: <strong>Apr 2026</strong></span>
+            <span>Location: <strong>Creator Site</strong></span>
+          </div>
+          <div class="date-pill">📅 3 Apr 2026 14:00 – 15:30</div>
+          <hr class="divider">
+          <div class="split-footer-loading">
+            <div class="split-loading-disabled" style="border-left:none;border-right:1px solid #eee;">✅ Confirm Slot</div>
+            <div class="split-loading-active" style="background:#c62828;">⏳ Rejecting...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <!-- 3. Rejected -->
+      <div class="col">
+        <div class="col-label">3 · Rejected <span class="tag tag-note">then removed from list</span></div>
+        <div class="card rejected-state">
+          <div class="card-header">
+            <div class="card-title">🏪 Test Shop</div>
+            <span class="badge badge-rejected">Rejected</span>
+          </div>
+          <div class="card-meta">
+            <span>Category: <strong>Electronics</strong></span>
+            <span>Month: <strong>Apr 2026</strong></span>
+            <span>Location: <strong>Creator Site</strong></span>
+          </div>
+          <div class="date-pill">📅 3 Apr 2026 14:00 – 15:30</div>
+          <hr class="divider">
+          <div class="rejected-banner">
+            ✕ Slot rejected.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>
