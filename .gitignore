@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+test-results/
+backup/
+docs/
+presentation-assets/
+ReferenceDocs/
+tests/
+playwright.config.js
+seed_data.gs
