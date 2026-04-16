@@ -6032,7 +6032,7 @@
                   <label style="font-size:13px;font-weight:600;color:#222;display:block;margin-bottom:8px;">Search Brand Application</label>
                   <div style="display:flex;gap:8px;">
                     <input type="text" id="brief-search-input" placeholder="Search by shop name or ID…" value="${escapeHtml(state.briefSearchQuery)}"
-                      oninput="state.briefSearchQuery = this.value; const _p = this.selectionStart; render(); const _el = document.getElementById('brief-search-input'); if(_el){_el.focus();_el.setSelectionRange(_p,_p);}"
+                      oninput="state.briefSearchQuery = this.value;"
                       style="flex:1;padding:7px 12px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;">
                     <button onclick="handleSearchBrandApps();" style="padding:7px 16px;background:#636e72;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Search</button>
                   </div>
