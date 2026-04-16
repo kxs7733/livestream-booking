@@ -1298,25 +1298,32 @@ async function deleteInternalTeamMember(id) {
 async function searchBrandAppsForBriefReupload(query) {
   try {
     const currentMonth = getCurrentMonthStr();
+    console.log('[searchBrandAppsForBriefReupload] currentMonth:', currentMonth, 'query:', query);
     let q = supabase.from('brand_applications')
-      .select('id, shopName, brandName, month, status, livestreamBrief')
+      .select('id, shop_name, brand_name, month, status, livestream_brief')
       .in('status', ['approved', 'pending'])
       .gte('month', currentMonth);
 
     if (query && query.trim()) {
       const cleanQuery = query.toLowerCase().trim();
-      const { data } = await q;
+      const { data, error } = await q;
+      if (error) console.log('[searchBrandAppsForBriefReupload] query error:', error);
+      console.log('[searchBrandAppsForBriefReupload] found', data?.length || 0, 'records before filter');
       const filtered = (data || []).filter(app =>
-        (app.shopName && app.shopName.toLowerCase().includes(cleanQuery)) ||
-        (app.brandName && app.brandName.toLowerCase().includes(cleanQuery)) ||
+        (app.shop_name && app.shop_name.toLowerCase().includes(cleanQuery)) ||
+        (app.brand_name && app.brand_name.toLowerCase().includes(cleanQuery)) ||
         (app.id && app.id.toLowerCase().includes(cleanQuery))
       );
+      console.log('[searchBrandAppsForBriefReupload] filtered to', filtered.length, 'records');
       return { success: true, data: filtered };
     }
 
-    const { data } = await q;
+    const { data, error } = await q;
+    if (error) console.log('[searchBrandAppsForBriefReupload] query error:', error);
+    console.log('[searchBrandAppsForBriefReupload] returning', data?.length || 0, 'records');
     return { success: true, data: data || [] };
   } catch (err) {
+    console.error('[searchBrandAppsForBriefReupload]', err.message);
     return { success: false, error: err.message };
   }
 }

@@ -6046,8 +6046,9 @@
                     <div style="border:1px solid #dfe6e9;border-radius:6px;max-height:200px;overflow-y:auto;">
                       ${state.briefSearchResults.map(app => `
                         <div style="padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;${state.briefSelectedAppId === app.id ? 'background:#e3f2fd;' : 'background:#fff;'}" onclick="state.briefSelectedAppId = '${escapeHtml(app.id)}'; state.briefUploadFile = null; render();">
-                          <div style="font-weight:600;color:#222;font-size:13px;">${escapeHtml(app.shopName || app.brandName || '')}</div>
+                          <div style="font-weight:600;color:#222;font-size:13px;">${escapeHtml(app.shop_name || app.brand_name || '')}</div>
                           <div style="font-size:12px;color:#999;">ID: ${escapeHtml(app.id)} | Month: ${escapeHtml(app.month)}</div>
+                          ${app.livestream_brief ? `<div style="font-size:11px;color:#666;margin-top:4px;word-break:break-all;">📄 Current: <a href="${escapeHtml(app.livestream_brief)}" target="_blank" style="color:#0066cc;text-decoration:none;">View Brief</a></div>` : '<div style="font-size:11px;color:#999;margin-top:4px;">📄 No brief uploaded yet</div>'}
                         </div>
                       `).join('')}
                     </div>
@@ -6057,7 +6058,7 @@
                     <div>
                       <label style="font-size:13px;font-weight:600;color:#222;display:block;margin-bottom:8px;">Upload Brief File</label>
                       <input type="file" id="brief-file-input" accept=".xlsx,.xls,.csv,.ods"
-                        onchange="(() => { const file = this.files[0]; const app = state.briefSearchResults.find(a => a.id === state.briefSelectedAppId); if (file && app) handleBriefFileSelected(file, app.shopName || app.brandName); })()"
+                        onchange="(() => { const file = this.files[0]; const app = state.briefSearchResults.find(a => a.id === state.briefSelectedAppId); if (file && app) handleBriefFileSelected(file, app.shop_name || app.brand_name); })()"
                         style="padding:10px 12px;border:1px solid #dfe6e9;border-radius:6px;width:100%;box-sizing:border-box;margin-bottom:12px;">
                       <div style="font-size:12px;color:#999;margin-bottom:12px;">
                         Supported formats: Excel (.xlsx, .xls), CSV (.csv), OpenDocument (.ods). Max 10 MB.<br>
