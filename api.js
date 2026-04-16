@@ -53,12 +53,6 @@ router.get('/', async (req, res) => {
       case 'addAffiliate':
         result = await addAffiliate(JSON.parse(req.query.data));
         break;
-      case 'addSlot':
-        result = await addSlot(JSON.parse(req.query.data));
-        break;
-      case 'addBooking':
-        result = await addBooking(JSON.parse(req.query.data));
-        break;
       case 'addBrandApplication':
         result = await addBrandApplication(JSON.parse(req.query.data));
         break;
@@ -79,12 +73,6 @@ router.get('/', async (req, res) => {
         break;
       case 'rescheduleCreatorApplication':
         result = await rescheduleCreatorApplication(req.query.id, JSON.parse(req.query.data));
-        break;
-      case 'deleteSlot':
-        result = await deleteSlot(req.query.id);
-        break;
-      case 'deleteBooking':
-        result = await deleteBooking(req.query.id);
         break;
       case 'validateBrandLogin':
         result = await validateBrandLogin(req.query.shopId, req.query.shopName);
@@ -127,7 +115,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const body = req.body;
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     if (body && body.action === 'uploadBrief') {
       const result = await uploadBriefFile(body.fileName, body.fileData, body.mimeType);
       return res.json(result);
@@ -173,49 +161,73 @@ async function getAllData(allMonths, pastMonths) {
   }
 
   // Fetch all tables in parallel — filter brand/creator applications server-side
-  const [sellers, affiliates, slots, bookings, managedSellers, managedAffiliates, businessMappingValues] =
+  const [sellers, affiliates, managedSellers, managedAffiliates, businessMappingValues] =
     await Promise.all([
       db.all('sellers'),
       db.all('affiliates'),
-      db.all('slots'),
-      db.all('bookings'),
       db.all('managed_sellers'),
       db.all('managed_affiliates'),
       db.all('business_mapping_values'),
     ]);
 
-  // Brand applications — filter by month if not allMonths
-  let brandAppQuery = db.client.from('brand_applications').select('*');
-  if (filterMonth) brandAppQuery = brandAppQuery.gte('month', filterMonth);
-  const { data: baRaw } = await brandAppQuery;
-  const brandApplications = (baRaw || []).map(row => {
+  // Fetch all rows for a table in parallel pages (get count first, then all pages simultaneously)
+  const PAGE = 1000;
+  async function fetchAllParallel(buildCountQ, buildPageQ) {
+    const { count, error: countErr } = await buildCountQ();
+    if (countErr) throw new Error(countErr.message);
+    if (!count) return [];
+    const numPages = Math.ceil(count / PAGE);
+    const results = await Promise.all(
+      Array.from({ length: numPages }, (_, i) => buildPageQ(i * PAGE, (i + 1) * PAGE - 1))
+    );
+    const rows = [];
+    for (const { data, error } of results) {
+      if (error) throw new Error(error.message);
+      rows.push(...(data || []));
+    }
+    return rows;
+  }
+
+  // Brand applications and creator applications fetched in parallel
+  const [baRaw, caRaw] = await Promise.all([
+    fetchAllParallel(
+      () => {
+        let q = db.client.from('brand_applications').select('*', { count: 'exact', head: true });
+        if (filterMonth) q = q.gte('month', filterMonth);
+        return q;
+      },
+      (from, to) => {
+        let q = db.client.from('brand_applications').select('*').range(from, to);
+        if (filterMonth) q = q.gte('month', filterMonth);
+        return q;
+      }
+    ),
+    fetchAllParallel(
+      () => {
+        let q = db.client.from('creator_applications').select('*', { count: 'exact', head: true });
+        if (filterMonth) q = q.gte('stream_date', filterMonth + '-01');
+        return q;
+      },
+      (from, to) => {
+        let q = db.client.from('creator_applications').select('*').range(from, to);
+        if (filterMonth) q = q.gte('stream_date', filterMonth + '-01');
+        return q;
+      }
+    ),
+  ]);
+
+  const brandApplications = baRaw.map(row => {
     const obj = {};
     for (const [k, v] of Object.entries(row)) obj[snakeToCamelLocal(k)] = v;
     return obj;
   });
-
-  // Build set of brand app IDs to filter creator applications
-  const brandAppIds = filterMonth ? new Set(brandApplications.map(a => String(a.id))) : null;
-
-  // Creator applications — filter by brand app IDs
-  let caRaw;
-  if (brandAppIds && brandAppIds.size === 0) {
-    caRaw = [];
-  } else {
-    let caQuery = db.client.from('creator_applications').select('*');
-    if (brandAppIds) {
-      caQuery = caQuery.in('brand_application_id', [...brandAppIds]);
-    }
-    const { data } = await caQuery;
-    caRaw = data || [];
-  }
   const creatorApplications = caRaw.map(row => {
     const obj = {};
     for (const [k, v] of Object.entries(row)) obj[snakeToCamelLocal(k)] = v;
     return obj;
   });
 
-  return { sellers, affiliates, slots, bookings, brandApplications, creatorApplications, managedSellers, managedAffiliates, businessMappingValues };
+  return { sellers, affiliates, slots: [], bookings: [], brandApplications, creatorApplications, managedSellers, managedAffiliates, businessMappingValues };
 }
 
 function snakeToCamelLocal(s) {
@@ -242,37 +254,9 @@ async function addAffiliate(data) {
   return { success: true, data };
 }
 
-async function addSlot(data) {
-  await db.insert('slots', {
-    id: data.id, sellerId: data.sellerId, sellerName: data.sellerName,
-    date: data.date, startTime: data.startTime, endTime: data.endTime,
-    description: data.description || '', createdAt: data.createdAt,
-  });
-  return { success: true, data };
-}
-
-async function addBooking(data) {
-  await db.insert('bookings', {
-    id: data.id, slotId: data.slotId, sellerId: data.sellerId, sellerName: data.sellerName,
-    affiliateId: data.affiliateId, affiliateName: data.affiliateName,
-    date: data.date, startTime: data.startTime, endTime: data.endTime, bookedAt: data.bookedAt,
-  });
-  return { success: true, data };
-}
-
 async function addBrandApplication(data) {
   await db.insert('brand_applications', data);
   return { success: true, data };
-}
-
-async function deleteSlot(id) {
-  await db.deleteById('slots', id);
-  return { success: true };
-}
-
-async function deleteBooking(id) {
-  await db.deleteById('bookings', id);
-  return { success: true };
 }
 
 // ─── addCreatorApplication ────────────────────────────────────────────────────
@@ -725,16 +709,19 @@ async function updateAffiliateProfile(affiliateId, data) {
 
 async function uploadBriefFile(fileName, base64Data, mimeType) {
   try {
-    const { supabase } = require('./lib/db');
-    const buffer = Buffer.from(base64Data, 'base64');
-    const path = `briefs/${Date.now()}_${fileName}`;
-    const { error } = await supabase.storage.from('briefs').upload(path, buffer, {
-      contentType: mimeType || 'application/octet-stream',
-      upsert: false,
+    const gasUrl = process.env.GAS_URL;
+    if (!gasUrl) return { success: false, error: 'GAS_URL not configured' };
+    const response = await fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'uploadBrief', fileName, fileData: base64Data, mimeType }),
+      redirect: 'follow',
     });
-    if (error) return { success: false, error: error.message };
-    const { data } = supabase.storage.from('briefs').getPublicUrl(path);
-    return { success: true, fileUrl: data.publicUrl };
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { return { success: false, error: 'Non-JSON response from GAS: ' + text.substring(0, 200) }; }
+    if (data && data.success) return { success: true, fileUrl: data.fileUrl };
+    return { success: false, error: (data && data.error) || 'Upload failed' };
   } catch (err) {
     return { success: false, error: err.message };
   }

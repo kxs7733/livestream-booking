@@ -19,7 +19,7 @@ app.use(express.static(__dirname));
 
 // Serve main app for root
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'shopee-live-creator-match.html'));
+  res.sendFile(path.join(__dirname, 'shopee-live-creator-match-supabase.html'));
 });
 
 app.listen(PORT, () => {
