@@ -1,6 +1,9 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
+const { google } = require('googleapis');
+const fs = require('fs');
+const path = require('path');
 
 const { db, supabase } = require('./lib/db');
 const { hashPin, randomUUID } = require('./lib/auth');
@@ -1026,6 +1029,173 @@ router.post('/configTable/delete', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[POST /configTable/delete]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Google Sheets Sync ────────────────────────────────────────────────────
+
+const SHEET_ID = '170ruk_B9l3sLvxYCtMDNgpM6ncxqCyPhyVyuvvmzSXI';
+const CREDS_PATH = path.join(__dirname, 'docs/shopee-live-creator-match-db9d7b015207.json');
+
+const getGoogleSheetsClient = async () => {
+  const credentials = JSON.parse(fs.readFileSync(CREDS_PATH, 'utf8'));
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+  });
+  return google.sheets({ version: 'v4', auth });
+};
+
+const syncToGoogleSheets = async () => {
+  try {
+    const sheets = await getGoogleSheetsClient();
+    console.log('[syncToGoogleSheets] Starting sync...');
+
+    // Fetch all data from Supabase (7 tables)
+    const [brandApps, creatorApps, sellers, affiliates, businessMappings, internalTeam, telegramUsers] = await Promise.all([
+      db.all('brand_applications'),
+      db.all('creator_applications'),
+      db.all('sellers'),
+      db.all('affiliates'),
+      db.all('business_mapping_values'),
+      db.all('internal_team'),
+      db.all('telegram_users')
+    ]);
+
+    // Convert data to CSV format (first row = headers)
+    const toRows = (data, headers) => {
+      if (!data || data.length === 0) return [headers];
+      return [
+        headers,
+        ...data.map(row => headers.map(h => String(row[h] || '').replace(/"/g, '""')))
+      ];
+    };
+
+    const updates = [
+      { range: 'BrandApplications', values: toRows(brandApps, Object.keys(brandApps[0] || {})) },
+      { range: 'CreatorApplications', values: toRows(creatorApps, Object.keys(creatorApps[0] || {})) },
+      { range: 'Sellers', values: toRows(sellers, Object.keys(sellers[0] || {})) },
+      { range: 'Affiliates', values: toRows(affiliates, Object.keys(affiliates[0] || {})) },
+      { range: 'BusinessMappingValues', values: toRows(businessMappings, Object.keys(businessMappings[0] || {})) },
+      { range: 'InternalTeam', values: toRows(internalTeam, Object.keys(internalTeam[0] || {})) },
+      { range: 'TelegramUsers', values: toRows(telegramUsers, Object.keys(telegramUsers[0] || {})) }
+    ];
+
+    // Clear and update each sheet
+    for (const update of updates) {
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId: SHEET_ID,
+        range: update.range
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: update.range,
+        valueInputOption: 'RAW',
+        requestBody: { values: update.values }
+      });
+    }
+
+    console.log('[syncToGoogleSheets] Sync complete');
+    return { success: true, synced: updates.length };
+  } catch (err) {
+    console.error('[syncToGoogleSheets]', err.message);
+    throw err;
+  }
+};
+
+const archiveOldApplications = async () => {
+  try {
+    const sheets = await getGoogleSheetsClient();
+    console.log('[archiveOldApplications] Starting archive...');
+
+    // Calculate cutoff date (6 months ago)
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - 6);
+    const cutoffMonthStr = cutoffDate.getFullYear() + '-' + String(cutoffDate.getMonth() + 1).padStart(2, '0');
+
+    // Find old brand applications (by month)
+    const { data: oldBrandApps } = await supabase
+      .from('brand_applications')
+      .select('*')
+      .lt('month', cutoffMonthStr);
+
+    // Find old creator applications (by stream_date)
+    const { data: oldCreatorApps } = await supabase
+      .from('creator_applications')
+      .select('*')
+      .lt('stream_date', cutoffDate.toISOString().split('T')[0]);
+
+    let archivedCount = 0;
+
+    // Archive brand applications
+    if (oldBrandApps && oldBrandApps.length > 0) {
+      const brandHeaders = Object.keys(oldBrandApps[0]);
+      const brandRows = oldBrandApps.map(row => brandHeaders.map(h => String(row[h] || '')));
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: 'archive_BrandApplications',
+        valueInputOption: 'RAW',
+        requestBody: { values: brandRows }
+      });
+      archivedCount += oldBrandApps.length;
+    }
+
+    // Archive creator applications
+    if (oldCreatorApps && oldCreatorApps.length > 0) {
+      const creatorHeaders = Object.keys(oldCreatorApps[0]);
+      const creatorRows = oldCreatorApps.map(row => creatorHeaders.map(h => String(row[h] || '')));
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: 'archive_CreatorApplications',
+        valueInputOption: 'RAW',
+        requestBody: { values: creatorRows }
+      });
+      archivedCount += oldCreatorApps.length;
+    }
+
+    if (archivedCount === 0) {
+      console.log('[archiveOldApplications] No old data to archive');
+      return { success: true, archived: 0 };
+    }
+
+    // Delete old records from Supabase
+    const oldBrandAppIds = (oldBrandApps || []).map(a => a.id);
+    const oldCreatorAppIds = (oldCreatorApps || []).map(a => a.id);
+
+    if (oldBrandAppIds.length > 0) {
+      await supabase.from('brand_applications').delete().in('id', oldBrandAppIds);
+    }
+    if (oldCreatorAppIds.length > 0) {
+      await supabase.from('creator_applications').delete().in('id', oldCreatorAppIds);
+    }
+
+    console.log(`[archiveOldApplications] Archived ${archivedCount} records`);
+    return { success: true, archived: archivedCount };
+  } catch (err) {
+    console.error('[archiveOldApplications]', err.message);
+    throw err;
+  }
+};
+
+router.post('/sync-google-sheets', async (req, res) => {
+  try {
+    const result = await syncToGoogleSheets();
+    res.json(result);
+  } catch (err) {
+    console.error('[POST /sync-google-sheets]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/archive-old-applications', async (req, res) => {
+  try {
+    const result = await archiveOldApplications();
+    res.json(result);
+  } catch (err) {
+    console.error('[POST /archive-old-applications]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

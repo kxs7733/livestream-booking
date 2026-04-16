@@ -690,6 +690,8 @@
       configEditingId: null,
       configEditingDraft: {},
       configAddingNew: false,
+      archiveConfirmationText: '',
+      showArchiveModal: false,
     };
 
     // ─── Contact defaults ─────────────────────────────────────────────────────
@@ -2916,6 +2918,75 @@
       }
     };
 
+    const handleSyncGoogleSheets = async () => {
+      showNotification('⟳ Syncing to Google Sheets...', 'success', 0);
+      try {
+        const result = await fetch('/api/sync-google-sheets', { method: 'POST' }).then(r => r.json());
+        if (result.error) {
+          showNotification(`✗ Sync failed: ${result.error}`, 'error');
+        } else {
+          showNotification(`✓ Synced: ${result.synced} sheets updated`);
+        }
+      } catch (err) {
+        showNotification(`✗ Sync failed: ${err.message}`, 'error');
+      }
+    };
+
+    const handleArchiveOldApplications = async () => {
+      state.showArchiveModal = true;
+      state.archiveConfirmationText = '';
+      render();
+    };
+
+    const confirmArchiveOldApplications = async () => {
+      if (state.archiveConfirmationText !== 'I want to archive old data') {
+        showNotification('Please type the exact confirmation text', 'error');
+        return;
+      }
+      state.showArchiveModal = false;
+      try {
+        const result = await fetch('/api/archive-old-applications', { method: 'POST' }).then(r => r.json());
+        if (result.error) {
+          showNotification(`✗ Archive failed: ${result.error}`, 'error');
+        } else {
+          showNotification(`✓ Archived ${result.archived} records and synced to Google Sheets`);
+        }
+      } catch (err) {
+        showNotification(`✗ Archive failed: ${err.message}`, 'error');
+      }
+      state.archiveConfirmationText = '';
+      render();
+    };
+
+    const renderArchiveModal = () => {
+      if (!state.showArchiveModal) return '';
+      return `
+        <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;">
+          <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+            <div style="font-size:18px;font-weight:700;color:#222;margin-bottom:16px;">⚠️ Archive Old Data</div>
+            <div style="font-size:14px;color:#666;margin-bottom:20px;line-height:1.6;">
+              <p><strong>This will:</strong></p>
+              <ul style="margin:8px 0;padding-left:20px;">
+                <li>Move all brand & creator applications older than 6 months to Google Sheets Archive tab</li>
+                <li><strong style="color:#e74c3c;">Permanently delete</strong> these records from Supabase</li>
+                <li>Next daily sync to google sheets will only contain recent 6 months + upcoming data</li>
+              </ul>
+              <p style="margin-top:12px;color:#e74c3c;"><strong>This action cannot be undone.</strong></p>
+            </div>
+            <div style="margin-bottom:20px;">
+              <div style="font-size:13px;font-weight:600;color:#222;margin-bottom:12px;">Type to confirm:</div>
+              <div style="font-size:12px;color:#999;margin-bottom:8px;font-family:monospace;padding:8px 12px;background:#f5f5f5;border-radius:4px;border:1px solid #e0e0e0;">I want to archive old data</div>
+              <input type="text" placeholder="Enter the text above..." value="${escapeHtml(state.archiveConfirmationText)}" oninput="state.archiveConfirmationText = this.value;" style="width:100%;padding:12px 12px;border:2px solid #dfe6e9;border-radius:6px;font-size:14px;font-family:monospace;box-sizing:border-box;">
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button onclick="confirmArchiveOldApplications();" style="flex:1;padding:10px 16px;background:#e74c3c;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Archive Now</button>
+              <button onclick="state.showArchiveModal = false; state.archiveConfirmationText = ''; render();" style="flex:1;padding:10px 16px;background:#b2bec3;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
     const renderPinResetModal = () => {
       if (!state.pinResetModal.show) return '';
       const { userName, userType } = state.pinResetModal;
@@ -3144,7 +3215,7 @@
 
       const footerHtml = state.view === 'landing' ? `<div class="shopee-powered">Powered by <a href="https://shopee.sg" target="_blank">Shopee</a> &middot; Shopee Live Creator Match</div>` : '';
       const loadingHtml = state.isLoading ? `<div class="loading-overlay"><div class="loading-spinner"></div></div>` : '';
-      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderRescheduleModal()}${renderRejectModal()}${renderPinResetModal()}`;
+      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderRescheduleModal()}${renderRejectModal()}${renderArchiveModal()}${renderPinResetModal()}`;
     };
 
     // ========================
@@ -5598,6 +5669,8 @@
                 <div style="position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid #dfe6e9;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:100;min-width:220px;overflow:hidden;">
                   <button onclick="state.adminMenuOpen=false; state.internalPinResetMode = !state.internalPinResetMode; state.internalPinResetSearch = ''; render();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Reset User's PIN</button>
                   <button onclick="state.adminMenuOpen=false; handleSyncManagedData();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Sync Managed Data</button>
+                  <button onclick="state.adminMenuOpen=false; handleSyncGoogleSheets();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">📊 Sync to Google Sheets</button>
+                  <button onclick="state.adminMenuOpen=false; handleArchiveOldApplications();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">📦 Archive Old Data</button>
                   <button onclick="state.adminMenuOpen=false; state.internalConfigMode = true; state.configEditingId = null; render(); loadConfigTable();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;">⚙️ Config Table</button>
                 </div>
               ` : ''}

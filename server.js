@@ -36,6 +36,19 @@ cron.schedule('5 * * * *', async () => {
   }
 });
 
+// Schedule daily sync to Google Sheets (every day at 2:00 AM)
+cron.schedule('0 2 * * *', async () => {
+  console.log('[CRON] Starting daily Google Sheets sync...');
+  try {
+    const result = await fetch(`http://localhost:${PORT}/api/sync-google-sheets`, {
+      method: 'POST'
+    }).then(r => r.json());
+    console.log('[CRON] Google Sheets sync complete:', result);
+  } catch (err) {
+    console.error('[CRON] Google Sheets sync failed:', err.message);
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
