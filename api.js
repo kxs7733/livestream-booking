@@ -366,9 +366,11 @@ async function updateBrandApplication(id, data) {
 
   const updatedApp = Object.assign({}, currentApp, data);
   if (String(data.status) === 'approved') {
+    console.log('[updateBrandApplication] Sending approval email to:', updatedApp.sellerPicEmail);
     sendEmailToSeller_BrandAppApproved(updatedApp).catch(console.error);
   }
   if (String(data.status) === 'rejected' && String(currentApp.status) !== 'rejected') {
+    console.log('[updateBrandApplication] Sending rejection email to:', updatedApp.sellerPicEmail);
     sendRejectionEmailToBrandApp(updatedApp, data.rejectionReason || '').catch(console.error);
   }
 
@@ -816,12 +818,19 @@ async function getInternalTeamEmails() {
 async function sendEmailToSeller_BrandAppApproved(app) {
   if (!app.sellerPicEmail) return;
   const subject = '[Shopee Live Creator Match] Your Application Has Been Approved!';
-  const body = 'Great news! Your brand application has been approved.\n\n'
-    + 'Shop Name: ' + (app.shopName || app.brandName) + '\n'
-    + 'Stream Month: ' + (app.month || '') + '\n'
+  const body = 'Hello, ' + (app.shopName || app.brandName) + '!\n\n'
+    + 'Great news! Your brand\'s livestream application has been approved!\n\n'
+    + 'Stream month: ' + (app.month || '') + '\n'
     + 'Streams Requested: ' + (app.streamCount || '') + '\n\n'
-    + 'Creators can now apply for your livestream slots. You will be notified when a creator confirms a slot.\n\n'
-    + 'Thank you for using Shopee Live Creator Match!';
+    + 'Creators can now apply to stream for your brand.\n'
+    + 'Please note that this does not guarantee that all slots will be taken.\n\n'
+    + 'Next steps:\n'
+    + '1) You will be notified when a creator confirms a slot.\n'
+    + '2) Once confirmed, please ensure that products are sent to the matched creators and AMS commissions have been set up!\n\n'
+    + 'Thank you for using Shopee Live Creator Match!\n\n'
+    + 'Best regards,\n'
+    + 'Shopee Live Team\n\n'
+    + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
   await sendEmail(app.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
 }
@@ -830,12 +839,16 @@ async function sendRejectionEmailToBrandApp(app, reason) {
   if (!app.sellerPicEmail) return;
   const contactString = await getInternalPicContactString();
   const subject = '[Shopee Live Creator Match] Brand Application Rejected — ' + (app.shopName || app.brandName || '');
-  const body = 'Your brand application has been rejected by Shopee.\n\n'
-    + 'Shop: ' + (app.shopName || app.brandName || '') + '\n'
-    + 'Month: ' + (app.month || '') + '\n'
-    + (reason ? 'Reason: ' + reason + '\n' : '')
-    + '\nIf you have any questions, please contact ' + contactString + '.\n\n'
-    + 'Thank you for using Shopee Live Creator Match!';
+  const body = 'Hello, ' + (app.shopName || app.brandName || '') + '!\n\n'
+    + 'Unfortunately, your brand\'s livestream application has been rejected by Shopee for the following reason:\n\n'
+    + 'Stream month: ' + (app.month || '') + '\n'
+    + 'Reason: ' + (reason || '') + '\n\n'
+    + 'If the issue is able to be resolved, we encourage you to re-apply.\n\n'
+    + 'We apologise for the inconvenience. If you have any questions, please contact ' + contactString + '\n\n'
+    + 'Thank you for using Shopee Live Creator Match!\n\n'
+    + 'Best regards,\n'
+    + 'Shopee Live Team\n\n'
+    + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
   await sendEmail(app.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
 }
@@ -844,25 +857,34 @@ async function sendCancellationEmail_BrandApp(app, reason) {
   if (!app.sellerPicEmail) return;
   const contactString = await getInternalPicContactString();
   const subject = '[Shopee Live Creator Match] Brand Application Cancelled — ' + (app.shopName || app.brandName || '');
-  const body = 'Your brand application has been cancelled.\n\n'
-    + 'Shop: ' + (app.shopName || app.brandName || '') + '\n'
-    + 'Month: ' + (app.month || '') + '\n'
-    + (reason ? 'Reason: ' + reason + '\n' : '')
-    + '\nIf you have any questions, please contact ' + contactString + '.\n\n'
-    + 'Thank you for using Shopee Live Creator Match!';
+  const body = 'Hello, ' + (app.shopName || app.brandName || '') + '!\n\n'
+    + 'Unfortunately, your brand\'s livestream application has been cancelled by Shopee for the following reason:\n\n'
+    + 'Stream month: ' + (app.month || '') + '\n'
+    + 'Reason: ' + (reason || '') + '\n\n'
+    + 'We apologise for the inconvenience. If you have any questions, please contact ' + contactString + '\n\n'
+    + 'Thank you for using Shopee Live Creator Match!\n\n'
+    + 'Best regards,\n'
+    + 'Shopee Live Team\n\n'
+    + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
   await sendEmail(app.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
 }
 
 async function sendCancellationEmail_CreatorApp(creatorApp, brandApp, reason) {
   if (!brandApp || !brandApp.sellerPicEmail) return;
+  const contactString = await getInternalPicContactString();
+  const slotText = (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' - ' + creatorApp.streamEndTime : '');
   const subject = '[Shopee Live Creator Match] Creator Stream Cancelled - ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '');
-  const body = 'A creator has cancelled their livestream slot.\n\n'
+  const body = 'Hello, ' + (brandApp.shopName || brandApp.brandName || '') + '!\n\n'
+    + 'Unfortunately, your brand\'s livestream has been cancelled by Shopee for the following reason:\n\n'
     + 'Creator: ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '') + '\n'
-    + 'Shop: ' + (creatorApp.brandName || creatorApp.shopName || '') + '\n'
-    + 'Slot: ' + (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + '\n'
-    + (reason ? 'Reason: ' + reason + '\n' : '')
-    + '\nPlease update your livestream schedule accordingly.\n\nThank you for using Shopee Live Creator Match!';
+    + 'Slot: ' + slotText + '\n'
+    + 'Reason: ' + (reason || '') + '\n\n'
+    + 'We apologise for the inconvenience. If you have any questions, please contact ' + contactString + '\n\n'
+    + 'Thank you for using Shopee Live Creator Match!\n\n'
+    + 'Best regards,\n'
+    + 'Shopee Live Team\n\n'
+    + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
   await sendEmail(brandApp.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
 }
@@ -886,12 +908,20 @@ async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
 
 async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp) {
   if (!brandApp || !brandApp.sellerPicEmail) return;
+  const oldSlotText = oldDate + (oldStartTime ? ' ' + oldStartTime : '') + (oldEndTime ? ' - ' + oldEndTime : '');
+  const newSlotText = (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' - ' + creatorApp.streamEndTime : '');
   const subject = '[Shopee Live Creator Match] Slot Rescheduled - ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '');
-  const body = 'A creator has rescheduled their livestream slot.\n\n'
+  const body = 'Hello, ' + (brandApp.shopName || brandApp.brandName || '') + '!\n\n'
+    + 'A creator has rescheduled their livestream slot for your brand.\n'
+    + 'Please take note of the new date below and ensure product samples have been delivered and AMS commissions are set up accordingly.\n\n'
     + 'Creator: ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '') + '\n'
-    + 'Old slot: ' + oldDate + (oldStartTime ? ' ' + oldStartTime : '') + (oldEndTime ? ' – ' + oldEndTime : '') + '\n'
-    + 'New slot: ' + (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' – ' + creatorApp.streamEndTime : '') + '\n\n'
-    + 'Thank you for using Shopee Live Creator Match!';
+    + 'Old Slot: ' + oldSlotText + '\n'
+    + 'New Slot: ' + newSlotText + '\n\n'
+    + 'We apologise for the inconvenience.\n\n'
+    + 'Thank you for using Shopee Live Creator Match!\n\n'
+    + 'Best regards,\n'
+    + 'Shopee Live Team\n\n'
+    + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
   await sendEmail(brandApp.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
 }
