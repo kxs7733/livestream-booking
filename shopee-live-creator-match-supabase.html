@@ -692,6 +692,17 @@
       configAddingNew: false,
       archiveConfirmationText: '',
       showArchiveModal: false,
+      internalTeamConfigMode: false,
+      internalTeamData: [],
+      internalTeamEditingId: null,
+      internalTeamEditingDraft: {},
+      internalTeamAddingNew: false,
+      briefReuploadMode: false,
+      briefSearchQuery: '',
+      briefSearchResults: [],
+      briefSelectedAppId: null,
+      briefUploadFile: null,
+      briefUploading: false,
     };
 
     // ─── Contact defaults ─────────────────────────────────────────────────────
@@ -2985,6 +2996,171 @@
           </div>
         </div>
       `;
+    };
+
+    // ─── Internal Team Config ─────────────────────────────────────────────────
+
+    const loadInternalTeam = async () => {
+      try {
+        const result = await apiCall('getInternalTeam');
+        if (result.success) {
+          state.internalTeamData = result.data || [];
+        } else {
+          showNotification('Failed to load internal team', 'error');
+        }
+        render();
+      } catch (err) {
+        showNotification(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    const handleAddInternalTeamMember = async () => {
+      if (!state.internalTeamEditingDraft.id || !state.internalTeamEditingDraft.email) {
+        showNotification('ID and Email are required', 'error');
+        return;
+      }
+      try {
+        const result = await apiCall('addInternalTeamMember', { data: state.internalTeamEditingDraft });
+        if (result.success) {
+          showNotification('Team member added');
+          state.internalTeamAddingNew = false;
+          state.internalTeamEditingDraft = {};
+          await loadInternalTeam();
+        } else {
+          showNotification(result.error || 'Failed to add member', 'error');
+        }
+      } catch (err) {
+        showNotification(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    const handleUpdateInternalTeamMember = async (id) => {
+      try {
+        const result = await apiCall('updateInternalTeamMember', { id, data: state.internalTeamEditingDraft });
+        if (result.success) {
+          showNotification('Team member updated');
+          state.internalTeamEditingId = null;
+          state.internalTeamEditingDraft = {};
+          await loadInternalTeam();
+        } else {
+          showNotification(result.error || 'Failed to update member', 'error');
+        }
+      } catch (err) {
+        showNotification(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    const handleDeleteInternalTeamMember = async (id) => {
+      if (!confirm('Are you sure you want to delete this team member?')) return;
+      try {
+        const result = await apiCall('deleteInternalTeamMember', { id });
+        if (result.success) {
+          showNotification('Team member deleted');
+          await loadInternalTeam();
+        } else {
+          showNotification(result.error || 'Failed to delete member', 'error');
+        }
+      } catch (err) {
+        showNotification(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    // ─── Brief Re-upload ──────────────────────────────────────────────────────
+
+    const handleSearchBrandApps = async () => {
+      try {
+        const result = await apiCall('searchBrandAppsForBriefReupload', { query: state.briefSearchQuery });
+        if (result.success) {
+          state.briefSearchResults = result.data || [];
+          state.briefSelectedAppId = null;
+          state.briefUploadFile = null;
+        } else {
+          showNotification(result.error || 'Search failed', 'error');
+          state.briefSearchResults = [];
+        }
+        render();
+      } catch (err) {
+        showNotification(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    const validateBriefFilename = (filename, shopName) => {
+      const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+      const normalise = s => s.toLowerCase().replace(/\s+/g, '');
+      return normalise(nameWithoutExt).includes(normalise(shopName || ''));
+    };
+
+    const handleBriefFileSelected = (file, shopName) => {
+      if (!file) return;
+      if (!validateBriefFilename(file.name, shopName)) {
+        showNotification('Filename must include shop name. Please rename your file and re-upload (e.g., innisfree_sg_May26_v1).', 'error');
+        return;
+      }
+      const validTypes = ['.xlsx', '.xls', '.csv', '.ods'];
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+      if (!validTypes.includes(fileExt)) {
+        showNotification('File type not allowed. Supported: Excel (.xlsx, .xls), CSV (.csv), OpenDocument Spreadsheet (.ods)', 'error');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        showNotification('File size exceeds 10 MB limit', 'error');
+        return;
+      }
+      state.briefUploadFile = file;
+      render();
+    };
+
+    const handleUploadBrief = async () => {
+      if (!state.briefSelectedAppId || !state.briefUploadFile) {
+        showNotification('Please select an application and upload a file', 'error');
+        return;
+      }
+      state.briefUploading = true;
+      render();
+      try {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const base64Data = e.target.result.split(',')[1];
+          const mimeType = state.briefUploadFile.type || 'application/octet-stream';
+          try {
+            const uploadResponse = await fetch('/api', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'uploadBrief', fileName: state.briefUploadFile.name, fileData: base64Data, mimeType })
+            });
+            const uploadResult = await uploadResponse.json();
+            if (uploadResult.success && uploadResult.fileUrl) {
+              const updateResult = await apiCall('updateBriefLink', { appId: state.briefSelectedAppId, briefUrl: uploadResult.fileUrl });
+              if (updateResult.success) {
+                showNotification('Brief uploaded successfully');
+                state.briefReuploadMode = false;
+                state.briefSearchQuery = '';
+                state.briefSearchResults = [];
+                state.briefSelectedAppId = null;
+                state.briefUploadFile = null;
+              } else {
+                showNotification('Brief uploaded but failed to update link', 'error');
+              }
+            } else {
+              showNotification(uploadResult.error || 'Upload failed', 'error');
+            }
+          } catch (err) {
+            showNotification(`Upload error: ${err.message}`, 'error');
+          }
+          state.briefUploading = false;
+          render();
+        };
+        reader.onerror = () => {
+          showNotification('Failed to read file', 'error');
+          state.briefUploading = false;
+          render();
+        };
+        reader.readAsDataURL(state.briefUploadFile);
+      } catch (err) {
+        showNotification(`Error: ${err.message}`, 'error');
+        state.briefUploading = false;
+        render();
+      }
     };
 
     const renderPinResetModal = () => {
@@ -5671,7 +5847,9 @@
                   <button onclick="state.adminMenuOpen=false; handleSyncManagedData();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Sync Managed Data</button>
                   <button onclick="state.adminMenuOpen=false; handleSyncGoogleSheets();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">📊 Sync to Google Sheets</button>
                   <button onclick="state.adminMenuOpen=false; handleArchiveOldApplications();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">📦 Archive Old Data</button>
-                  <button onclick="state.adminMenuOpen=false; state.internalConfigMode = true; state.configEditingId = null; render(); loadConfigTable();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;">⚙️ Config Table</button>
+                  <button onclick="state.adminMenuOpen=false; state.internalConfigMode = true; state.configEditingId = null; render(); loadConfigTable();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">⚙️ Config Table</button>
+                  <button onclick="state.adminMenuOpen=false; state.internalTeamConfigMode = true; state.internalTeamEditingId = null; state.internalTeamEditingDraft = {}; render(); loadInternalTeam();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">👥 Internal Team Config</button>
+                  <button onclick="state.adminMenuOpen=false; state.briefReuploadMode = true; state.briefSearchQuery = ''; state.briefSearchResults = []; state.briefSelectedAppId = null; state.briefUploadFile = null; render();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;">📄 Re-upload Brief</button>
                 </div>
               ` : ''}
             </div>
@@ -5776,6 +5954,123 @@
                       </div>
                     `).join('')}
                   </div>
+                `}
+              </div>
+            `;
+          })()}
+
+          ${(() => {
+            if (!state.internalTeamConfigMode) return '';
+            return `
+              <div style="background:#f8f9fa;border:1px solid #dfe6e9;border-radius:12px;padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div style="font-size:14px;font-weight:600;color:#636e72;">Internal Team Members</div>
+                  <button onclick="state.internalTeamConfigMode = false; state.internalTeamEditingId = null; render();" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">✕</button>
+                </div>
+
+                ${!state.internalTeamAddingNew ? `<button onclick="state.internalTeamAddingNew = true; state.internalTeamEditingDraft = { id: '', email: '' }; render();" style="margin-bottom:12px;padding:8px 16px;background:#636e72;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">+ Add Member</button>` : ''}
+
+                <div style="overflow-x:auto;">
+                  <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+                    <colgroup>
+                      <col style="width:150px;">
+                      <col style="width:200px;">
+                      <col style="width:150px;">
+                      <col style="width:100px;">
+                    </colgroup>
+                    <thead>
+                      <tr style="background:#f0f0f0;border-bottom:1px solid #dfe6e9;">
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#222;">ID</th>
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#222;">Email</th>
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#222;">Created At</th>
+                        <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:#222;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${state.internalTeamAddingNew ? `
+                        <tr style="background:#fff3cd;border-bottom:1px solid #f0f0f0;">
+                          <td style="padding:8px 12px;"><input type="text" placeholder="ID" value="${escapeHtml(state.internalTeamEditingDraft.id)}" oninput="state.internalTeamEditingDraft.id = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                          <td style="padding:8px 12px;"><input type="email" placeholder="Email" value="${escapeHtml(state.internalTeamEditingDraft.email)}" oninput="state.internalTeamEditingDraft.email = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                          <td style="padding:8px 12px;color:#999;">Auto-filled</td>
+                          <td style="padding:8px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="handleAddInternalTeamMember();" style="padding:4px 8px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Add</button><button onclick="state.internalTeamAddingNew = false; state.internalTeamEditingDraft = {}; render();" style="padding:4px 8px;background:#999;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button></td>
+                        </tr>
+                      ` : ''}
+                      ${state.internalTeamData.map(row => {
+                        const createdAt = row.created_at ? new Date(row.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+                        return `
+                        <tr style="border-bottom:1px solid #f0f0f0;${state.internalTeamEditingId === row.id ? 'background:#fff3cd;' : ''}">
+                          ${state.internalTeamEditingId === row.id ? `
+                            <td style="padding:8px 12px;"><input type="text" value="${escapeHtml(state.internalTeamEditingDraft.id)}" oninput="state.internalTeamEditingDraft.id = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                            <td style="padding:8px 12px;"><input type="email" value="${escapeHtml(state.internalTeamEditingDraft.email)}" oninput="state.internalTeamEditingDraft.email = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                            <td style="padding:8px 12px;color:#999;">${escapeHtml(createdAt)}</td>
+                            <td style="padding:8px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="handleUpdateInternalTeamMember('${escapeHtml(row.id)}');" style="padding:4px 8px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Save</button><button onclick="state.internalTeamEditingId = null; render();" style="padding:4px 8px;background:#999;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button></td>
+                          ` : `
+                            <td style="padding:10px 12px;font-size:13px;color:#222;">${escapeHtml(row.id || '')}</td>
+                            <td style="padding:10px 12px;font-size:13px;color:#222;">${escapeHtml(row.email || '')}</td>
+                            <td style="padding:10px 12px;font-size:13px;color:#999;">${escapeHtml(createdAt)}</td>
+                            <td style="padding:10px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="state.internalTeamEditingId = '${escapeHtml(row.id)}'; state.internalTeamEditingDraft = { id: '${escapeHtml(row.id)}', email: '${escapeHtml(row.email)}' }; render();" style="padding:4px 8px;background:#636e72;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Edit</button><button onclick="handleDeleteInternalTeamMember('${escapeHtml(row.id)}');" style="padding:4px 8px;background:#e74c3c;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Delete</button></td>
+                          `}
+                        </tr>
+                      `}).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          })()}
+
+          ${(() => {
+            if (!state.briefReuploadMode) return '';
+            return `
+              <div style="background:#f8f9fa;border:1px solid #dfe6e9;border-radius:12px;padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div style="font-size:14px;font-weight:600;color:#636e72;">Re-upload Brief</div>
+                  <button onclick="state.briefReuploadMode = false; state.briefSearchQuery = ''; state.briefSearchResults = []; state.briefSelectedAppId = null; state.briefUploadFile = null; render();" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">✕</button>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                  <label style="font-size:13px;font-weight:600;color:#222;display:block;margin-bottom:8px;">Search Brand Application</label>
+                  <div style="display:flex;gap:8px;">
+                    <input type="text" id="brief-search-input" placeholder="Search by shop name or ID…" value="${escapeHtml(state.briefSearchQuery)}"
+                      oninput="state.briefSearchQuery = this.value; const _p = this.selectionStart; render(); const _el = document.getElementById('brief-search-input'); if(_el){_el.focus();_el.setSelectionRange(_p,_p);}"
+                      style="flex:1;padding:7px 12px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;">
+                    <button onclick="handleSearchBrandApps();" style="padding:7px 16px;background:#636e72;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Search</button>
+                  </div>
+                </div>
+
+                ${state.briefSearchResults.length === 0 ? `
+                  <div style="font-size:13px;color:#999;">Search for brand applications to get started.</div>
+                ` : `
+                  <div style="margin-bottom:16px;">
+                    <label style="font-size:13px;font-weight:600;color:#222;display:block;margin-bottom:8px;">Select Application</label>
+                    <div style="border:1px solid #dfe6e9;border-radius:6px;max-height:200px;overflow-y:auto;">
+                      ${state.briefSearchResults.map(app => `
+                        <div style="padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;${state.briefSelectedAppId === app.id ? 'background:#e3f2fd;' : 'background:#fff;'}" onclick="state.briefSelectedAppId = '${escapeHtml(app.id)}'; state.briefUploadFile = null; render();">
+                          <div style="font-weight:600;color:#222;font-size:13px;">${escapeHtml(app.shopName || app.brandName || '')}</div>
+                          <div style="font-size:12px;color:#999;">ID: ${escapeHtml(app.id)} | Month: ${escapeHtml(app.month)}</div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+
+                  ${state.briefSelectedAppId ? `
+                    <div>
+                      <label style="font-size:13px;font-weight:600;color:#222;display:block;margin-bottom:8px;">Upload Brief File</label>
+                      <input type="file" id="brief-file-input" accept=".xlsx,.xls,.csv,.ods"
+                        onchange="(() => { const file = this.files[0]; const app = state.briefSearchResults.find(a => a.id === state.briefSelectedAppId); if (file && app) handleBriefFileSelected(file, app.shopName || app.brandName); })()"
+                        style="padding:10px 12px;border:1px solid #dfe6e9;border-radius:6px;width:100%;box-sizing:border-box;margin-bottom:12px;">
+                      <div style="font-size:12px;color:#999;margin-bottom:12px;">
+                        Supported formats: Excel (.xlsx, .xls), CSV (.csv), OpenDocument (.ods). Max 10 MB.<br>
+                        Filename must include shop name (e.g., innisfree_sg_May26_v1)
+                      </div>
+                      ${state.briefUploadFile ? `
+                        <div style="padding:10px 12px;background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;margin-bottom:12px;font-size:13px;">
+                          ✓ File selected: ${escapeHtml(state.briefUploadFile.name)}
+                        </div>
+                        <button onclick="handleUploadBrief();" ${state.briefUploading ? 'disabled' : ''} style="width:100%;padding:10px 16px;background:${state.briefUploading ? '#999' : '#27ae60'};color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:${state.briefUploading ? 'not-allowed' : 'pointer'};">${state.briefUploading ? '⏳ Uploading...' : 'Upload Brief'}</button>
+                      ` : ''}
+                    </div>
+                  ` : ''}
                 `}
               </div>
             `;

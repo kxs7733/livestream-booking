@@ -104,6 +104,24 @@ router.get('/', async (req, res) => {
       case 'adminResetPin':
         result = await adminResetPin(req.query.userId, req.query.userType);
         break;
+      case 'getInternalTeam':
+        result = await getInternalTeam();
+        break;
+      case 'addInternalTeamMember':
+        result = await addInternalTeamMember(JSON.parse(req.query.data));
+        break;
+      case 'updateInternalTeamMember':
+        result = await updateInternalTeamMember(req.query.id, JSON.parse(req.query.data));
+        break;
+      case 'deleteInternalTeamMember':
+        result = await deleteInternalTeamMember(req.query.id);
+        break;
+      case 'searchBrandAppsForBriefReupload':
+        result = await searchBrandAppsForBriefReupload(req.query.query);
+        break;
+      case 'updateBriefLink':
+        result = await updateBriefLink(req.query.appId, req.query.briefUrl);
+        break;
       default:
         result = { error: 'Unknown action' };
     }
@@ -1229,5 +1247,90 @@ router.post('/archive-old-applications', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── Internal Team Management ─────────────────────────────────────────────────
+
+async function getInternalTeam() {
+  try {
+    const { data } = await supabase.from('internal_team').select('*').order('created_at', { ascending: false });
+    return { success: true, data: data || [] };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function addInternalTeamMember(memberData) {
+  try {
+    const { error } = await supabase.from('internal_team').insert({
+      id: memberData.id,
+      email: memberData.email,
+      created_at: new Date().toISOString()
+    });
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function updateInternalTeamMember(id, updates) {
+  try {
+    const { error } = await supabase.from('internal_team').update(updates).eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function deleteInternalTeamMember(id) {
+  try {
+    const { error } = await supabase.from('internal_team').delete().eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Brief Re-upload ──────────────────────────────────────────────────────────
+
+async function searchBrandAppsForBriefReupload(query) {
+  try {
+    const currentMonth = getCurrentMonthStr();
+    let q = supabase.from('brand_applications')
+      .select('id, shopName, brandName, month, status, livestreamBrief')
+      .in('status', ['approved', 'pending'])
+      .gte('month', currentMonth);
+
+    if (query && query.trim()) {
+      const cleanQuery = query.toLowerCase().trim();
+      const { data } = await q;
+      const filtered = (data || []).filter(app =>
+        (app.shopName && app.shopName.toLowerCase().includes(cleanQuery)) ||
+        (app.brandName && app.brandName.toLowerCase().includes(cleanQuery)) ||
+        (app.id && app.id.toLowerCase().includes(cleanQuery))
+      );
+      return { success: true, data: filtered };
+    }
+
+    const { data } = await q;
+    return { success: true, data: data || [] };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function updateBriefLink(appId, briefUrl) {
+  try {
+    const { error } = await supabase.from('brand_applications')
+      .update({ livestreamBrief: briefUrl })
+      .eq('id', appId);
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
 
 module.exports = router;
