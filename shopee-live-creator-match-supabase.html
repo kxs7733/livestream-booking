@@ -684,6 +684,12 @@
       internalPinResetSearch: '',
       pinResetModal: { show: false, userId: null, userName: '', userType: '' },
       isSyncingManagedData: false,
+      adminMenuOpen: false,
+      internalConfigMode: false,
+      configData: [],
+      configEditingId: null,
+      configEditingDraft: {},
+      configAddingNew: false,
     };
 
     // ─── Contact defaults ─────────────────────────────────────────────────────
@@ -1105,14 +1111,14 @@
     };
 
     // Notification
-    const showNotification = (message, type = 'success') => {
+    const showNotification = (message, type = 'success', duration = 3000) => {
       const existing = document.querySelector('.notification');
       if (existing) existing.remove();
       const notif = document.createElement('div');
       notif.className = `notification ${type}`;
       notif.textContent = message;
       document.body.appendChild(notif);
-      setTimeout(() => notif.remove(), 3000);
+      if (duration > 0) setTimeout(() => notif.remove(), duration);
     };
 
     // Silent background prefetch — no loading state, no render. Call after login validates to overlap with PIN entry.
@@ -2824,20 +2830,90 @@
     };
 
     const handleSyncManagedData = async () => {
-      state.isSyncingManagedData = true;
-      render();
+      state.adminMenuOpen = false;
+      showNotification('⟳ Syncing managed data...', 'success', 0);
       try {
         const result = await fetch('/api/syncManagedData', { method: 'POST' }).then(r => r.json());
         if (result.error) {
-          showNotification(`Sync failed: ${result.error}`, 'error');
+          showNotification(`✗ Sync failed: ${result.error}`, 'error');
         } else {
           showNotification(`✓ Sync complete: ${result.sellerCount} sellers, ${result.affiliateCount} affiliates updated`);
         }
       } catch (err) {
-        showNotification(`Sync failed: ${err.message}`, 'error');
+        showNotification(`✗ Sync failed: ${err.message}`, 'error');
       }
-      state.isSyncingManagedData = false;
-      render();
+    };
+
+    const loadConfigTable = async () => {
+      try {
+        const result = await fetch('/api/configTable').then(r => r.json());
+        if (result.success) {
+          state.configData = result.data;
+        }
+        render();
+      } catch (err) {
+        showNotification(`Failed to load config: ${err.message}`, 'error');
+      }
+    };
+
+    const handleSaveConfigRow = async (id) => {
+      const { type, code, description, active } = state.configEditingDraft;
+      if (!type || !code) {
+        showNotification('Type and Code are required', 'error');
+        return;
+      }
+      try {
+        const result = await fetch('/api/configTable/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, type, code, description, active })
+        }).then(r => r.json());
+        if (!result.success) throw new Error(result.error);
+        state.configEditingId = null;
+        state.configEditingDraft = {};
+        await loadConfigTable();
+        showNotification('Row saved');
+      } catch (err) {
+        showNotification(`Failed to save: ${err.message}`, 'error');
+      }
+    };
+
+    const handleAddNewConfigRow = async () => {
+      const { type, code, description, active } = state.configEditingDraft;
+      if (!type || !code) {
+        showNotification('Type and Code are required', 'error');
+        return;
+      }
+      try {
+        const result = await fetch('/api/configTable/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, code, description, active })
+        }).then(r => r.json());
+        if (!result.success) throw new Error(result.error);
+        state.configAddingNew = false;
+        state.configEditingDraft = { type: '', code: '', description: '', active: 'ACTIVE' };
+        await loadConfigTable();
+        showNotification('Row added');
+      } catch (err) {
+        showNotification(`Failed to add row: ${err.message}`, 'error');
+      }
+    };
+
+    const handleDeleteConfigRow = async (id) => {
+      if (!confirm('Delete this row?')) return;
+      try {
+        const result = await fetch('/api/configTable/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        }).then(r => r.json());
+        if (!result.success) throw new Error(result.error);
+        await loadConfigTable();
+        showNotification('Row deleted successfully');
+      } catch (err) {
+        showNotification(`Failed to delete row: ${err.message}`, 'error');
+      }
     };
 
     const renderPinResetModal = () => {
@@ -5513,12 +5589,84 @@
             </label>
           </div>
 
-          <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+          <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;position:relative;">
             <button onclick="startInternalBrandApply()" style="padding:9px 18px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">+ Apply on Behalf of Brand</button>
             <button onclick="${state.internalCreatorPickerMode ? 'cancelInternalCreatorPicker()' : 'startInternalCreatorPicker()'}" style="padding:9px 18px;background:${state.internalCreatorPickerMode ? '#636e72' : '#6c5ce7'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">${state.internalCreatorPickerMode ? '✕ Cancel' : '+ Apply on Behalf of Creator'}</button>
-            <button onclick="state.internalPinResetMode = !state.internalPinResetMode; state.internalPinResetSearch = ''; render();" style="padding:9px 18px;background:${state.internalPinResetMode ? '#636e72' : '#b2bec3'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">${state.internalPinResetMode ? '✕ Cancel' : 'Reset User\'s PIN'}</button>
-            <button onclick="handleSyncManagedData();" style="padding:9px 18px;background:${state.isSyncingManagedData ? '#95a5a6' : '#27ae60'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;${state.isSyncingManagedData ? 'opacity:0.6;' : ''}">${state.isSyncingManagedData ? '⟳ Syncing...' : '↻ Sync Managed Data'}</button>
+            <div style="position:relative;" data-admin-menu>
+              <button onclick="state.adminMenuOpen = !state.adminMenuOpen; render();" style="padding:9px 18px;background:#636e72;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">⚙️ Admin ${state.adminMenuOpen ? '▲' : '▼'}</button>
+              ${state.adminMenuOpen ? `
+                <div style="position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid #dfe6e9;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:100;min-width:220px;overflow:hidden;">
+                  <button onclick="state.adminMenuOpen=false; state.internalPinResetMode = !state.internalPinResetMode; state.internalPinResetSearch = ''; render();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Reset User's PIN</button>
+                  <button onclick="state.adminMenuOpen=false; handleSyncManagedData();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Sync Managed Data</button>
+                  <button onclick="state.adminMenuOpen=false; state.internalConfigMode = true; state.configEditingId = null; render(); loadConfigTable();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;">⚙️ Config Table</button>
+                </div>
+              ` : ''}
+            </div>
           </div>
+
+          ${(() => {
+            if (!state.internalConfigMode) return '';
+            const typeOptions = ['VoucherTier', 'ProductNominationLink', 'InternalPIC', 'InternalPICNumber', 'AvailableMonth', 'BrandActivation'];
+            return `
+              <div style="background:#f8f9fa;border:1px solid #dfe6e9;border-radius:12px;padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div style="font-size:14px;font-weight:600;color:#636e72;">Business Mapping Values</div>
+                  <button onclick="state.internalConfigMode = false; state.configEditingId = null; state.configAddingNew = false; render();" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">✕</button>
+                </div>
+
+                ${!state.configAddingNew ? `<button onclick="state.configAddingNew = true; state.configEditingDraft = { type: '${typeOptions[0]}', code: '', description: '', active: 'ACTIVE' }; render();" style="margin-bottom:12px;padding:8px 16px;background:#636e72;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">+ Add Row</button>` : ''}
+
+                <div style="overflow-x:auto;">
+                  <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+                    <colgroup>
+                      <col style="width:110px;">
+                      <col style="width:90px;">
+                      <col style="width:120px;">
+                      <col style="width:70px;">
+                      <col style="width:140px;">
+                    </colgroup>
+                    <thead>
+                      <tr style="background:#f0f0f0;border-bottom:1px solid #dfe6e9;">
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#222;">Type</th>
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#222;">Code</th>
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:#222;">Description</th>
+                        <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:#222;">Active</th>
+                        <th style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:#222;white-space:nowrap;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${state.configAddingNew ? `
+                        <tr style="background:#fff3cd;border-bottom:1px solid #f0f0f0;">
+                          <td style="padding:8px 12px;"><select value="${escapeHtml(state.configEditingDraft.type)}" onchange="state.configEditingDraft.type = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;">${typeOptions.map(t => `<option value="${t}" ${state.configEditingDraft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+                          <td style="padding:8px 12px;"><input type="text" placeholder="Code" value="${escapeHtml(state.configEditingDraft.code)}" oninput="state.configEditingDraft.code = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                          <td style="padding:8px 12px;"><input type="text" placeholder="Description" value="${escapeHtml(state.configEditingDraft.description)}" oninput="state.configEditingDraft.description = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                          <td style="padding:8px 12px;text-align:center;"><input type="checkbox" ${state.configEditingDraft.active === 'ACTIVE' ? 'checked' : ''} onchange="state.configEditingDraft.active = this.checked ? 'ACTIVE' : 'INACTIVE';" style="cursor:pointer;"></td>
+                          <td style="padding:8px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="handleAddNewConfigRow();" style="padding:4px 8px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Add</button><button onclick="state.configAddingNew = false; state.configEditingDraft = { type: '', code: '', description: '', active: 'ACTIVE' }; render();" style="padding:4px 8px;background:#999;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button></td>
+                        </tr>
+                      ` : ''}
+                      ${state.configData.map(row => `
+                        <tr style="border-bottom:1px solid #f0f0f0;${state.configEditingId === row.id ? 'background:#fff3cd;' : ''}">
+                          ${state.configEditingId === row.id ? `
+                            <td style="padding:8px 12px;"><select value="${escapeHtml(state.configEditingDraft.type)}" onchange="state.configEditingDraft.type = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;">${typeOptions.map(t => `<option value="${t}" ${state.configEditingDraft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+                            <td style="padding:8px 12px;"><input type="text" value="${escapeHtml(state.configEditingDraft.code)}" oninput="state.configEditingDraft.code = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                            <td style="padding:8px 12px;"><input type="text" value="${escapeHtml(state.configEditingDraft.description)}" oninput="state.configEditingDraft.description = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                            <td style="padding:8px 12px;text-align:center;"><input type="checkbox" ${state.configEditingDraft.active === 'ACTIVE' ? 'checked' : ''} onchange="state.configEditingDraft.active = this.checked ? 'ACTIVE' : 'INACTIVE';" style="cursor:pointer;"></td>
+                            <td style="padding:8px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="handleSaveConfigRow(${row.id});" style="padding:4px 8px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Save</button><button onclick="state.configEditingId = null; render();" style="padding:4px 8px;background:#999;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button></td>
+                          ` : `
+                            <td style="padding:10px 12px;font-size:13px;color:#222;">${escapeHtml(row.type || '')}</td>
+                            <td style="padding:10px 12px;font-size:13px;color:#222;">${escapeHtml(row.code || '')}</td>
+                            <td style="padding:10px 12px;font-size:13px;color:#222;word-wrap:break-word;">${escapeHtml(row.description || '')}</td>
+                            <td style="padding:10px 12px;text-align:center;font-size:13px;color:#222;">${row.active === 'ACTIVE' ? '✓' : '✗'}</td>
+                            <td style="padding:10px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="state.configEditingId = ${row.id}; state.configEditingDraft = { type: '${escapeHtml(row.type)}', code: '${escapeHtml(row.code)}', description: '${escapeHtml(row.description)}', active: '${row.active}' }; render();" style="padding:4px 8px;background:#636e72;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Edit</button><button onclick="handleDeleteConfigRow(${row.id});" style="padding:4px 8px;background:#e74c3c;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Delete</button></td>
+                          `}
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          })()}
 
           ${(() => {
             if (!state.internalPinResetMode) return '';
@@ -5529,7 +5677,10 @@
               : state.creators.filter(c => !searchVal || c.name?.toLowerCase().includes(searchVal) || String(c.id).toLowerCase().includes(searchVal));
             return `
               <div style="background:#f8f9fa;border:1px solid #dfe6e9;border-radius:12px;padding:20px;margin-bottom:24px;">
-                <div style="font-size:14px;font-weight:600;color:#636e72;margin-bottom:16px;">Reset User's PIN</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div style="font-size:14px;font-weight:600;color:#636e72;">Reset User's PIN</div>
+                  <button onclick="state.internalPinResetMode = false; state.internalPinResetSearch = ''; render();" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">✕</button>
+                </div>
                 <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
                   <button onclick="state.internalPinResetUserType='brand'; state.internalPinResetSearch=''; render();"
                     style="padding:6px 16px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:${isBrand ? '#636e72' : '#ecf0f1'};color:${isBrand ? '#fff' : '#636e72'};">Brand</button>
@@ -6334,6 +6485,14 @@
         </div>
       `;
     };
+
+    // Close admin menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (state.adminMenuOpen && !e.target.closest('[data-admin-menu]')) {
+        state.adminMenuOpen = false;
+        render();
+      }
+    });
 
     // Initialize — restore session on refresh, otherwise show landing
     const _savedSession = sessionStorage.getItem('lbSession');

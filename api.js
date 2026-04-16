@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { db } = require('./lib/db');
+const { db, supabase } = require('./lib/db');
 const { hashPin, randomUUID } = require('./lib/auth');
 const { sendEmail } = require('./lib/email');
 const {
@@ -911,7 +911,7 @@ async function syncManagedData() {
     if (!GAS_URL) throw new Error('GAS_URL not configured');
 
     console.log('[syncManagedData] Fetching from GAS...');
-    const url = `${GAS_URL}?action=getAllData&allMonths=false`;
+    const url = `${GAS_URL}?action=getManagedData`;
     const res = await fetch(url, { redirect: 'follow' });
     const data = await res.json();
 
@@ -937,7 +937,8 @@ async function syncManagedData() {
       const BATCH = 500;
       for (let i = 0; i < managedSellers.length; i += BATCH) {
         const batch = managedSellers.slice(i, i + BATCH);
-        await db.upsert('managed_sellers', batch, 'shop_id');
+        const { error } = await supabase.from('managed_sellers').upsert(batch, { onConflict: 'shop_id' });
+        if (error) throw new Error(`Upsert managed_sellers: ${error.message}`);
         sellerCount += batch.length;
       }
     }
@@ -946,7 +947,8 @@ async function syncManagedData() {
       const BATCH = 500;
       for (let i = 0; i < managedAffiliates.length; i += BATCH) {
         const batch = managedAffiliates.slice(i, i + BATCH);
-        await db.upsert('managed_affiliates', batch, 'affiliate_id');
+        const { error } = await supabase.from('managed_affiliates').upsert(batch, { onConflict: 'affiliate_id' });
+        if (error) throw new Error(`Upsert managed_affiliates: ${error.message}`);
         affiliateCount += batch.length;
       }
     }
@@ -965,6 +967,65 @@ router.post('/syncManagedData', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[POST /syncManagedData]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Business Mapping Values Config ────────────────────────────────────────────
+
+router.get('/configTable', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('business_mapping_values').select('*');
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('[GET /configTable]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/configTable/add', async (req, res) => {
+  try {
+    const { type, code, description, active } = req.body;
+    const { data, error } = await supabase
+      .from('business_mapping_values')
+      .insert([{ type, code, description, active }])
+      .select();
+    if (error) throw error;
+    res.json({ success: true, data: data?.[0] });
+  } catch (err) {
+    console.error('[POST /configTable/add]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/configTable/update', async (req, res) => {
+  try {
+    const { id, type, code, description, active } = req.body;
+    const { data, error } = await supabase
+      .from('business_mapping_values')
+      .update({ type, code, description, active })
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    res.json({ success: true, data: data?.[0] });
+  } catch (err) {
+    console.error('[POST /configTable/update]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/configTable/delete', async (req, res) => {
+  try {
+    const { id } = req.body;
+    const { error } = await supabase
+      .from('business_mapping_values')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[POST /configTable/delete]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -94,6 +94,9 @@ function doGet(e) {
       case 'getAllData':
         result = getAllData(e.parameter.allMonths === 'true', e.parameter.pastMonths ? parseInt(e.parameter.pastMonths) : 0);
         break;
+      case 'getManagedData':
+        result = getManagedData();
+        break;
       case 'addSeller':
         result = addSeller(JSON.parse(e.parameter.data));
         break;
@@ -352,6 +355,44 @@ function getAllData(allMonths, pastMonths) {
     managedSellers: managedSellers,
     managedAffiliates: managedAffiliates,
     businessMappingValues: businessMappingValues
+  };
+}
+
+// Lightweight endpoint: fetch only managed sellers & affiliates
+function getManagedData() {
+  var managedSellers = (function() {
+    var sheet = getSheet('Managed Sellers');
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    var headers = data[0];
+    var result = [];
+    for (var i = 1; i < data.length; i++) {
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) { obj[headers[j]] = data[i][j]; }
+      if (obj.Shopid) result.push(obj);
+    }
+    return result;
+  })();
+
+  var managedAffiliates = (function() {
+    var sheet = getSheet('Managed Affiliates');
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    var headers = data[0];
+    var result = [];
+    for (var i = 1; i < data.length; i++) {
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) { obj[headers[j]] = data[i][j]; }
+      if (obj.affiliate_id) result.push(obj);
+    }
+    return result;
+  })();
+
+  return {
+    managedSellers: managedSellers,
+    managedAffiliates: managedAffiliates
   };
 }
 
