@@ -1,15 +1,17 @@
 {\rtf1\ansi\ansicpg1252\cocoartf2822
 \cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fnil\fcharset0 Menlo-Regular;\f2\fnil\fcharset0 HelveticaNeue;
 \f3\fnil\fcharset0 HelveticaNeue-Bold;\f4\froman\fcharset0 Times-Roman;\f5\fnil\fcharset0 .SFNS-Regular_wdth_opsz110000_GRAD_wght1F40000;
-}
+\f6\fnil\fcharset0 Menlo-Bold;}
 {\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red117\green117\blue117;\red255\green255\blue255;
 \red231\green54\blue35;\red255\green255\blue255;\red0\green0\blue0;\red255\green255\blue255;\red255\green255\blue255;
 \red44\green44\blue44;\red117\green117\blue117;\red38\green38\blue38;\red231\green54\blue35;\red52\green52\blue52;
-\red255\green245\blue242;\red0\green0\blue0;\red67\green67\blue67;\red252\green44\blue70;}
+\red255\green245\blue242;\red0\green0\blue0;\red67\green67\blue67;\red252\green44\blue70;\red175\green221\blue255;
+\red86\green32\blue244;\red202\green51\blue35;\red56\green185\blue199;}
 {\*\expandedcolortbl;;\csgray\c0;\cssrgb\c53333\c53333\c53333;\cssrgb\c100000\c100000\c100000;
 \cssrgb\c93333\c30196\c17647;\csgray\c100000;\cssrgb\c0\c1\c1;\cssrgb\c100000\c100000\c99985\c0;\cspthree\c100000\c100000\c100000;
 \cspthree\c22745\c22745\c22745;\cssrgb\c53333\c53333\c53333;\cssrgb\c20000\c20000\c20000;\cssrgb\c93333\c30196\c17647;\cssrgb\c26667\c26667\c26667;
-\cssrgb\c100000\c96863\c96078;\cssrgb\c0\c0\c0;\cssrgb\c33333\c33333\c33333;\cssrgb\c100000\c27843\c34118;}
+\cssrgb\c100000\c96863\c96078;\cssrgb\c0\c0\c0;\cssrgb\c33333\c33333\c33333;\cssrgb\c100000\c27843\c34118;\cssrgb\c73675\c89410\c100000;
+\cssrgb\c41681\c25958\c96648;\cssrgb\c83899\c28663\c18026;\cssrgb\c25546\c77007\c82023;}
 \paperw11900\paperh16840\margl1440\margr1440\vieww17380\viewh13220\viewkind0
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
 
@@ -323,8 +325,87 @@ Thank you!\'94\
 2. Then another requirement where for each approved creator application, I will need to trigger telegram notification 1 day before the stream to creator to remind them that their stream is the next day.\
 \
 \
+ 
+\f6\b Setup
+\f1\b0  \'97 In Apps Script editor, add a new file called \cf19 seed_data.gs\cf2  and paste   \
+  the contents from \cf19 livestream-booking-app/seed_data.gs\cf2 .\
+                                                                                \
+  
+\f6\b Run order
+\f1\b0  (separately, one at a time from the Run menu):                      \
+  1. \cf19 seedSellers()\cf2  \'97 500 rows, ~5s                                              \
+  2. \cf19 seedAffiliates()\cf2  \'97 1,000 rows, ~10s                                        \
+  3. \cf19 seedBrandApplications()\cf2  \'97 10,000 rows in 2\'d75K chunks, ~1\'962 min           \
+  4. \cf19 seedCreatorApplications()\cf2  \'97 30,000 rows in 6\'d75K chunks, ~2\'963 min           \
+                                                                                \
+  
+\f6\b After each run
+\f1\b0  \'97 check Apps Script execution log (View \uc0\u8594  Logs) for progress   \
+  lines like \cf19 BrandApplications: wrote rows 1\'965000\cf2 . Run \cf19 verifySheetCounts()\cf2  at   \
+  the end to confirm totals.                                                    \
+                                                                                \
+  
+\f6\b Why separate runs?
+\f1\b0  BrandApps + CreatorApps together = ~5 min, cutting it too  \
+  close to the 6-min limit. Running them separately is safe.\
+                                                                                \
+  
+\f6\b Data spread:
+\f1\b0                                                                 \
+  - Months weighted toward Apr/May 2026 (heavier) + Jun (lighter) \'97 stresses the\
+   3-month window filter                                                        \
+  - Status mix: ~50% pending, ~25% approved, ~12% rejected, ~12% cancelled \'97\
+  realistic distribution                                                        \
+  - Creator app \cf19 brandApplicationId\cf2  values reference \cf19 ba_000001\cf2 \uc0\u8594 \cf19 ba_010000\cf2  so the  \
+  join in \cf19 loadAllData()\cf2  resolves correctly\
+                                                         \
+\
+1. In brand application, I have this line \'93
+\f2\fs26 \cf11 \cb4 \expnd0\expndtw0\kerning0
+\CocoaLigature1 \outl0\strokewidth0 \strokec11 Your account manager will get back on the final Creator assigned to your livestream(s) within 5 working days.\'94 Change it to \'93Final Creator assigned to your livestreams will be updated in your seller dashboard in this app.\'94\
+2. In the internal dashboard search filter for \'93Brand Applications Pending Approval\'94 can you add one more filter to filter for Managed or Unmanaged Sellers. Then for \'93Creator Applications Pending Approval\'94 add one more filter to filter for Approved or Unapproved Affiliates
+\f1\fs22 \cf2 \cb1 \kerning1\expnd0\expndtw0 \CocoaLigature0 \outl0\strokewidth0 \
+\
+some changes to be made to the app, please confirm your understanding: \
+1. when im in mobile, the field "Preferred Stream Date" in brand application runs off a little. \
+2. Also in mobile, the seller profile is truncated in mobile view. So seller may not know to click on that to see their profile. 3. also in brand application on mobile, preferred stream date date picker is not auto defaulted to the month that the user chose for livestream month when it should be. \cf6 \cb2  \
+\
+Supabase project url: https://kfijuuhsgedvtscvcrxl.supabase.co\
+Service role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmaWp1dWhzZ2VkdnRzY3ZjcnhsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjMwNDYxOCwiZXhwIjoyMDkxODgwNjE4fQ.k9-IuN7r1yems0mQHkCh83pE_iovP0nsQZtD_oXZUJg\
+\
+\cf2 \cb1                                                                                                                                                   \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+\cf9 \uc0\u9210 \cf2  In order:                                                                                                                                       \
+                                                                                                                                                  \
+  
+\f6\b 1. Run in Supabase SQL Editor:
+\f1\b0                                                                                                                   \
+  \cf20 ALTER\cf2  \cf20 TABLE\cf2  creator_applications \cf20 ADD\cf2  \cf20 COLUMN\cf2  IF \cf20 NOT\cf2  \cf20 EXISTS\cf2  reminder1d_telegram_sent_at TEXT \cf20 DEFAULT\cf2  \cf21 ''\cf2 ;\
+  \cf20 ALTER\cf2  \cf20 TABLE\cf2  business_mapping_values \cf20 ADD\cf2  \cf20 COLUMN\cf2  IF \cf20 NOT\cf2  \cf20 EXISTS\cf2  code TEXT \cf20 DEFAULT\cf2  \cf21 ''\cf2 ;                                                              \
+  \cf20 ALTER\cf2  \cf20 TABLE\cf2  managed_sellers \cf20 ADD\cf2  \cf20 COLUMN\cf2  IF \cf20 NOT\cf2  \cf20 EXISTS\cf2  cluster TEXT \cf20 DEFAULT\cf2  \cf21 ''\cf2 ;                                                                   \
+  \cf20 ALTER\cf2  \cf20 TABLE\cf2  managed_sellers \cf20 ADD\cf2  \cf20 COLUMN\cf2  IF \cf20 NOT\cf2  \cf20 EXISTS\cf2  category TEXT \cf20 DEFAULT\cf2  \cf21 ''\cf2 ;\
+  \cf20 ALTER\cf2  \cf20 TABLE\cf2  managed_sellers \cf20 ADD\cf2  \cf20 COLUMN\cf2  IF \cf20 NOT\cf2  \cf20 EXISTS\cf2  username TEXT \cf20 DEFAULT\cf2  \cf21 ''\cf2 ;                                                                  \
+  \cf20 ALTER\cf2  \cf20 TABLE\cf2  managed_sellers \cf20 ADD\cf2  \cf20 COLUMN\cf2  IF \cf20 NOT\cf2  \cf20 EXISTS\cf2  shop_name TEXT \cf20 DEFAULT\cf2  \cf21 ''\cf2 ;\
+  \cf20 ALTER\cf2  \cf20 TABLE\cf2  managed_affiliates \cf20 ADD\cf2  \cf20 COLUMN\cf2  IF \cf20 NOT\cf2  \cf20 EXISTS\cf2  affiliate_name TEXT \cf20 DEFAULT\cf2  \cf21 ''\cf2 ;                                                         \
+  \cf20 DROP\cf2  \cf20 TABLE\cf2  IF \cf20 EXISTS\cf2  slots;                                                            \
+  \cf20 DROP\cf2  \cf20 TABLE\cf2  IF \cf20 EXISTS\cf2  bookings;                                                                                                                  \
+                                                            \
+  
+\f6\b 2. Re-run migration
+\f1\b0  to populate the new columns with GSheet data:                                                                               \
+  \cf22 cd\cf2  ~/Documents/Claude_Projects/livestream-booking-app && node migrate.js\
+                                                                                                                                                  \
+  
+\f6\b 3. Continue testing
+\f1\b0  \'97 log in as brand, creator, internal and go through the main flows to make sure everything works before we deploy to        \
+  Railway.                                     \
 \
 \
-\
+1. For seller site streams, we show that there are X number of slots left if all the slots are pending, but inside they can\'92t choose any timeslot. Would it be possible to hide such cards. How would you implement it? Tell me first before implementing anything\
+2. Business Mapping Values should be available on internal dashboard for internal team to configure since it is no longer a google sheet. \
+3. Is it possible to pull managed sellers and managed affiliates from google sheet into supabase in realtime? Context is now these are imported sheets from a live google sheet.\
+4. Can they download the backend data?\
+5. Can we allow internal team to re upload the livestream brief on the seller\'92s behalf?\
+6. Emails\
 \
 =IMPORTRANGE("1WZfDlb9btTioJgAvxjVsau6loPXlLJ30Bs0TixAypss","Seller Masterlist!A2:F")}

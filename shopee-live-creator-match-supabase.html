@@ -683,6 +683,7 @@
       internalPinResetUserType: 'brand',
       internalPinResetSearch: '',
       pinResetModal: { show: false, userId: null, userName: '', userType: '' },
+      isSyncingManagedData: false,
     };
 
     // ─── Contact defaults ─────────────────────────────────────────────────────
@@ -2819,6 +2820,23 @@
         return;
       }
       showNotification(`PIN reset for ${userName}. They will be prompted to set a new PIN on next login.`);
+      render();
+    };
+
+    const handleSyncManagedData = async () => {
+      state.isSyncingManagedData = true;
+      render();
+      try {
+        const result = await fetch('/api/syncManagedData', { method: 'POST' }).then(r => r.json());
+        if (result.error) {
+          showNotification(`Sync failed: ${result.error}`, 'error');
+        } else {
+          showNotification(`✓ Sync complete: ${result.sellerCount} sellers, ${result.affiliateCount} affiliates updated`);
+        }
+      } catch (err) {
+        showNotification(`Sync failed: ${err.message}`, 'error');
+      }
+      state.isSyncingManagedData = false;
       render();
     };
 
@@ -5499,6 +5517,7 @@
             <button onclick="startInternalBrandApply()" style="padding:9px 18px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">+ Apply on Behalf of Brand</button>
             <button onclick="${state.internalCreatorPickerMode ? 'cancelInternalCreatorPicker()' : 'startInternalCreatorPicker()'}" style="padding:9px 18px;background:${state.internalCreatorPickerMode ? '#636e72' : '#6c5ce7'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">${state.internalCreatorPickerMode ? '✕ Cancel' : '+ Apply on Behalf of Creator'}</button>
             <button onclick="state.internalPinResetMode = !state.internalPinResetMode; state.internalPinResetSearch = ''; render();" style="padding:9px 18px;background:${state.internalPinResetMode ? '#636e72' : '#b2bec3'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">${state.internalPinResetMode ? '✕ Cancel' : 'Reset User\'s PIN'}</button>
+            <button onclick="handleSyncManagedData();" style="padding:9px 18px;background:${state.isSyncingManagedData ? '#95a5a6' : '#27ae60'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;${state.isSyncingManagedData ? 'opacity:0.6;' : ''}">${state.isSyncingManagedData ? '⟳ Syncing...' : '↻ Sync Managed Data'}</button>
           </div>
 
           ${(() => {

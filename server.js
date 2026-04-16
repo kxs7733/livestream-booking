@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const compression = require('compression');
 const path = require('path');
+const cron = require('node-cron');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
@@ -20,6 +21,19 @@ app.use(express.static(__dirname));
 // Serve main app for root
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'shopee-live-creator-match-supabase.html'));
+});
+
+// Schedule hourly sync of managed sellers/affiliates (every hour at :05 past)
+cron.schedule('5 * * * *', async () => {
+  console.log('[CRON] Starting hourly sync of managed data...');
+  try {
+    const result = await fetch(`http://localhost:${PORT}/api/syncManagedData`, {
+      method: 'POST'
+    }).then(r => r.json());
+    console.log('[CRON] Sync complete:', result);
+  } catch (err) {
+    console.error('[CRON] Sync failed:', err.message);
+  }
 });
 
 app.listen(PORT, () => {

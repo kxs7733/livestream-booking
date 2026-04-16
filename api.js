@@ -903,4 +903,70 @@ function snakeToCamelObj(row) {
   return obj;
 }
 
+// ─── Sync Managed Data from GAS ────────────────────────────────────────────────
+
+async function syncManagedData() {
+  try {
+    const GAS_URL = process.env.GAS_URL;
+    if (!GAS_URL) throw new Error('GAS_URL not configured');
+
+    console.log('[syncManagedData] Fetching from GAS...');
+    const url = `${GAS_URL}?action=getAllData&allMonths=false`;
+    const res = await fetch(url, { redirect: 'follow' });
+    const data = await res.json();
+
+    // Sync managed_sellers
+    const managedSellers = (data.managedSellers || []).map(s => ({
+      shop_id: String(s.Shopid || s.shopId || s.shop_id || '').trim(),
+      rm_email: String(s['RM email'] || s.rmEmail || s.rm_email || '').trim(),
+      cluster: String(s.Cluster || s.cluster || '').trim(),
+      category: String(s.Category || s.category || '').trim(),
+      username: String(s.Username || s.username || '').trim(),
+      shop_name: String(s['Shop Name'] || s.shopName || s.shop_name || '').trim(),
+    })).filter(r => r.shop_id);
+
+    // Sync managed_affiliates
+    const managedAffiliates = (data.managedAffiliates || []).map(a => ({
+      affiliate_id: String(a.affiliate_id || a.affiliateId || '').trim().toLowerCase(),
+      affiliate_name: String(a.affiliate_name || a.affiliateName || '').trim(),
+    })).filter(r => r.affiliate_id);
+
+    let sellerCount = 0, affiliateCount = 0;
+
+    if (managedSellers.length > 0) {
+      const BATCH = 500;
+      for (let i = 0; i < managedSellers.length; i += BATCH) {
+        const batch = managedSellers.slice(i, i + BATCH);
+        await db.upsert('managed_sellers', batch, 'shop_id');
+        sellerCount += batch.length;
+      }
+    }
+
+    if (managedAffiliates.length > 0) {
+      const BATCH = 500;
+      for (let i = 0; i < managedAffiliates.length; i += BATCH) {
+        const batch = managedAffiliates.slice(i, i + BATCH);
+        await db.upsert('managed_affiliates', batch, 'affiliate_id');
+        affiliateCount += batch.length;
+      }
+    }
+
+    console.log(`[syncManagedData] Done. Sellers: ${sellerCount}, Affiliates: ${affiliateCount}`);
+    return { success: true, sellerCount, affiliateCount };
+  } catch (err) {
+    console.error('[syncManagedData]', err.message);
+    throw err;
+  }
+}
+
+router.post('/syncManagedData', async (req, res) => {
+  try {
+    const result = await syncManagedData();
+    res.json(result);
+  } catch (err) {
+    console.error('[POST /syncManagedData]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

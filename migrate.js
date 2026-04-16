@@ -64,8 +64,6 @@ async function run() {
     phone: String(a.phone || ''),
     shipping_address: String(a.shippingAddress || ''),
     shipping_postal_code: String(a.shippingPostalCode || ''),
-    delivery_instructions: String(a.deliveryInstructions || ''),
-    shipping_recipient_name: String(a.shippingRecipientName || ''),
     pin_salt: String(a.pinSalt || ''),
     pin_hash: String(a.pinHash || ''),
   })).filter(r => r.id);
@@ -170,6 +168,7 @@ async function run() {
     delivery_instructions: String(a.deliveryInstructions || ''),
     shipping_postal_code: String(a.shippingPostalCode || ''),
     shipping_recipient_name: String(a.shippingRecipientName || ''),
+    reminder1d_telegram_sent_at: String(a.reminder1dTelegramSentAt || ''),
   })).filter(r => r.id);
   await upsertBatch('creator_applications', cas);
 
@@ -177,18 +176,24 @@ async function run() {
   const ms = (data.managedSellers || []).map(s => ({
     shop_id: String(s.Shopid || s.shopId || s.shop_id || ''),
     rm_email: String(s['RM email'] || s.rmEmail || s.rm_email || ''),
+    cluster: String(s.Cluster || s.cluster || ''),
+    category: String(s.Category || s.category || ''),
+    username: String(s.Username || s.username || ''),
+    shop_name: String(s['Shop Name'] || s.shopName || s.shop_name || ''),
   })).filter(r => r.shop_id);
   await upsertBatch('managed_sellers', ms, 'shop_id');
 
   // ── managed_affiliates ───────────────────────────────────────────────────────
   const ma = (data.managedAffiliates || []).map(a => ({
     affiliate_id: String(a.affiliate_id || a.affiliateId || '').trim().toLowerCase(),
+    affiliate_name: String(a.affiliate_name || a.affiliateName || ''),
   })).filter(r => r.affiliate_id);
   await upsertBatch('managed_affiliates', ma, 'affiliate_id');
 
   // ── business_mapping_values ──────────────────────────────────────────────────
   const bmv = (data.businessMappingValues || []).map(v => ({
     type: String(v.Type || v.type || ''),
+    code: String(v.Code || v.code || ''),
     description: String(v.Description || v.description || ''),
     active: String(v.Active || v.active || ''),
   })).filter(r => r.type);

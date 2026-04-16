@@ -18,8 +18,6 @@ CREATE TABLE IF NOT EXISTS affiliates (
   phone TEXT DEFAULT '',
   shipping_address TEXT DEFAULT '',
   shipping_postal_code TEXT DEFAULT '',
-  delivery_instructions TEXT DEFAULT '',
-  shipping_recipient_name TEXT DEFAULT '',
   pin_salt TEXT DEFAULT '',
   pin_hash TEXT DEFAULT ''
 );
@@ -83,7 +81,8 @@ CREATE TABLE IF NOT EXISTS brand_applications (
   seller_site_postal_code TEXT DEFAULT '',
   seller_pdpa_consent_given TEXT DEFAULT '',
   loaned_product_return_costs_agreed TEXT DEFAULT '',
-  is_paused TEXT DEFAULT ''
+  is_paused TEXT DEFAULT '',
+  approved_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_brand_applications_shop_id ON brand_applications(shop_id);
@@ -119,7 +118,9 @@ CREATE TABLE IF NOT EXISTS creator_applications (
   rejection_reason TEXT DEFAULT '',
   delivery_instructions TEXT DEFAULT '',
   shipping_postal_code TEXT DEFAULT '',
-  shipping_recipient_name TEXT DEFAULT ''
+  shipping_recipient_name TEXT DEFAULT '',
+  reminder1d_telegram_sent_at TEXT DEFAULT '',
+  approved_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_creator_applications_brand_application_id ON creator_applications(brand_application_id);
@@ -142,17 +143,23 @@ CREATE TABLE IF NOT EXISTS internal_team (
 CREATE TABLE IF NOT EXISTS business_mapping_values (
   id SERIAL PRIMARY KEY,
   type TEXT DEFAULT '',
+  code TEXT DEFAULT '',
   description TEXT DEFAULT '',
   active TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS managed_sellers (
   shop_id TEXT PRIMARY KEY,
-  rm_email TEXT DEFAULT ''
+  rm_email TEXT DEFAULT '',
+  cluster TEXT DEFAULT '',
+  category TEXT DEFAULT '',
+  username TEXT DEFAULT '',
+  shop_name TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS managed_affiliates (
-  affiliate_id TEXT PRIMARY KEY
+  affiliate_id TEXT PRIMARY KEY,
+  affiliate_name TEXT DEFAULT ''
 );
 
 -- Used to replace Apps Script PropertiesService (Telegram dedup, sample message IDs)
