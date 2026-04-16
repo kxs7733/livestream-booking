@@ -384,11 +384,9 @@ async function updateBrandApplication(id, data) {
 
   const updatedApp = Object.assign({}, currentApp, data);
   if (String(data.status) === 'approved') {
-    console.log('[updateBrandApplication] Sending approval email to:', updatedApp.sellerPicEmail);
     sendEmailToSeller_BrandAppApproved(updatedApp).catch(console.error);
   }
   if (String(data.status) === 'rejected' && String(currentApp.status) !== 'rejected') {
-    console.log('[updateBrandApplication] Sending rejection email to:', updatedApp.sellerPicEmail);
     sendRejectionEmailToBrandApp(updatedApp, data.rejectionReason || '').catch(console.error);
   }
 
@@ -1298,7 +1296,6 @@ async function deleteInternalTeamMember(id) {
 async function searchBrandAppsForBriefReupload(query) {
   try {
     const currentMonth = getCurrentMonthStr();
-    console.log('[searchBrandAppsForBriefReupload] currentMonth:', currentMonth, 'query:', query);
     let q = supabase.from('brand_applications')
       .select('id, shop_name, brand_name, month, status, livestream_brief')
       .in('status', ['approved', 'pending'])
@@ -1307,23 +1304,19 @@ async function searchBrandAppsForBriefReupload(query) {
     if (query && query.trim()) {
       const cleanQuery = query.toLowerCase().trim();
       const { data, error } = await q;
-      if (error) console.log('[searchBrandAppsForBriefReupload] query error:', error);
-      console.log('[searchBrandAppsForBriefReupload] found', data?.length || 0, 'records before filter');
+      if (error) throw error;
       const filtered = (data || []).filter(app =>
         (app.shop_name && app.shop_name.toLowerCase().includes(cleanQuery)) ||
         (app.brand_name && app.brand_name.toLowerCase().includes(cleanQuery)) ||
         (app.id && app.id.toLowerCase().includes(cleanQuery))
       );
-      console.log('[searchBrandAppsForBriefReupload] filtered to', filtered.length, 'records');
       return { success: true, data: filtered };
     }
 
     const { data, error } = await q;
-    if (error) console.log('[searchBrandAppsForBriefReupload] query error:', error);
-    console.log('[searchBrandAppsForBriefReupload] returning', data?.length || 0, 'records');
+    if (error) throw error;
     return { success: true, data: data || [] };
   } catch (err) {
-    console.error('[searchBrandAppsForBriefReupload]', err.message);
     return { success: false, error: err.message };
   }
 }
@@ -1331,7 +1324,7 @@ async function searchBrandAppsForBriefReupload(query) {
 async function updateBriefLink(appId, briefUrl) {
   try {
     const { error } = await supabase.from('brand_applications')
-      .update({ livestreamBrief: briefUrl })
+      .update({ livestream_brief: briefUrl })
       .eq('id', appId);
     if (error) throw error;
     return { success: true };
