@@ -667,6 +667,7 @@
       cancelModal: { show: false, id: null, label: '' },
       rescheduleModal: null,
       brandCancelModal: { show: false, id: null, shopName: '', linkedCreators: [] },
+      creatorCancelModal: { show: false, id: null, reason: '' },
       rejectModal: { show: false, type: null, id: null, reason: '' },
       internalShowPast: false,
       internalBrandApplyMode: false,
@@ -2159,6 +2160,32 @@
 
     const handleRejectCreatorApp = (caId) => openRejectModal('creator', caId);
 
+    const openCreatorCancelModal = (id) => {
+      state.creatorCancelModal = { show: true, id, reason: '' };
+      render();
+    };
+
+    const handleConfirmCreatorAppCancel = async () => {
+      if (state.isSubmitting) return;
+      const { id } = state.creatorCancelModal;
+      if (!id) return;
+      const reasonInput = document.getElementById('creator-cancel-reason-input');
+      const reason = reasonInput ? reasonInput.value.trim() : '';
+      state.isSubmitting = true;
+      render();
+      const now = new Date().toISOString();
+      const result = await apiCall('updateCreatorApplication', { id, data: { status: 'cancelled', cancelReason: reason || '', cancelledAt: now } });
+      state.isSubmitting = false;
+      state.creatorCancelModal = { show: false, id: null, reason: '' };
+      if (!result || !result.success) {
+        showNotification(result?.error || 'Failed to cancel. Please try again.', 'error');
+      } else {
+        updateStateCA(id, { status: 'cancelled', cancelReason: reason || '', cancelledAt: now });
+        showNotification('Creator application cancelled. Notifications sent to creator and brand.');
+      }
+      render();
+    };
+
     const handleMarkSampleSent = async (caId, sent) => {
       if (state.isSubmitting) return;
       // Read inputs BEFORE render() destroys the DOM
@@ -2591,6 +2618,33 @@
                 ${state.isSubmitting ? '⏳ Cancelling...' : hasLinked ? 'Cancel Brand & All Linked Slots' : 'Confirm Cancel'}
               </button>
               <button class="btn-secondary" style="flex:1;" onclick="state.brandCancelModal = { show: false, id: null, shopName: '', linkedCreators: [] }; render();" ${state.isSubmitting ? 'disabled' : ''}>
+                Back
+              </button>
+            </div>
+          </div>
+        </div>`;
+    };
+
+    const renderCreatorCancelModal = () => {
+      if (!state.creatorCancelModal.show) return '';
+      const ca = state.creatorApplications.find(c => c.id === state.creatorCancelModal.id);
+      if (!ca) return '';
+      return `
+        <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;">
+          <div class="cancel-modal-inner" style="background:#fff;border-radius:16px;padding:28px;max-width:500px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;">
+            <div style="font-size:18px;font-weight:700;color:#222;margin-bottom:6px;">Cancel Creator Application</div>
+            <div style="font-size:14px;color:#666;margin-bottom:16px;">
+              <div>Creator: <strong>${ca.creatorName || ca.affiliateUsername}</strong></div>
+              <div>Shop: <strong>${ca.shopName || ca.brandName}</strong></div>
+              <div>Slot: <strong>${formatDate(ca.streamDate)} ${formatTime(ca.streamTime)}${ca.streamEndTime ? ' – ' + formatTime(ca.streamEndTime) : ''}</strong></div>
+            </div>
+            <label style="font-size:13px;font-weight:600;color:#444;display:block;margin-bottom:6px;">Reason for cancellation <span style="color:#e74c3c;">*</span></label>
+            <textarea id="creator-cancel-reason-input" rows="3" class="form-input" style="width:100%;resize:vertical;margin-bottom:16px;" placeholder="e.g. Creator unavailable"></textarea>
+            <div style="display:flex;gap:10px;margin-top:18px;">
+              <button class="btn-primary" style="flex:1;background:#e74c3c;border-color:#e74c3c;" onclick="handleConfirmCreatorAppCancel();" ${state.isSubmitting ? 'disabled' : ''}>
+                ${state.isSubmitting ? '⏳ Cancelling...' : 'Confirm Cancel'}
+              </button>
+              <button class="btn-secondary" style="flex:1;" onclick="state.creatorCancelModal = { show: false, id: null, reason: '' }; render();" ${state.isSubmitting ? 'disabled' : ''}>
                 Back
               </button>
             </div>
@@ -3386,7 +3440,7 @@
 
       const footerHtml = state.view === 'landing' ? `<div class="shopee-powered">Powered by <a href="https://shopee.sg" target="_blank">Shopee</a> &middot; Shopee Live Creator Match</div>` : '';
       const loadingHtml = state.isLoading ? `<div class="loading-overlay"><div class="loading-spinner"></div></div>` : '';
-      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderRescheduleModal()}${renderRejectModal()}${renderArchiveModal()}${renderPinResetModal()}`;
+      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderRescheduleModal()}${renderRejectModal()}${renderArchiveModal()}${renderPinResetModal()}`;
     };
 
     // ========================
@@ -6485,6 +6539,10 @@
                   <div class="action-btns">
                     <button class="action-btn btn-approve" onclick="handleApproveCreatorApp('${row.id}')" ${state.isSubmitting || slotsLeft === 0 ? 'disabled style="opacity:0.5;"' : ''}>Approve</button>
                     <button class="action-btn btn-reject" onclick="handleRejectCreatorApp('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reject</button>
+                  </div>
+                ` : row.status === 'approved' ? `
+                  <div class="action-btns">
+                    <button class="action-btn btn-reject" onclick="openCreatorCancelModal('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Cancel</button>
                   </div>
                 ` : ''}
               </div>
