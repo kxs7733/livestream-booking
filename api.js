@@ -834,17 +834,21 @@ async function getInternalTeamEmails() {
 
 // ─── Email Helper (delegates to Google Apps Script) ──────────────────────
 
-const sendEmailViaGAS = async (to, subject, body, cc = null) => {
+const sendEmailViaGAS = async (to, subject, body, cc = null, htmlBody = null) => {
   try {
     const gasUrl = process.env.GAS_URL;
     if (!gasUrl) {
       console.error('[sendEmailViaGAS] GAS_URL not configured');
       return false;
     }
+    const payload = { action: 'sendEmail', to, subject, body, cc };
+    if (htmlBody) {
+      payload.htmlBody = htmlBody;
+    }
     const response = await fetch(gasUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'sendEmail', to, subject, body, cc })
+      body: JSON.stringify(payload)
     });
     const result = await response.json();
     if (!result.success) {
@@ -881,6 +885,7 @@ async function sendRejectionEmailToBrandApp(app, reason) {
   if (!app.sellerPicEmail) return;
   const contactString = await getInternalPicContactString();
   const subject = '[Shopee Live Creator Match] Brand Application Rejected — ' + (app.shopName || app.brandName || '');
+  const appUrl = 'https://shopeelivecreatormatch.up.railway.app/';
   const body = 'Hello, ' + (app.shopName || app.brandName || '') + '!\n\n'
     + 'Unfortunately, your brand\'s livestream application has been rejected by Shopee for the following reason:\n\n'
     + 'Stream month: ' + (app.month || '') + '\n'
@@ -891,8 +896,17 @@ async function sendRejectionEmailToBrandApp(app, reason) {
     + 'Best regards,\n'
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
+  const htmlBody = '<p>Hello, ' + (app.shopName || app.brandName || '') + '!</p>\n\n'
+    + '<p>Unfortunately, your brand\'s livestream application has been rejected by Shopee for the following reason:</p>\n\n'
+    + '<p><strong>Stream month:</strong> ' + (app.month || '') + '<br/>'
+    + '<strong>Reason:</strong> ' + (reason || '') + '</p>\n\n'
+    + '<p>If the issue is able to be resolved, we encourage you to <a href="' + appUrl + '">re-apply here</a>.</p>\n\n'
+    + '<p>We apologise for the inconvenience. If you have any questions, please contact ' + contactString + '</p>\n\n'
+    + '<p>Thank you for using Shopee Live Creator Match!</p>\n\n'
+    + '<p>Best regards,<br/>Shopee Live Team</p>\n\n'
+    + '<p><em>*This email was automatically generated. Please do not reply.</em></p>';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
-  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail);
+  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail, htmlBody);
 }
 
 async function sendCancellationEmail_BrandApp(app, reason) {
@@ -935,17 +949,38 @@ async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
   const brandApp = await db.findById('brand_applications', creatorApp.brandApplicationId);
   if (!brandApp || !brandApp.sellerPicEmail) return;
   const slotText = (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' – ' + creatorApp.streamEndTime : '');
+  const appUrl = 'https://shopeelivecreatormatch.up.railway.app/';
   const subject = '[Shopee Live Creator Match] Creator Approved - ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '');
-  const body = 'A creator has been approved and confirmed for a livestream slot.\n\n'
-    + 'Affiliate Username: ' + (creatorApp.affiliateUsername || '') + '\n'
+  const body = 'Hello, ' + (brandApp.shopName || brandApp.brandName || '') + '!\n\n'
+    + 'A creator has been approved and confirmed for a livestream slot.\n\n'
+    + 'Creator: ' + (creatorApp.affiliateUsername || '') + '\n'
     + 'Telegram: ' + (creatorApp.telegram || '') + '\n'
     + 'Phone: ' + (creatorApp.phone || '') + '\n'
     + 'Slot: ' + slotText + '\n'
+    + 'Shipping Recipient Name: ' + (creatorApp.shippingRecipientName || '') + '\n'
     + 'Shipping Address: ' + (creatorApp.shippingAddress || '') + (creatorApp.shippingPostalCode ? ', S' + creatorApp.shippingPostalCode : '') + '\n'
     + (creatorApp.deliveryInstructions ? 'Delivery Instructions: ' + creatorApp.deliveryInstructions + '\n' : '')
-    + '\nPlease coordinate with the creator for product sample delivery.\n\nThank you for using Shopee Live Creator Match!';
+    + '\nPlease coordinate with the creator for product sample delivery and input the delivery tracking number/link in the Shopee Live Creator Portal.\n\n'
+    + 'Thank you for using Shopee Live Creator Match!\n\n'
+    + 'Best regards,\n'
+    + 'Shopee Live Team\n\n'
+    + '*This email was automatically generated. Please do not reply.';
+  const htmlBody = '<p>Hello, ' + (brandApp.shopName || brandApp.brandName || '') + '!</p>\n\n'
+    + '<p>A creator has been approved and confirmed for a livestream slot.</p>\n\n'
+    + '<p><strong>Creator:</strong> ' + (creatorApp.affiliateUsername || '') + '<br/>'
+    + '<strong>Telegram:</strong> ' + (creatorApp.telegram || '') + '<br/>'
+    + '<strong>Phone:</strong> ' + (creatorApp.phone || '') + '<br/>'
+    + '<strong>Slot:</strong> ' + slotText + '<br/>'
+    + '<strong>Shipping Recipient Name:</strong> ' + (creatorApp.shippingRecipientName || '') + '<br/>'
+    + '<strong>Shipping Address:</strong> ' + (creatorApp.shippingAddress || '') + (creatorApp.shippingPostalCode ? ', S' + creatorApp.shippingPostalCode : '') + '<br/>'
+    + (creatorApp.deliveryInstructions ? '<strong>Delivery Instructions:</strong> ' + creatorApp.deliveryInstructions + '<br/>' : '')
+    + '</p>\n\n'
+    + '<p>Please coordinate with the creator for product sample delivery and input the delivery tracking number/link in the <a href="' + appUrl + '">Shopee Live Creator Portal</a>.</p>\n\n'
+    + '<p>Thank you for using Shopee Live Creator Match!</p>\n\n'
+    + '<p>Best regards,<br/>Shopee Live Team</p>\n\n'
+    + '<p><em>*This email was automatically generated. Please do not reply.</em></p>';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
-  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail);
+  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail, htmlBody);
 }
 
 async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp) {
