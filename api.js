@@ -1118,10 +1118,12 @@ router.post('/configTable/delete', async (req, res) => {
 // ─── Google Sheets Sync ────────────────────────────────────────────────────
 
 const SHEET_ID = '170ruk_B9l3sLvxYCtMDNgpM6ncxqCyPhyVyuvvmzSXI';
-const CREDS_PATH = path.join(__dirname, 'docs/shopee-live-creator-match-db9d7b015207.json');
-
 const getGoogleSheetsClient = async () => {
-  const credentials = JSON.parse(fs.readFileSync(CREDS_PATH, 'utf8'));
+  const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!credentialsJson) {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY environment variable not set');
+  }
+  const credentials = JSON.parse(credentialsJson);
   const auth = new google.auth.GoogleAuth({
     credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
