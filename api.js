@@ -831,6 +831,24 @@ async function getInternalTeamEmails() {
   return (data || []).map(r => r.email).filter(Boolean);
 }
 
+// ─── Email Helper (delegates to Google Apps Script) ──────────────────────
+
+const sendEmailViaGAS = async (to, subject, body, cc = null) => {
+  try {
+    const gasUrl = process.env.GAS_URL;
+    if (!gasUrl) return false;
+    const response = await fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'sendEmail', to, subject, body, cc })
+    });
+    const result = await response.json();
+    return result.success !== false;
+  } catch (err) {
+    return false;
+  }
+};
+
 async function sendEmailToSeller_BrandAppApproved(app) {
   if (!app.sellerPicEmail) return;
   const subject = '[Shopee Live Creator Match] Your Application Has Been Approved!';
@@ -848,7 +866,7 @@ async function sendEmailToSeller_BrandAppApproved(app) {
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
-  await sendEmail(app.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
+  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail);
 }
 
 async function sendRejectionEmailToBrandApp(app, reason) {
@@ -866,7 +884,7 @@ async function sendRejectionEmailToBrandApp(app, reason) {
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
-  await sendEmail(app.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
+  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail);
 }
 
 async function sendCancellationEmail_BrandApp(app, reason) {
@@ -883,7 +901,7 @@ async function sendCancellationEmail_BrandApp(app, reason) {
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
-  await sendEmail(app.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
+  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail);
 }
 
 async function sendCancellationEmail_CreatorApp(creatorApp, brandApp, reason) {
@@ -902,7 +920,7 @@ async function sendCancellationEmail_CreatorApp(creatorApp, brandApp, reason) {
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
-  await sendEmail(brandApp.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
+  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail);
 }
 
 async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
@@ -919,7 +937,7 @@ async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
     + (creatorApp.deliveryInstructions ? 'Delivery Instructions: ' + creatorApp.deliveryInstructions + '\n' : '')
     + '\nPlease coordinate with the creator for product sample delivery.\n\nThank you for using Shopee Live Creator Match!';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
-  await sendEmail(brandApp.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
+  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail);
 }
 
 async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp) {
@@ -939,7 +957,7 @@ async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldSta
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
-  await sendEmail(brandApp.sellerPicEmail, subject, body, rmEmail ? { cc: rmEmail } : {});
+  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail);
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
