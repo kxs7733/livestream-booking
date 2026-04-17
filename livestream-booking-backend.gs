@@ -198,6 +198,18 @@ function doPost(e) {
       var result = uploadBriefFile(body.fileName, body.fileData, body.mimeType);
       return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
     }
+
+    // Email sending (delegated from Node.js backend)
+    if (body.action === 'sendEmail') {
+      try {
+        var options = body.cc ? { cc: body.cc } : {};
+        MailApp.sendEmail(body.to, body.subject, body.body, options);
+        return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+      } catch (e) {
+        Logger.log('sendEmail error: ' + e.toString());
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: e.toString() })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
   } catch (err) {
     // Fall through to doGet for non-JSON POST requests
   }
