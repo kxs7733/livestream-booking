@@ -1070,16 +1070,12 @@
         Object.entries(params).forEach(([key, value]) => {
           url.searchParams.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
         });
-        console.log('[API]', action, '| URL length:', url.toString().length);
-        console.log('[API]', action, '| Full URL:', url.toString());
         const response = await fetch(url.toString(), { redirect: 'follow' });
-        console.log('[API]', action, '| Status:', response.status, '| Redirected:', response.redirected, '| Final URL:', response.url);
         const text = await response.text();
-        console.log('[API]', action, '| Body:', text.substring(0, 500));
         try {
           return JSON.parse(text);
         } catch (e) {
-          console.error('[API]', action, '| Not JSON. Raw:', text.substring(0, 500));
+          console.error('[API]', action, '| Parse error');
           return null;
         }
       } catch (error) {
@@ -1108,9 +1104,8 @@
               redirect: 'follow'
             });
             const text = await response.text();
-            console.log('[Upload] Status:', response.status, '| Body:', text.substring(0, 300));
             try { resolve(JSON.parse(text)); } catch (e) {
-              console.error('[Upload] Non-JSON response:', text.substring(0, 300));
+              console.error('[Upload] Parse error');
               resolve(null);
             }
           } catch (err) {
