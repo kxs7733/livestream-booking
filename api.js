@@ -1008,12 +1008,22 @@ async function syncManagedData() {
 
     let sellerCount = 0, affiliateCount = 0;
 
+    // Clear all existing rows to ensure exact match with Google Sheet
+    console.log('[syncManagedData] Clearing managed_sellers...');
+    const { error: delError1 } = await supabase.from('managed_sellers').delete().neq('shop_id', '');
+    if (delError1) throw new Error(`Delete managed_sellers: ${delError1.message}`);
+
+    console.log('[syncManagedData] Clearing managed_affiliates...');
+    const { error: delError2 } = await supabase.from('managed_affiliates').delete().neq('affiliate_id', '');
+    if (delError2) throw new Error(`Delete managed_affiliates: ${delError2.message}`);
+
+    // Insert fresh data from Google Sheet
     if (managedSellers.length > 0) {
       const BATCH = 500;
       for (let i = 0; i < managedSellers.length; i += BATCH) {
         const batch = managedSellers.slice(i, i + BATCH);
-        const { error } = await supabase.from('managed_sellers').upsert(batch, { onConflict: 'shop_id' });
-        if (error) throw new Error(`Upsert managed_sellers: ${error.message}`);
+        const { error } = await supabase.from('managed_sellers').insert(batch);
+        if (error) throw new Error(`Insert managed_sellers: ${error.message}`);
         sellerCount += batch.length;
       }
     }
@@ -1022,8 +1032,8 @@ async function syncManagedData() {
       const BATCH = 500;
       for (let i = 0; i < managedAffiliates.length; i += BATCH) {
         const batch = managedAffiliates.slice(i, i + BATCH);
-        const { error } = await supabase.from('managed_affiliates').upsert(batch, { onConflict: 'affiliate_id' });
-        if (error) throw new Error(`Upsert managed_affiliates: ${error.message}`);
+        const { error } = await supabase.from('managed_affiliates').insert(batch);
+        if (error) throw new Error(`Insert managed_affiliates: ${error.message}`);
         affiliateCount += batch.length;
       }
     }
