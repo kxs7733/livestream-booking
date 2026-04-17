@@ -203,6 +203,9 @@ function doPost(e) {
     if (body.action === 'sendEmail') {
       try {
         var options = body.cc ? { cc: body.cc } : {};
+        if (body.htmlBody) {
+          options.htmlBody = body.htmlBody;
+        }
         MailApp.sendEmail(body.to, body.subject, body.body, options);
         return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
       } catch (e) {
