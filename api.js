@@ -1010,11 +1010,11 @@ async function syncManagedData() {
 
     // Clear all existing rows to ensure exact match with Google Sheet
     console.log('[syncManagedData] Clearing managed_sellers...');
-    const { error: delError1 } = await supabase.from('managed_sellers').delete().neq('shop_id', '');
+    const { error: delError1 } = await supabase.from('managed_sellers').delete().gt('id', -1);
     if (delError1) throw new Error(`Delete managed_sellers: ${delError1.message}`);
 
     console.log('[syncManagedData] Clearing managed_affiliates...');
-    const { error: delError2 } = await supabase.from('managed_affiliates').delete().neq('affiliate_id', '');
+    const { error: delError2 } = await supabase.from('managed_affiliates').delete().gt('id', -1);
     if (delError2) throw new Error(`Delete managed_affiliates: ${delError2.message}`);
 
     // Insert fresh data from Google Sheet
