@@ -836,15 +836,22 @@ async function getInternalTeamEmails() {
 const sendEmailViaGAS = async (to, subject, body, cc = null) => {
   try {
     const gasUrl = process.env.GAS_URL;
-    if (!gasUrl) return false;
+    if (!gasUrl) {
+      console.error('[sendEmailViaGAS] GAS_URL not configured');
+      return false;
+    }
     const response = await fetch(gasUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'sendEmail', to, subject, body, cc })
     });
     const result = await response.json();
+    if (!result.success) {
+      console.error('[sendEmailViaGAS] GAS returned error:', result.error);
+    }
     return result.success !== false;
   } catch (err) {
+    console.error('[sendEmailViaGAS] Error:', err.message);
     return false;
   }
 };
