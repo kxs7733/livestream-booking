@@ -360,6 +360,7 @@ async function cancelBrandApplication(id, cancelReason) {
     const ca = snakeToCamelObj(rawRow);
     await db.updateById('creator_applications', ca.id, { status: 'cancelled', cancelReason: cancelReason || '', cancelledAt: now });
     sendCancellationEmail_CreatorApp(ca, brandApp, cancelReason || '').catch(console.error);
+    sendCancellationNotification_CreatorApp(ca, cancelReason || '').catch(console.error);
     cancelledCount++;
   }
 
