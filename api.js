@@ -1013,6 +1013,21 @@ function snakeToCamelObj(row) {
   return obj;
 }
 
+async function getSyncAlertTelegramUsername() {
+  try {
+    const { data } = await supabase
+      .from('business_mapping_values')
+      .select('code')
+      .eq('type', 'SyncAlertsPIC')
+      .eq('active', true)
+      .single();
+    return data?.code || null;
+  } catch (err) {
+    console.warn('[getSyncAlertTelegramUsername] Could not fetch config:', err.message);
+    return null;
+  }
+}
+
 // ─── Sync Managed Data from GAS ────────────────────────────────────────────────
 
 async function syncManagedData() {
@@ -1082,6 +1097,14 @@ async function syncManagedData() {
     return { success: true, sellerCount, affiliateCount };
   } catch (err) {
     console.error('[syncManagedData]', err.message);
+    const alertUsername = await getSyncAlertTelegramUsername();
+    if (alertUsername) {
+      try {
+        await telegramSend(alertUsername, `🚨 *Sync Error*\n*syncManagedData* failed:\n${err.message}`);
+      } catch (telegramErr) {
+        console.error('[syncManagedData] Failed to send Telegram alert:', telegramErr.message);
+      }
+    }
     throw err;
   }
 }
@@ -1231,6 +1254,14 @@ const syncToGoogleSheets = async () => {
     return { success: true, synced: updates.length };
   } catch (err) {
     console.error('[syncToGoogleSheets]', err.message);
+    const alertUsername = await getSyncAlertTelegramUsername();
+    if (alertUsername) {
+      try {
+        await telegramSend(alertUsername, `🚨 *Sync Error*\n*syncToGoogleSheets* failed:\n${err.message}`);
+      } catch (telegramErr) {
+        console.error('[syncToGoogleSheets] Failed to send Telegram alert:', telegramErr.message);
+      }
+    }
     throw err;
   }
 };
@@ -1316,6 +1347,14 @@ const archiveOldApplications = async () => {
     return { success: true, archived: archivedCount };
   } catch (err) {
     console.error('[archiveOldApplications]', err.message);
+    const alertUsername = await getSyncAlertTelegramUsername();
+    if (alertUsername) {
+      try {
+        await telegramSend(alertUsername, `🚨 *Sync Error*\n*archiveOldApplications* failed:\n${err.message}`);
+      } catch (telegramErr) {
+        console.error('[archiveOldApplications] Failed to send Telegram alert:', telegramErr.message);
+      }
+    }
     throw err;
   }
 };
