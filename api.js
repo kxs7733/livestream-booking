@@ -1019,7 +1019,7 @@ async function getSyncAlertTelegramUsername() {
       .from('business_mapping_values')
       .select('code')
       .eq('type', 'SyncAlertsPIC')
-      .eq('active', true)
+      .eq('active', 'ACTIVE')
       .single();
     return data?.code || null;
   } catch (err) {
