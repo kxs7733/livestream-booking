@@ -429,6 +429,25 @@ async function updateCreatorApplication(id, data) {
     data.sampleReceivedAt = '';
   }
 
+  // Validate slot limit when approving
+  if (data.status && String(data.status) === 'approved' && String(currentRow.status) !== 'approved') {
+    const brandApp = await db.findById('brand_applications', currentRow.brandApplicationId);
+    if (!brandApp) return { success: false, error: 'Brand application not found' };
+
+    const streamCount = parseInt(brandApp.streamCount, 10) || 0;
+    if (streamCount <= 0) return { success: false, error: 'Brand application has no livestream slots defined' };
+
+    // Count approved creator applications for this brand
+    const allCreatorApps = await db.all('creator_applications');
+    const approvedCount = allCreatorApps.filter(
+      ca => String(ca.brandApplicationId) === String(currentRow.brandApplicationId) && String(ca.status) === 'approved'
+    ).length;
+
+    if (approvedCount >= streamCount) {
+      return { success: false, error: `Cannot approve. This brand has ${streamCount} livestream slot${streamCount !== 1 ? 's' : ''}, and all are already approved. No slots remaining.` };
+    }
+  }
+
   await db.updateById('creator_applications', id, data);
 
   const row = Object.assign({}, currentRow, data);
