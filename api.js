@@ -1041,6 +1041,11 @@ async function syncManagedData() {
       affiliate_name: String(a.affiliate_name || a.affiliateName || '').trim(),
     })).filter(r => r.affiliate_id);
 
+    // Validate non-empty data before touching DB
+    if (!managedSellers.length || !managedAffiliates.length) {
+      throw new Error('GAS returned empty data for sellers or affiliates');
+    }
+
     let sellerCount = 0, affiliateCount = 0;
 
     // Clear all existing rows to ensure exact match with Google Sheet
@@ -1182,6 +1187,13 @@ const syncToGoogleSheets = async () => {
       db.all('telegram_users')
     ]);
 
+    // Validate all data is non-null before touching any sheet
+    if (!Array.isArray(brandApps) || !Array.isArray(creatorApps) || !Array.isArray(sellers) ||
+        !Array.isArray(affiliates) || !Array.isArray(businessMappings) || !Array.isArray(internalTeam) ||
+        !Array.isArray(telegramUsers)) {
+      throw new Error('Supabase returned corrupted data: not all arrays');
+    }
+
     // Convert data to CSV format (first row = headers)
     const toRows = (data, headers) => {
       if (!data || data.length === 0) return [headers];
@@ -1245,6 +1257,12 @@ const archiveOldApplications = async () => {
       .select('*')
       .lt('stream_date', cutoffDate.toISOString().split('T')[0]);
 
+    // Validate before appending
+    if ((!oldBrandApps || !oldBrandApps.length) && (!oldCreatorApps || !oldCreatorApps.length)) {
+      console.log('[archiveOldApplications] No old data to archive');
+      return { success: true, archived: 0 };
+    }
+
     let archivedCount = 0;
 
     // Archive brand applications
@@ -1252,12 +1270,15 @@ const archiveOldApplications = async () => {
       const brandHeaders = Object.keys(oldBrandApps[0]);
       const brandRows = oldBrandApps.map(row => brandHeaders.map(h => String(row[h] || '')));
 
-      await sheets.spreadsheets.values.append({
+      const brandAppendResult = await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'archive_BrandApplications',
         valueInputOption: 'RAW',
         requestBody: { values: brandRows }
       });
+      if (!brandAppendResult.data || brandAppendResult.status !== 200) {
+        throw new Error(`Failed to append brand applications to Google Sheets`);
+      }
       archivedCount += oldBrandApps.length;
     }
 
@@ -1266,29 +1287,29 @@ const archiveOldApplications = async () => {
       const creatorHeaders = Object.keys(oldCreatorApps[0]);
       const creatorRows = oldCreatorApps.map(row => creatorHeaders.map(h => String(row[h] || '')));
 
-      await sheets.spreadsheets.values.append({
+      const creatorAppendResult = await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
         range: 'archive_CreatorApplications',
         valueInputOption: 'RAW',
         requestBody: { values: creatorRows }
       });
+      if (!creatorAppendResult.data || creatorAppendResult.status !== 200) {
+        throw new Error(`Failed to append creator applications to Google Sheets`);
+      }
       archivedCount += oldCreatorApps.length;
     }
 
-    if (archivedCount === 0) {
-      console.log('[archiveOldApplications] No old data to archive');
-      return { success: true, archived: 0 };
-    }
-
-    // Delete old records from Supabase
+    // Delete old records from Supabase (only after successful appends)
     const oldBrandAppIds = (oldBrandApps || []).map(a => a.id);
     const oldCreatorAppIds = (oldCreatorApps || []).map(a => a.id);
 
     if (oldBrandAppIds.length > 0) {
-      await supabase.from('brand_applications').delete().in('id', oldBrandAppIds);
+      const { error: brandDelError } = await supabase.from('brand_applications').delete().in('id', oldBrandAppIds);
+      if (brandDelError) throw new Error(`Delete brand applications: ${brandDelError.message}`);
     }
     if (oldCreatorAppIds.length > 0) {
-      await supabase.from('creator_applications').delete().in('id', oldCreatorAppIds);
+      const { error: creatorDelError } = await supabase.from('creator_applications').delete().in('id', oldCreatorAppIds);
+      if (creatorDelError) throw new Error(`Delete creator applications: ${creatorDelError.message}`);
     }
 
     console.log(`[archiveOldApplications] Archived ${archivedCount} records`);
