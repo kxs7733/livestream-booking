@@ -5949,6 +5949,7 @@
                     <div class="app-card-detail"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(a.voucherTier)}</div></div>
                     <div class="app-card-detail"><div class="label">Seller Site Stream Only</div><div class="value">${String(a.sellerSiteRequired) === 'true' ? 'Yes' : 'No'}</div></div>
                     ${String(a.sellerSiteRequired) === 'true' ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${a.sellerSiteAddress ? a.sellerSiteAddress + (a.sellerSitePostalCode ? ', S' +a.sellerSitePostalCode : '') : '—'}</div></div>` : ''}
+                    ${String(a.sellerSiteRequired) === 'true' && a.transportationCovered ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Transportation</div><div class="value" style="color:#27ae60;font-weight:600;">Transportation fee covered by seller</div></div>` : ''}
                     <div class="app-card-detail"><div class="label">Brand Activation</div><div class="value">${String(a.hasPackageActivation) === 'true' ? 'Yes' : 'No'}</div></div>
                     ${String(a.hasPackageActivation) === 'true' ? `<div class="app-card-detail"><div class="label">Brand Activation Type</div><div class="value">${getBrandActivationLabel(a.brandActivationType)}</div></div>` : ''}
                     <div class="app-card-detail"><div class="label">Preferred Date</div><div class="value">${a.preferredDate ? formatDate(a.preferredDate) : 'None'}</div></div>
@@ -6512,6 +6513,7 @@
                 <div class="app-card-detail"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(app.voucherTier)}</div></div>
                 <div class="app-card-detail"><div class="label">Seller Site Stream Only</div><div class="value">${String(app.sellerSiteRequired) === 'true' ? 'Yes' : 'No'}</div></div>
                 ${String(app.sellerSiteRequired) === 'true' ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${app.sellerSiteAddress ? app.sellerSiteAddress + (app.sellerSitePostalCode ? ', S' +app.sellerSitePostalCode : '') : '—'}</div></div>` : ''}
+                ${String(app.sellerSiteRequired) === 'true' && app.transportationCovered ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Transportation</div><div class="value" style="color:#27ae60;font-weight:600;">Transportation fee covered by seller</div></div>` : ''}
                 ${String(app.sellerSiteRequired) === 'true' && Array.isArray(app.sellerSiteTimeslots) && app.sellerSiteTimeslots.length > 0 ? `
                   <div class="app-card-detail" style="grid-column:1/-1;">
                     <div class="label">Seller Site Timeslots</div>
