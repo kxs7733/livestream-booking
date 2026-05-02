@@ -80,6 +80,9 @@ router.get('/', async (req, res) => {
       case 'bulkApproveCreatorApplications':
         result = await bulkApproveCreatorApplications(JSON.parse(req.query.ids));
         break;
+      case 'bulkApproveBrandApplications':
+        result = await bulkApproveBrandApplications(JSON.parse(req.query.ids));
+        break;
       case 'validateBrandLogin':
         result = await validateBrandLogin(req.query.shopId, req.query.shopName);
         break;
@@ -585,6 +588,23 @@ async function rescheduleCreatorApplication(id, data) {
   }
 
   return { success: true };
+}
+
+// ─── bulkApproveBrandApplications ────────────────────────────────────────────
+
+async function bulkApproveBrandApplications(ids) {
+  const approvedAt = new Date().toISOString();
+  const failed = [];
+  let approved = 0;
+  for (const id of ids) {
+    const result = await updateBrandApplication(id, { status: 'approved', approvedAt });
+    if (result.success) {
+      approved++;
+    } else {
+      failed.push({ id, error: result.error });
+    }
+  }
+  return { success: true, approved, failed };
 }
 
 // ─── bulkApproveCreatorApplications ──────────────────────────────────────────
