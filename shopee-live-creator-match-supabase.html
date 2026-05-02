@@ -1367,6 +1367,7 @@
       const streamLocation = form.querySelector('#f-stream-location').value;
       const sellerSiteAddress = streamLocation === 'Seller Site' ? (form.querySelector('#f-seller-site-address')?.value.trim() || '') : '';
       const sellerSitePostalCode = streamLocation === 'Seller Site' ? (form.querySelector('#f-seller-site-postal')?.value.trim() || '') : '';
+      const transportationCovered = streamLocation === 'Seller Site' ? (document.getElementById('f-transportation-covered')?.checked || false) : false;
       const sellerPdpaConsentGiven = form.querySelector('#f-pdpa-consent')?.checked || false;
       const loanedProductReturnCostsAgreed = form.querySelector('#f-loaned-return-costs')?.checked || false;
       const hasPackageActivation = form.querySelector('#f-package-activation').checked;
@@ -1505,6 +1506,7 @@
         productNomConfirmed,
         numProductsSponsored: form.querySelector('#f-num-products').value,
         streamLocation,
+        transportationCovered,
         sellerSiteAddress,
         sellerSitePostalCode,
         sellerPdpaConsentGiven,
@@ -1564,6 +1566,7 @@
         sellerSiteRequired: streamLocation === 'Seller Site',
         sellerSiteAddress,
         sellerSitePostalCode,
+        transportationCovered,
         sellerPdpaConsentGiven,
         loanedProductReturnCostsAgreed,
         sellerSiteTimeslots: streamLocation === 'Seller Site' ? JSON.stringify(state.brandFormTimeslots) : '[]',
@@ -3389,6 +3392,7 @@
               <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${brandApp.amsCommission ? brandApp.amsCommission + '%' : '—'}</div></div>
               <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandApp.streamLocation || '—'}</div></div>
               ${isSeller && brandApp.sellerSiteAddress ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${brandApp.sellerSiteAddress}${brandApp.sellerSitePostalCode ? ', S' +brandApp.sellerSitePostalCode : ''}</div></div>` : ''}
+              ${isSeller && brandApp.transportationCovered ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Transportation</div><div class="value" style="color:#27ae60;font-weight:600;">Transportation fee covered by seller</div></div>` : ''}
               <div class="app-card-detail"><div class="label">Seller PIC</div><div class="value">${brandApp.sellerPicName || '—'}${brandApp.sellerPicMobile ? ' · ' + brandApp.sellerPicMobile : ''}</div></div>
               <div class="app-card-detail"><div class="label">Seller PIC Email</div><div class="value">${brandApp.sellerPicEmail || '—'}</div></div>
               ${brandApp.livestreamBrief ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Livestream Brief</div><div class="value"><a href="${brandApp.livestreamBrief}" target="_blank" style="color:#6c5ce7;text-decoration:underline;">📄 View Brief</a></div></div>` : ''}
@@ -3457,6 +3461,7 @@
               <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${brandApp.amsCommission ? brandApp.amsCommission + '%' : '—'}</div></div>
               <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandApp.streamLocation || '—'}</div></div>
               ${isSeller && brandApp.sellerSiteAddress ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${brandApp.sellerSiteAddress}${brandApp.sellerSitePostalCode ? ', S' +brandApp.sellerSitePostalCode : ''}</div></div>` : ''}
+              ${isSeller && brandApp.transportationCovered ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Transportation</div><div class="value" style="color:#27ae60;font-weight:600;">Transportation fee covered by seller</div></div>` : ''}
               <div class="app-card-detail"><div class="label">Seller PIC</div><div class="value">${brandApp.sellerPicName || '—'}${brandApp.sellerPicMobile ? ' · ' + brandApp.sellerPicMobile : ''}</div></div>
               <div class="app-card-detail"><div class="label">Seller PIC Email</div><div class="value">${brandApp.sellerPicEmail || '—'}</div></div>
             </div>
@@ -4105,6 +4110,7 @@
                 <div class="app-card-detail-grid">
                   <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${s.streamLocation || '—'}</div></div>
                   ${(String(s.sellerSiteRequired) === 'true' || (s.streamLocation || '').trim().toLowerCase() === 'seller site') ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${s.sellerSiteAddress ? s.sellerSiteAddress + (s.sellerSitePostalCode ? ', S' +s.sellerSitePostalCode : '') : '—'}</div></div>` : ''}
+                  ${(String(s.sellerSiteRequired) === 'true' || (s.streamLocation || '').trim().toLowerCase() === 'seller site') && s.transportationCovered ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Transportation</div><div class="value" style="color:#27ae60;font-weight:600;">Transportation fee covered by seller</div></div>` : ''}
                   <div class="app-card-detail"><div class="label">Products Sponsored/Loaned</div><div class="value">${s.numProductsSponsored || '—'}</div></div>
                   <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(s.voucherTier)}</div></div>
                   <div class="app-card-detail"><div class="label">Brand Activation</div><div class="value">${String(s.hasPackageActivation) === 'true' ? 'Yes' : 'No'}</div></div>
@@ -4281,7 +4287,7 @@
               <div class="form-row single">
                 <div class="form-group">
                   <label class="form-label">Stream Location <span class="required">*</span></label>
-                  <select id="f-stream-location" class="form-select" onchange="var el=document.getElementById('seller-site-address-row');if(el)el.style.display=this.value==='Seller Site'?'block':'none';var ts=document.getElementById('seller-site-timeslots-row');if(ts)ts.style.display=this.value==='Seller Site'?'block':'none';if(this.value==='Seller Site'){var _m=document.getElementById('f-month')?.value;var _ssd=document.getElementById('f-ss-date');if(_ssd&&_m){var _ld=new Date(parseInt(_m.split('-')[0]),parseInt(_m.split('-')[1]),0).getDate();_ssd.min=_m+'-01';_ssd.max=_m+'-'+String(_ld).padStart(2,'0');if(!_ssd.value||_ssd.value.substring(0,7)!==_m)_ssd.value=_m+'-01';} updateSellerTimeslotsDisplay();}">
+                  <select id="f-stream-location" class="form-select" onchange="var el=document.getElementById('seller-site-address-row');if(el)el.style.display=this.value==='Seller Site'?'block':'none';var ts=document.getElementById('seller-site-timeslots-row');if(ts)ts.style.display=this.value==='Seller Site'?'block':'none';var tc=document.getElementById('transportation-covered-row');if(tc)tc.style.display=this.value==='Seller Site'?'block':'none';if(this.value==='Seller Site'){var _m=document.getElementById('f-month')?.value;var _ssd=document.getElementById('f-ss-date');if(_ssd&&_m){var _ld=new Date(parseInt(_m.split('-')[0]),parseInt(_m.split('-')[1]),0).getDate();_ssd.min=_m+'-01';_ssd.max=_m+'-'+String(_ld).padStart(2,'0');if(!_ssd.value||_ssd.value.substring(0,7)!==_m)_ssd.value=_m+'-01';} updateSellerTimeslotsDisplay();}">
                     <option value="Creator Site" ${d.streamLocation !== 'Seller Site' ? 'selected' : ''}>Creator Site</option>
                     <option value="Seller Site" ${d.streamLocation === 'Seller Site' ? 'selected' : ''}>Seller Site</option>
                   </select>
@@ -4342,6 +4348,12 @@
                     })()}
                   </div>
                 </div>
+              </div>
+              <div id="transportation-covered-row" style="display:${d.streamLocation === 'Seller Site' ? 'block' : 'none'};margin-top:12px;">
+                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+                  <input type="checkbox" id="f-transportation-covered" style="margin-top:2px;" ${d.transportationCovered ? 'checked' : ''}>
+                  <span style="font-size:14px;color:#333;">Seller will cover creators' round-trip transportation costs to and from the seller's site</span>
+                </label>
               </div>
             </div>
 
