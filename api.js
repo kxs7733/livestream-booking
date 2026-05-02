@@ -1066,7 +1066,6 @@ async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldSta
 
 async function sendRescheduleEmailToInternalTeam(creatorApp, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp) {
   const emails = await getInternalTeamEmails();
-  console.log('[sendRescheduleEmailToInternalTeam] emails:', emails);
   if (!emails.length) return;
   const oldSlotText = oldDate + (oldStartTime ? ' ' + oldStartTime : '') + (oldEndTime ? ' – ' + oldEndTime : '');
   const newSlotText = (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' – ' + creatorApp.streamEndTime : '');
@@ -1079,8 +1078,7 @@ async function sendRescheduleEmailToInternalTeam(creatorApp, oldDate, oldStartTi
     + '*This email was automatically generated. Please do not reply.';
   const [to, ...rest] = emails;
   const cc = rest.length ? rest.join(',') : null;
-  const result = await sendEmailViaGAS(to, subject, body, cc);
-  console.log('[sendRescheduleEmailToInternalTeam] sendEmailViaGAS result:', result);
+  await sendEmailViaGAS(to, subject, body, cc);
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
