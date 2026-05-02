@@ -147,6 +147,10 @@ router.post('/', async (req, res) => {
       const result = await uploadBriefFile(body.fileName, body.fileData, body.mimeType);
       return res.json(result);
     }
+    if (body && body.action === 'bulkAddBrandApplications') {
+      const result = await bulkAddBrandApplications(body.applications);
+      return res.json(result);
+    }
     res.json({ error: 'Unknown POST action' });
   } catch (err) {
     console.error('[POST /api]', err.message);
@@ -284,6 +288,12 @@ async function addAffiliate(data) {
 async function addBrandApplication(data) {
   await db.insert('brand_applications', data);
   return { success: true, data };
+}
+
+async function bulkAddBrandApplications(applications) {
+  if (!Array.isArray(applications) || applications.length === 0) return { error: 'No applications provided.' };
+  await db.insertMany('brand_applications', applications);
+  return { success: true, count: applications.length };
 }
 
 // ─── addCreatorApplication ────────────────────────────────────────────────────

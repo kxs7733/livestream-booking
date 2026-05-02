@@ -603,6 +603,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script>
     // ============================================
     // CONFIGURATION
@@ -709,6 +710,12 @@
       currentPageBrandAppIds: [],
       selectedCreatorAppIds: {},
       currentPageCreatorAppIds: [],
+      brandBehalfMenuOpen: false,
+      internalBulkUploadMode: false,
+      bulkUploadRows: [],
+      bulkUploadStep: 'upload',
+      bulkUploadEnrichValues: {},
+      bulkUploadTimeslots: {},
     };
 
     // ─── Contact defaults ─────────────────────────────────────────────────────
@@ -5991,6 +5998,435 @@
     // RENDER: Internal Dashboard
     // ========================
 
+    // ─── Bulk Upload: parse Excel ─────────────────────────────────────────────
+    const parseBulkExcelFile = (file) => {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (raw.length < 2) { showNotification('File is empty or has no data rows.', 'error'); return; }
+
+        // Row 1 = legend, Row 2 = headers, Row 3 = example (skip), Row 4+ = data
+        if (raw.length < 4) { showNotification('File has no data rows. Fill from row 4 onwards.', 'error'); return; }
+        const headers = raw[1].map(h => String(h).trim().toLowerCase().replace(/\s+/g, '_'));
+        const col = (name) => headers.indexOf(name);
+
+        const VALID_LOCATIONS    = ['creator site', 'seller site'];
+        const VALID_VOUCHER      = state.businessMappingValues.filter(r => r.type === 'VoucherTier' && String(r.active).toUpperCase() === 'ACTIVE').map(r => String(r.code).toUpperCase());
+        const VALID_ACTIVATION   = state.businessMappingValues.filter(r => r.type === 'BrandActivation' && String(r.active).toUpperCase() === 'ACTIVE').map(r => String(r.code).toUpperCase());
+        const VALID_SELLER_TYPES = ['beauty', 'electronics', 'f&b', 'health', 'home appliances | home & living', 'fashion', 'toys, kids & babies', 'others'];
+
+        const parsed = [];
+        for (let i = 3; i < raw.length; i++) {
+          const r = raw[i];
+          const get = (name) => String(r[col(name)] ?? '').trim();
+          if (r.every(c => String(c).trim() === '')) continue; // skip blank rows
+
+          const errors = [];
+          const enrichNeeds = { shopName: false, siteAddress: false, timeslots: false };
+
+          const shopId      = get('shop_id');
+          const month       = get('month');
+          const streamLoc   = get('stream_location');
+          const streamCount = get('stream_count');
+          const amsComm     = get('ams_commission');
+          const sellerType  = get('seller_type');
+          const numProds    = get('num_products_sponsored');
+          const hasPkg      = get('has_package_activation').toLowerCase();
+          const voucherTier = get('voucher_tier').toUpperCase();
+          const picName     = get('seller_pic_name');
+          const picMobile   = get('seller_pic_mobile');
+          const picEmail    = get('seller_pic_email');
+          const transCov    = get('transportation_covered').toLowerCase();
+          const brandActType = get('brand_activation_type').toUpperCase();
+          const prefDate    = get('preferred_date');
+          const brief       = get('livestream_brief');
+
+          if (!shopId)      errors.push('shop_id is required');
+          if (!month)       errors.push('month is required');
+          else if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) errors.push('month must be in YYYY-MM format (e.g. 2026-06)');
+          if (!streamLoc)   errors.push('stream_location is required');
+          else if (!VALID_LOCATIONS.includes(streamLoc.toLowerCase())) errors.push(`stream_location must be "Creator Site" or "Seller Site"`);
+          if (!streamCount || isNaN(parseInt(streamCount, 10)) || parseInt(streamCount, 10) < 1) errors.push('stream_count must be a positive integer');
+          if (!amsComm || isNaN(parseFloat(amsComm))) errors.push('ams_commission must be a number');
+          if (!sellerType)  errors.push('seller_type is required');
+          else if (!VALID_SELLER_TYPES.includes(sellerType.toLowerCase())) errors.push(`seller_type "${sellerType}" is not a valid category`);
+          if (!numProds || isNaN(parseInt(numProds, 10))) errors.push('num_products_sponsored must be a number');
+          if (hasPkg !== 'true' && hasPkg !== 'false') errors.push('has_package_activation must be true or false');
+          if (!VALID_VOUCHER.includes(voucherTier)) errors.push(`voucher_tier must be T1 or T2`);
+          if (!picName)     errors.push('seller_pic_name is required');
+          if (!picMobile)   errors.push('seller_pic_mobile is required');
+          else if (!/^\d{8,15}$/.test(picMobile.replace(/\s/g, ''))) errors.push('seller_pic_mobile must be digits only, 8–15 characters (e.g. 6591234567)');
+          if (!picEmail)    errors.push('seller_pic_email is required');
+          else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(picEmail)) errors.push('seller_pic_email must be a valid email address');
+          if (streamLoc.toLowerCase() === 'seller site' && transCov !== 'true' && transCov !== 'false') errors.push('transportation_covered must be true or false for Seller Site');
+          if (hasPkg === 'true') {
+            if (!VALID_ACTIVATION.includes(brandActType)) errors.push('brand_activation_type must be SBD, BBD, BBF, or BPL when has_package_activation is true');
+            if (!prefDate) errors.push('preferred_date is required when has_package_activation is true');
+            else if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(prefDate) || isNaN(new Date(prefDate).getTime())) errors.push('preferred_date must be a valid date in YYYY-MM-DD format (e.g. 2026-06-15)');
+          }
+
+          if (errors.length > 0) {
+            parsed.push({ _rowNum: i + 1, _status: 'error', _errors: errors, shopId });
+            continue;
+          }
+
+          // Shop name lookup
+          let shopName = '';
+          let siteAddress = '';
+          let sitePostalCode = '';
+          const seller = state.brands.find(s => String(s.id) === String(shopId));
+          const managed = state.managedSellers.find(s => String(s.shopId) === String(shopId));
+
+          if (seller) {
+            shopName = seller.name || '';
+            siteAddress = seller.siteAddress || '';
+            sitePostalCode = seller.sitePostalCode || '';
+          } else if (managed) {
+            shopName = managed.shopName || managed.shop_name || '';
+          } else {
+            errors.push('shop_id not found in sellers or managed sellers — row blocked');
+            parsed.push({ _rowNum: i + 1, _status: 'error', _errors: errors, shopId });
+            continue;
+          }
+
+          if (!shopName) enrichNeeds.shopName = true;
+          const isSellerSite = streamLoc.toLowerCase() === 'seller site';
+          if (isSellerSite && (!siteAddress || !sitePostalCode)) enrichNeeds.siteAddress = true;
+          if (isSellerSite) enrichNeeds.timeslots = true;
+
+          const status = (enrichNeeds.shopName || enrichNeeds.siteAddress || enrichNeeds.timeslots) ? 'enrich' : 'valid';
+          parsed.push({
+            _rowNum: i + 1, _status: status, _errors: [], _enrichNeeds: enrichNeeds,
+            shopId, shopName, brandId: shopId, brandName: shopName,
+            month, streamLocation: streamLoc, streamCount: parseInt(streamCount, 10),
+            amsCommission: parseFloat(amsComm), sellerType, numProductsSponsored: parseInt(numProds, 10),
+            hasPackageActivation: hasPkg === 'true', voucherTier,
+            sellerPicName: picName, sellerPicMobile: picMobile, sellerPicEmail: picEmail,
+            transportationCovered: isSellerSite ? transCov === 'true' : false,
+            brandActivationType: hasPkg === 'true' ? brandActType : '',
+            preferredDate: hasPkg === 'true' ? prefDate : '',
+            livestreamBrief: brief,
+            sellerSiteRequired: isSellerSite,
+            sellerSiteAddress: siteAddress,
+            sellerSitePostalCode: sitePostalCode,
+            sellerSiteTimeslots: '[]',
+            sellerPdpaConsentGiven: true, bundleDealsAgreed: true,
+            loanedProductReturnCostsAgreed: true, creatorAssignmentAgreed: true,
+            productNominationsConfirmed: true,
+            status: 'pending',
+          });
+        }
+
+        state.bulkUploadRows = parsed;
+        state.bulkUploadStep = 'preview';
+        state.bulkUploadEnrichValues = {};
+        state.bulkUploadTimeslots = {};
+        render();
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    // ─── Bulk Upload: confirm & submit ────────────────────────────────────────
+    const handleBulkUploadConfirm = async () => {
+      const enrichValues = state.bulkUploadEnrichValues;
+      const timeslots    = state.bulkUploadTimeslots;
+
+      // Merge enrich values into rows
+      const toSubmit = state.bulkUploadRows
+        .filter(r => r._status === 'valid' || r._status === 'enrich')
+        .map((r, idx) => {
+          const ev = enrichValues[idx] || {};
+          const ts = timeslots[idx] || [];
+          const shopName = ev.shopName !== undefined ? ev.shopName.trim() : r.shopName;
+          const siteAddress = ev.siteAddress !== undefined ? ev.siteAddress.trim() : r.sellerSiteAddress;
+          const sitePostal  = ev.sitePostal  !== undefined ? ev.sitePostal.trim()  : r.sellerSitePostalCode;
+          return {
+            ...r,
+            id: generateId(),
+            shopName, brandName: shopName,
+            sellerSiteAddress: siteAddress,
+            sellerSitePostalCode: sitePostal,
+            sellerSiteTimeslots: r.sellerSiteRequired ? JSON.stringify(ts) : '[]',
+            createdAt: new Date().toISOString(),
+          };
+        });
+
+      if (toSubmit.length === 0) { showNotification('No valid rows to submit.', 'error'); return; }
+
+      // Validate enrich completeness
+      for (const row of toSubmit) {
+        if (row._enrichNeeds?.shopName && !row.shopName) { showNotification(`Row ${row._rowNum}: Shop name is still empty.`, 'error'); return; }
+        if (row._enrichNeeds?.siteAddress && (!row.sellerSiteAddress || !row.sellerSitePostalCode)) { showNotification(`Row ${row._rowNum}: Seller site address is still incomplete.`, 'error'); return; }
+        if (row._enrichNeeds?.timeslots) {
+          const ts = JSON.parse(row.sellerSiteTimeslots || '[]');
+          if (!ts.length) { showNotification(`Row ${row._rowNum}: At least one seller site timeslot is required.`, 'error'); return; }
+          if (ts.length !== parseInt(row.streamCount, 10)) { showNotification(`Row ${row._rowNum}: Must have exactly ${row.streamCount} timeslot${row.streamCount !== 1 ? 's' : ''} (${ts.length} added).`, 'error'); return; }
+        }
+      }
+
+      // Strip internal _* fields before sending
+      const clean = toSubmit.map(r => {
+        const { _rowNum, _status, _errors, _enrichNeeds, ...rest } = r;
+        return rest;
+      });
+
+      state.isLoading = true; render();
+      const postRes = await fetch('/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bulkAddBrandApplications', applications: clean }),
+      });
+      const result = await postRes.json();
+      state.isLoading = false;
+      if (result?.success) {
+        clean.forEach(a => state.brandApplications.push(a));
+        rebuildInternalDisplayArrays();
+        state.internalBulkUploadMode = false;
+        state.bulkUploadRows = [];
+        state.bulkUploadStep = 'upload';
+        showNotification(`${result.count} brand application${result.count !== 1 ? 's' : ''} created successfully.`);
+      } else {
+        showNotification(result?.error || 'Failed to create applications. Please try again.', 'error');
+      }
+      render();
+    };
+
+    // ─── Bulk Upload: add/remove seller site timeslot per row ────────────────
+    const addBulkSellerSiteTimeslot = (rowIdx) => {
+      const row = state.bulkUploadRows[rowIdx];
+      const month = (state.bulkUploadEnrichValues[rowIdx]?.month) || row?.month || '';
+      const streamCount = parseInt(row?.streamCount, 10) || 0;
+      const dateVal = document.getElementById(`f-bss-date-${rowIdx}`)?.value;
+      const hourVal = document.getElementById(`f-bss-hour-${rowIdx}`)?.value || '00';
+      const minVal  = document.getElementById(`f-bss-min-${rowIdx}`)?.value  || '00';
+      if (!dateVal) { showNotification('Please select a date', 'error'); return; }
+      if (streamCount < 1) { showNotification('Stream count is missing for this row', 'error'); return; }
+      const slots = state.bulkUploadTimeslots[rowIdx] || [];
+      if (slots.length >= streamCount) {
+        showNotification(`You can only add ${streamCount} timeslot${streamCount !== 1 ? 's' : ''} for this row`, 'error');
+        return;
+      }
+      if (month && dateVal.substring(0, 7) !== month) {
+        showNotification(`Timeslot must be within ${formatMonth(month)}`, 'error');
+        return;
+      }
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+      if (new Date(dateVal) < tomorrow) {
+        showNotification('Timeslot date must be tomorrow or later', 'error');
+        return;
+      }
+      const startMins = parseInt(hourVal) * 60 + parseInt(minVal);
+      const endTotalMins = startMins + 120;
+      const endHour = String(Math.floor(endTotalMins / 60) % 24).padStart(2, '0');
+      const endMin  = String(endTotalMins % 60).padStart(2, '0');
+      const endDate = endTotalMins >= 1440
+        ? (() => { const d = new Date(dateVal + 'T00:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().substring(0, 10); })()
+        : dateVal;
+      const newSlot = { id: generateId(), date: dateVal, startTime: `${hourVal}:${minVal}`, endDate, endTime: `${endHour}:${endMin}` };
+      const conflict = slots.find(s => timeslotsOverlap(newSlot, s));
+      if (conflict) {
+        showNotification(`This overlaps with ${formatDate(conflict.date)} · ${formatTime(conflict.startTime)}–${formatTime(conflict.endTime)} already in your list`, 'error');
+        return;
+      }
+      const shopId = row?.shopId || '';
+      const existingConflict = (state.brandApplications || [])
+        .filter(a => String(a.sellerSiteRequired) === 'true' && a.status !== 'rejected' && a.status !== 'cancelled' && Array.isArray(a.sellerSiteTimeslots) && (a.shopId || a.brandId) === shopId)
+        .flatMap(a => a.sellerSiteTimeslots)
+        .find(s => timeslotsOverlap(newSlot, s));
+      if (existingConflict) {
+        showNotification(`This overlaps with ${formatDate(existingConflict.date)} · ${formatTime(existingConflict.startTime)}–${formatTime(existingConflict.endTime)} in another brand application`, 'error');
+        return;
+      }
+      if (!state.bulkUploadTimeslots[rowIdx]) state.bulkUploadTimeslots[rowIdx] = [];
+      state.bulkUploadTimeslots[rowIdx].push(newSlot);
+      render();
+    };
+    const removeBulkSellerSiteTimeslot = (rowIdx, tsIdx) => {
+      state.bulkUploadTimeslots[rowIdx].splice(tsIdx, 1);
+      render();
+    };
+
+    // ─── Bulk Upload: panel renderer ─────────────────────────────────────────
+    const renderBulkUploadPanel = () => {
+      const step = state.bulkUploadStep;
+      const rows = state.bulkUploadRows;
+      const validCount  = rows.filter(r => r._status === 'valid').length;
+      const enrichCount = rows.filter(r => r._status === 'enrich').length;
+      const errorCount  = rows.filter(r => r._status === 'error').length;
+
+      let body = '';
+
+      if (step === 'upload') {
+        body = `
+          <div style="text-align:center;padding:24px 0 8px;">
+            <div style="font-size:32px;margin-bottom:8px;">📤</div>
+            <div style="font-size:14px;color:#555;margin-bottom:20px;">Upload an Excel file to create multiple brand applications at once.</div>
+            <a href="/bulk_brand_application_upload_template.xlsx" download style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#f0f7ff;border:1px solid #b3d4f5;border-radius:8px;font-size:13px;color:#1a56db;text-decoration:none;font-weight:500;margin-bottom:20px;">📥 Download Template</a>
+            <div>
+              <input type="file" id="bulk-upload-input" accept=".xlsx,.xls" style="display:none;" onchange="parseBulkExcelFile(this.files[0]);">
+              <button onclick="document.getElementById('bulk-upload-input').click();" style="padding:10px 24px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Choose Excel File</button>
+            </div>
+          </div>`;
+      }
+
+      if (step === 'preview') {
+        const rowsHtml = rows.map((r, idx) => {
+          if (r._status === 'error') {
+            return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;margin-bottom:8px;">
+              <span style="color:#dc2626;font-size:16px;flex-shrink:0;">✗</span>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:#dc2626;">Row ${r._rowNum}${r.shopId ? ` — Shop ID ${r.shopId}` : ''}</div>
+                ${r._errors.map(e => `<div style="font-size:12px;color:#b91c1c;margin-top:2px;">• ${e}</div>`).join('')}
+              </div>
+            </div>`;
+          }
+          if (r._status === 'enrich') {
+            const needs = Object.entries(r._enrichNeeds).filter(([,v])=>v).map(([k])=>k === 'shopName' ? 'shop name' : k === 'siteAddress' ? 'seller site address' : 'timeslots').join(', ');
+            return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:8px;">
+              <span style="color:#d97706;font-size:16px;flex-shrink:0;">⚠</span>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:#92400e;">Row ${r._rowNum} — ${r.shopName || `Shop ID ${r.shopId}`} · ${r.month} · ${r.streamLocation}</div>
+                <div style="font-size:12px;color:#b45309;margin-top:2px;">Needs: ${needs}</div>
+              </div>
+            </div>`;
+          }
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;margin-bottom:8px;">
+            <span style="color:#16a34a;font-size:16px;">✓</span>
+            <div style="font-size:13px;color:#166534;"><strong>${r.shopName}</strong> · ${r.month} · ${r.streamLocation} · ${r.streamCount} stream${r.streamCount !== 1 ? 's' : ''}</div>
+          </div>`;
+        }).join('');
+
+        const canProceed = validCount + enrichCount > 0;
+        const nextLabel = enrichCount > 0 ? `Fill Missing Info (${enrichCount} rows) →` : `Confirm & Create (${validCount}) →`;
+        body = `
+          <div style="margin-bottom:16px;">
+            <div style="font-size:13px;color:#555;margin-bottom:12px;">
+              <strong>${rows.length}</strong> rows parsed —
+              <span style="color:#16a34a;font-weight:600;">${validCount} ready</span>${enrichCount ? ` · <span style="color:#d97706;font-weight:600;">${enrichCount} need info</span>` : ''}${errorCount ? ` · <span style="color:#dc2626;font-weight:600;">${errorCount} blocked</span>` : ''}
+            </div>
+            <div style="max-height:320px;overflow-y:auto;">${rowsHtml}</div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="state.bulkUploadStep='upload'; render();" style="padding:8px 18px;background:#fff;border:1px solid #ddd;border-radius:8px;font-size:13px;cursor:pointer;">← Back</button>
+            ${canProceed ? `<button onclick="state.bulkUploadStep='${enrichCount > 0 ? 'enrich' : 'confirm'}'; render();" style="padding:8px 20px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">${nextLabel}</button>` : ''}
+          </div>`;
+      }
+
+      if (step === 'enrich') {
+        const enrichRows = rows.map((r, idx) => ({ r, idx })).filter(({ r }) => r._status === 'enrich');
+        const enrichHtml = enrichRows.map(({ r, idx }) => {
+          const ev = state.bulkUploadEnrichValues[idx] || {};
+          const ts = state.bulkUploadTimeslots[idx] || [];
+          let fields = `<div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:10px;">Row ${r._rowNum} — Shop ID ${r.shopId} · ${r.month} · ${r.streamLocation}</div>`;
+
+          if (r._enrichNeeds.shopName) {
+            fields += `<div style="margin-bottom:10px;">
+              <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Shop Name <span style="color:#dc2626;">*</span></label>
+              <input type="text" class="form-input" style="font-size:13px;padding:8px 12px;width:100%;max-width:320px;" placeholder="Enter shop name"
+                value="${ev.shopName !== undefined ? ev.shopName : r.shopName}"
+                oninput="state.bulkUploadEnrichValues[${idx}] = state.bulkUploadEnrichValues[${idx}] || {}; state.bulkUploadEnrichValues[${idx}].shopName = this.value;">
+            </div>`;
+          }
+
+          if (r._enrichNeeds.siteAddress) {
+            fields += `<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:200px;">
+                <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Seller Site Address <span style="color:#dc2626;">*</span></label>
+                <input type="text" class="form-input" style="font-size:13px;padding:8px 12px;width:100%;" placeholder="Street address"
+                  value="${ev.siteAddress !== undefined ? ev.siteAddress : r.sellerSiteAddress}"
+                  oninput="state.bulkUploadEnrichValues[${idx}] = state.bulkUploadEnrichValues[${idx}] || {}; state.bulkUploadEnrichValues[${idx}].siteAddress = this.value;">
+              </div>
+              <div style="width:120px;">
+                <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">Postal Code <span style="color:#dc2626;">*</span></label>
+                <input type="text" class="form-input" style="font-size:13px;padding:8px 12px;width:100%;" placeholder="6 digits" maxlength="6"
+                  value="${ev.sitePostal !== undefined ? ev.sitePostal : r.sellerSitePostalCode}"
+                  oninput="state.bulkUploadEnrichValues[${idx}] = state.bulkUploadEnrichValues[${idx}] || {}; state.bulkUploadEnrichValues[${idx}].sitePostal = this.value;">
+              </div>
+            </div>`;
+          }
+
+          if (r._enrichNeeds.timeslots) {
+            const month = r.month || '';
+            const streamCount = parseInt(r.streamCount, 10) || 0;
+            const [yr, mo] = month ? month.split('-').map(Number) : [0, 0];
+            const lastDay = month ? new Date(yr, mo, 0).getDate() : 31;
+            const minDate = month ? `${month}-01` : '';
+            const maxDate = month ? `${month}-${String(lastDay).padStart(2,'0')}` : '';
+            const hours = Array.from({length:24},(_,h)=>String(h).padStart(2,'0'));
+            const chipsHtml = ts.length > 0
+              ? ts.map((t, tsIdx) => `
+                  <div style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#fff0f0;border:1px solid #fcddd4;border-radius:20px;font-size:13px;color:#333;margin-bottom:6px;">
+                    <span>📅 ${formatDate(t.date)} · ${formatTime(t.startTime)}–${formatTime(t.endTime)}</span>
+                    <button type="button" onclick="removeBulkSellerSiteTimeslot(${idx}, ${tsIdx})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:15px;line-height:1;padding:0 0 0 4px;font-weight:700;">✕</button>
+                  </div>`).join('')
+              : '<span style="font-size:13px;color:#999;">No timeslots added yet.</span>';
+            const countColor = ts.length > 0 && ts.length === streamCount ? '#27ae60' : '#e67e22';
+            fields += `<div style="margin-bottom:10px;">
+              <label style="font-size:12px;color:#555;display:block;margin-bottom:6px;">Seller Site Timeslots <span style="color:#dc2626;">*</span> <span style="font-size:11px;color:#888;">(each slot is fixed at 2 hours)</span></label>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;min-height:34px;margin-bottom:8px;">${chipsHtml}</div>
+              <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:${countColor};">${ts.length} / ${streamCount} timeslots added</div>
+              <div style="background:#f9f9f9;border-radius:8px;padding:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:12px;font-weight:600;color:#555;white-space:nowrap;">Add a slot:</span>
+                <input type="date" id="f-bss-date-${idx}" class="form-input" style="flex:1;min-width:130px;font-size:12px;padding:6px 10px;" ${minDate ? `min="${minDate}" max="${maxDate}" value="${minDate}"` : ''}>
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  <select id="f-bss-hour-${idx}" class="form-input" style="width:68px;font-size:12px;padding:6px 4px;">
+                    ${hours.map(h=>`<option value="${h}">${h}</option>`).join('')}
+                  </select>
+                  <span style="font-weight:700;color:#888;">:</span>
+                  <select id="f-bss-min-${idx}" class="form-input" style="width:68px;font-size:12px;padding:6px 4px;">
+                    <option value="00">00</option>
+                    <option value="30">30</option>
+                  </select>
+                </div>
+                <button type="button" class="btn-secondary" onclick="addBulkSellerSiteTimeslot(${idx})" style="font-size:12px;white-space:nowrap;flex-shrink:0;">+ Add</button>
+              </div>
+            </div>`;
+          }
+
+          return `<div style="padding:16px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;">${fields}</div>`;
+        }).join('');
+
+        body = `
+          <div style="margin-bottom:16px;max-height:400px;overflow-y:auto;">${enrichHtml}</div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="state.bulkUploadStep='preview'; render();" style="padding:8px 18px;background:#fff;border:1px solid #ddd;border-radius:8px;font-size:13px;cursor:pointer;">← Back</button>
+            <button onclick="state.bulkUploadStep='confirm'; render();" style="padding:8px 20px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Review & Confirm →</button>
+          </div>`;
+      }
+
+      if (step === 'confirm') {
+        const submitRows = rows.filter(r => r._status === 'valid' || r._status === 'enrich');
+        const summaryHtml = submitRows.map((r, idx) => {
+          const ev = state.bulkUploadEnrichValues[idx] || {};
+          const name = ev.shopName || r.shopName || `Shop ID ${r.shopId}`;
+          return `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid #f0f0f0;color:#333;">${name} · ${r.month} · ${r.streamLocation} · ${r.streamCount} stream${r.streamCount !== 1 ? 's' : ''}</div>`;
+        }).join('');
+        body = `
+          <div style="margin-bottom:16px;">
+            <div style="font-size:13px;color:#555;margin-bottom:12px;">Creating <strong>${submitRows.length}</strong> brand application${submitRows.length !== 1 ? 's' : ''} as <strong>Pending</strong>:</div>
+            <div style="max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:8px 12px;">${summaryHtml}</div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="state.bulkUploadStep='${enrichCount > 0 ? 'enrich' : 'preview'}'; render();" style="padding:8px 18px;background:#fff;border:1px solid #ddd;border-radius:8px;font-size:13px;cursor:pointer;">← Back</button>
+            <button onclick="handleBulkUploadConfirm();" style="padding:8px 20px;background:#27ae60;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">✓ Confirm & Create</button>
+          </div>`;
+      }
+
+      return `
+        <div style="background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:20px;margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div style="font-size:15px;font-weight:700;color:#222;">📤 Bulk Upload Brand Applications</div>
+            <button onclick="state.internalBulkUploadMode=false; state.bulkUploadRows=[]; state.bulkUploadStep='upload'; render();" style="padding:4px 12px;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:13px;cursor:pointer;color:#555;">✕ Close</button>
+          </div>
+          ${body}
+        </div>`;
+    };
+
     const renderInternalDashboard = () => {
       const displayBrandApps = state.internalDisplayBrandApps || [];
       const displayCreatorApps = state.internalDisplayCreatorApps || [];
@@ -6027,7 +6463,15 @@
           </div>
 
           <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;position:relative;">
-            <button onclick="startInternalBrandApply()" style="padding:9px 18px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">+ Apply on Behalf of Brand</button>
+            <div style="position:relative;" data-brand-behalf-menu>
+              <button onclick="state.brandBehalfMenuOpen = !state.brandBehalfMenuOpen; render();" style="padding:9px 18px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">+ Apply on Behalf of Brand ${state.brandBehalfMenuOpen ? '▲' : '▼'}</button>
+              ${state.brandBehalfMenuOpen ? `
+                <div style="position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #dfe6e9;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:100;min-width:180px;overflow:hidden;">
+                  <button onclick="state.brandBehalfMenuOpen=false; startInternalBrandApply();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">📝 Single Create</button>
+                  <button onclick="state.brandBehalfMenuOpen=false; state.internalBulkUploadMode=true; state.bulkUploadStep='upload'; state.bulkUploadRows=[]; state.bulkUploadEnrichValues={}; state.bulkUploadTimeslots={}; render();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;">📤 Mass Create</button>
+                </div>
+              ` : ''}
+            </div>
             <button onclick="${state.internalCreatorPickerMode ? 'cancelInternalCreatorPicker()' : 'startInternalCreatorPicker()'}" style="padding:9px 18px;background:${state.internalCreatorPickerMode ? '#636e72' : '#6c5ce7'};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">${state.internalCreatorPickerMode ? '✕ Cancel' : '+ Apply on Behalf of Creator'}</button>
             <div style="position:relative;" data-admin-menu>
               <button onclick="state.adminMenuOpen = !state.adminMenuOpen; render();" style="padding:9px 18px;background:#636e72;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">⚙️ Admin ${state.adminMenuOpen ? '▲' : '▼'}</button>
@@ -6334,6 +6778,7 @@
 
     // Internal: Brand Applications
     const renderInternalBrandApps = () => {
+      const bulkPanel = state.internalBulkUploadMode ? renderBulkUploadPanel() : '';
       const all = state.internalDisplayBrandApps || filterBrandAppsByDisplayWindow(state.brandApplications);
       const sf = state.brandAppStatusFilter;
       let filtered = sf ? all.filter(a => a.status === sf) : all;
@@ -6413,10 +6858,10 @@
       `;
 
       if (all.length === 0) {
-        return filterBar + `<div class="empty-state"><p style="color:#888;">No brand applications yet</p></div>`;
+        return bulkPanel + filterBar + `<div class="empty-state"><p style="color:#888;">No brand applications yet</p></div>`;
       }
       if (filtered.length === 0) {
-        return filterBar + `<div class="empty-state"><p style="color:#888;">No ${sf} applications match filters</p></div>`;
+        return bulkPanel + filterBar + `<div class="empty-state"><p style="color:#888;">No ${sf || 'matching'} applications match filters</p></div>`;
       }
 
       const sorted = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -6463,7 +6908,7 @@
         </div>
       `;
 
-      return filterBar + brandBulkActionBar + paginationBar + paginated.map(app => {
+      return bulkPanel + filterBar + brandBulkActionBar + paginationBar + paginated.map(app => {
         const isExpanded = state.expandedCards['int-' + app.id];
         return `
           <div class="app-card">
