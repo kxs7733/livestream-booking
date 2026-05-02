@@ -4350,10 +4350,12 @@
                 </div>
               </div>
               <div id="transportation-covered-row" style="display:${d.streamLocation === 'Seller Site' ? 'block' : 'none'};margin-top:12px;">
-                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-                  <input type="checkbox" id="f-transportation-covered" style="margin-top:2px;" ${d.transportationCovered ? 'checked' : ''}>
-                  <span style="font-size:14px;color:#333;">Seller will cover creators' round-trip transportation costs to and from the seller's site</span>
-                </label>
+                <div class="form-checkbox-row" onclick="this.querySelector('input').click()">
+                  <input type="checkbox" id="f-transportation-covered" onclick="event.stopPropagation()" ${d.transportationCovered ? 'checked' : ''}>
+                  <div>
+                    <div class="form-checkbox-label">Seller will cover creators' round-trip transportation costs to and from the seller's site</div>
+                  </div>
+                </div>
               </div>
             </div>
 
