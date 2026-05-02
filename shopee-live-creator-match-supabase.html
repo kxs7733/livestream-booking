@@ -6781,6 +6781,7 @@
                 <div class="app-card-detail-grid">
                   <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${brandApp?.streamLocation || '—'}</div></div>
                   ${(String(brandApp?.sellerSiteRequired) === 'true' || String(brandApp?.streamLocation).trim().toLowerCase() === 'seller site') ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${brandApp?.sellerSiteAddress ? brandApp.sellerSiteAddress + (brandApp.sellerSitePostalCode ? ', S' +brandApp.sellerSitePostalCode : '') : '—'}</div></div>` : ''}
+                  ${(String(brandApp?.sellerSiteRequired) === 'true' || String(brandApp?.streamLocation).trim().toLowerCase() === 'seller site') && brandApp?.transportationCovered ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Transportation</div><div class="value">Transportation fee covered by seller</div></div>` : ''}
                   <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${brandApp?.amsCommission ? brandApp.amsCommission + '%' : '—'}</div></div>
                   <div class="app-card-detail"><div class="label">Products Sponsored/Loaned</div><div class="value">${brandApp?.numProductsSponsored || '—'}</div></div>
                   <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(brandApp?.voucherTier)}</div></div>
@@ -7005,6 +7006,7 @@
                   <div class="app-card-detail-grid">
                     <div class="app-card-detail"><div class="label">Stream Location</div><div class="value">${s.streamLocation || '—'}</div></div>
                     ${(String(s.sellerSiteRequired) === 'true' || s.streamLocation === 'Seller Site') ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Seller Site Address</div><div class="value">${s.sellerSiteAddress ? s.sellerSiteAddress + (s.sellerSitePostalCode ? ', S' +s.sellerSitePostalCode : '') : '—'}</div></div>` : ''}
+                    ${(String(s.sellerSiteRequired) === 'true' || s.streamLocation === 'Seller Site') && s.transportationCovered ? `<div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Transportation</div><div class="value">Transportation fee covered by seller</div></div>` : ''}
                     <div class="app-card-detail"><div class="label">AMS Commission</div><div class="value">${s.amsCommission ? s.amsCommission + '%' : '—'}</div></div>
                     <div class="app-card-detail"><div class="label">Products Sponsored/Loaned</div><div class="value">${s.numProductsSponsored || '—'}</div></div>
                       <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Voucher Tier</div><div class="value">${getVoucherTierLabel(s.voucherTier)}</div></div>
