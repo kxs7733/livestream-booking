@@ -4648,6 +4648,7 @@
                   ${String(app.sellerSiteRequired) === 'true' ? '<div class="app-card-meta-item" style="color:#e67e22;">📍 Seller site stream only</div>' : ''}
                 </div>
                 ${String(app.sellerSiteRequired) === 'true' && app.sellerSitePostalCode ? `<div style="margin-top:8px;font-size:13px;color:#888;">📍 <strong>Seller Site Postal Code:</strong> ${app.sellerSitePostalCode}</div>` : ''}
+                ${String(app.sellerSiteRequired) === 'true' && app.transportationCovered ? `<div style="margin-top:8px;font-size:13px;color:#888;">🚗 Transportation fee covered by seller</div>` : ''}
                 ${String(app.hasPackageActivation) === 'true' ? `<div style="margin-top:8px;font-size:13px;color:#888;">🎯 <strong>Brand Activation:</strong> ${getBrandActivationLabel(app.brandActivationType)}${app.preferredDate ? ` · <strong>Activation Date:</strong> ${formatDate(app.preferredDate)}` : ''}</div>` : ''}
                 <div style="margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                   ${alreadyApplied
