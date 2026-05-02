@@ -2170,26 +2170,33 @@
 
     const handleSaveBrandAppEdit = async (appId) => {
       if (state.isSubmitting) return;
+      const app = state.brandApplications.find(a => a.id === appId);
+      const isSellerSite = String(app?.sellerSiteRequired) === 'true';
       const streamCountEl = document.getElementById('edit-stream-count-' + appId);
       const amsEl = document.getElementById('edit-ams-' + appId);
-      if (!streamCountEl || !amsEl) return;
-      const streamCount = streamCountEl.value.trim();
+      if (!amsEl) return;
       const amsCommission = amsEl.value.trim();
-      if (!streamCount || isNaN(streamCount) || parseInt(streamCount) < 1) {
-        showNotification('Please enter a valid number of livestreams', 'error'); return;
+      if (!isSellerSite) {
+        if (!streamCountEl) return;
+        const streamCount = streamCountEl.value.trim();
+        if (!streamCount || isNaN(streamCount) || parseInt(streamCount) < 1) {
+          showNotification('Please enter a valid number of livestreams', 'error'); return;
+        }
       }
       if (amsCommission === '' || isNaN(amsCommission)) {
         showNotification('Please enter a valid AMS commission', 'error'); return;
       }
+      const updates = { amsCommission: parseFloat(amsCommission) };
+      if (!isSellerSite && streamCountEl) updates.streamCount = parseInt(streamCountEl.value.trim());
       state.isSubmitting = true;
       render();
-      const result = await apiCall('updateBrandApplication', { id: appId, data: { streamCount: parseInt(streamCount), amsCommission: parseFloat(amsCommission) } });
+      const result = await apiCall('updateBrandApplication', { id: appId, data: updates });
       state.isSubmitting = false;
       if (!result || !result.success) {
         showNotification(result?.error || 'Failed to save. Please try again.', 'error');
         render(); return;
       }
-      updateStateBA(appId, { streamCount: parseInt(streamCount), amsCommission: parseFloat(amsCommission) });
+      updateStateBA(appId, updates);
       state.editingBrandApp = null;
       showNotification('Brand application updated');
       render();
@@ -6535,10 +6542,10 @@
               <div style="margin-top:12px;padding:14px 16px;background:#f8f5ff;border-radius:8px;border:1px solid #d4c5f9;">
                 <div style="font-size:13px;font-weight:600;color:#6c5ce7;margin-bottom:12px;">Edit Fields</div>
                 <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
-                  <div>
+                  ${String(app.sellerSiteRequired) !== 'true' ? `<div>
                     <label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">Number of Livestreams</label>
                     <input type="number" id="edit-stream-count-${app.id}" class="form-input" style="width:160px;font-size:14px;padding:8px 12px;" value="${app.streamCount}" min="1">
-                  </div>
+                  </div>` : ''}
                   <div>
                     <label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">AMS Commission (%)</label>
                     <input type="number" id="edit-ams-${app.id}" class="form-input" style="width:160px;font-size:14px;padding:8px 12px;" value="${app.amsCommission}" step="0.1" min="0">
