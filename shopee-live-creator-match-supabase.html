@@ -954,11 +954,11 @@
       ).length;
     };
 
-    const countCreatorConfirmedSlotsForShopMonth = (creatorShopId, shopId, month) => {
+    const countCreatorConfirmedSlotsForShopMonth = (creatorId, shopId, month) => {
       return state.creatorApplications.filter(ca => {
-        if (ca.creatorShopId !== creatorShopId || ca.status !== 'approved') return false;
+        if (String(ca.creatorId) !== String(creatorId) || ca.status !== 'approved') return false;
         const ba = state.brandApplications.find(b => b.id === ca.brandApplicationId);
-        return ba && ba.shopId === shopId && ba.month === month;
+        return ba && String(ba.shopId) === String(shopId) && ba.month === month;
       }).length;
     };
 
@@ -7176,7 +7176,7 @@
         const displayPhone = '+' + phoneParsed.code + ' ' + phoneParsed.number;
         const slotsLeft = brandApp ? (brandApp.streamCount - countTakenSlots(brandApp.id)) : 0;
         const pendingOrApprovedCount = countPendingOrApprovedApps(row.brandApplicationId);
-        const confirmedSlotsThisMonth = countCreatorConfirmedSlotsForShopMonth(row.creatorShopId, brandApp?.shopId, brandApp?.month);
+        const confirmedSlotsThisMonth = countCreatorConfirmedSlotsForShopMonth(row.creatorId, brandApp?.shopId, brandApp?.month);
         return `
           <div class="app-card creator-app">
             <div class="app-card-header">
