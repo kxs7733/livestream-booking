@@ -947,6 +947,14 @@
       ).length;
     };
 
+    const countCreatorConfirmedSlotsForShopMonth = (creatorShopId, shopId, month) => {
+      return state.creatorApplications.filter(ca => {
+        if (ca.creatorShopId !== creatorShopId || ca.status !== 'approved') return false;
+        const ba = state.brandApplications.find(b => b.id === ca.brandApplicationId);
+        return ba && ba.shopId === shopId && ba.month === month;
+      }).length;
+    };
+
     const formatMonth = (monthStr) => {
       if (!monthStr) return '—';
       const [year, month] = monthStr.split('-');
@@ -6723,6 +6731,7 @@
         const displayPhone = '+' + phoneParsed.code + ' ' + phoneParsed.number;
         const slotsLeft = brandApp ? (brandApp.streamCount - countTakenSlots(brandApp.id)) : 0;
         const pendingOrApprovedCount = countPendingOrApprovedApps(row.brandApplicationId);
+        const confirmedSlotsThisMonth = countCreatorConfirmedSlotsForShopMonth(row.creatorShopId, brandApp?.shopId, brandApp?.month);
         return `
           <div class="app-card creator-app">
             <div class="app-card-header">
@@ -6746,6 +6755,7 @@
                 <div style="font-size:12px;color:#888;display:flex;gap:16px;flex-wrap:wrap;">
                   <span>📊 ${slotsLeft}/${brandApp?.streamCount || 0} slots left</span>
                   <span>⏳ ${pendingOrApprovedCount} creator application${pendingOrApprovedCount !== 1 ? 's' : ''} pending review</span>
+                  <span style="${confirmedSlotsThisMonth >= 2 ? 'color:#27ae60;font-weight:600;' : ''}">✓ ${confirmedSlotsThisMonth} confirmed slot${confirmedSlotsThisMonth !== 1 ? 's' : ''} this month</span>
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">
