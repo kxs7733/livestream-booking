@@ -1288,9 +1288,9 @@
       render();
     };
 
-    const handleCreatorLogin = async (affiliateId, name, phone) => {
-      if (!affiliateId || !affiliateId.trim() || !name || !name.trim() || !phone || !phone.trim()) {
-        showNotification('Please enter your Affiliate ID, Affiliate Username, and Phone Number', 'error');
+    const handleCreatorLogin = async (affiliateId, phone) => {
+      if (!affiliateId || !affiliateId.trim() || !phone || !phone.trim()) {
+        showNotification('Please enter your Affiliate ID and Phone Number', 'error');
         return;
       }
       const btn = document.getElementById('login-btn');
@@ -1298,7 +1298,7 @@
       state.isLoading = true;
       render();
 
-      const validation = await apiCall('validateCreatorLogin', { affiliateId: affiliateId.trim(), affiliateUsername: name.trim(), phone: phone.trim() });
+      const validation = await apiCall('validateCreatorLogin', { affiliateId: affiliateId.trim(), phone: phone.trim() });
       state.isLoading = false;
       if (!validation || !validation.success) {
         showNotification(validation ? validation.error : 'Validation failed. Please try again.', 'error');
@@ -1313,7 +1313,7 @@
       if (validation.exists) {
         creator = validation.affiliate;
       } else {
-        creator = { id: affiliateId.trim(), name: name.trim(), createdAt: new Date().toISOString(), phone: phone.trim() };
+        creator = { id: affiliateId.trim(), name: validation.managedName, createdAt: new Date().toISOString(), phone: phone.trim() };
         state.creators.push(creator);
         await apiCall('addAffiliate', { data: creator });
       }
@@ -3575,16 +3575,14 @@
           <div class="login-card creator">
             <div class="login-icon" style="background:#f0f0ff;">🎬</div>
             <h2 class="login-title" style="color:#6c5ce7;">Creator Login</h2>
-            <p class="login-subtitle">Enter your Affiliate ID, Affiliate Username, and Phone Number to continue</p>
+            <p class="login-subtitle">Enter your Affiliate ID and Phone Number to continue</p>
             <div class="login-form">
               <input type="text" id="login-affiliate-id" class="login-input"
                 placeholder="Enter your Affiliate ID">
               <div style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:4px;">You may find your Affiliate ID <a href="https://shopee.sg/universal-link?redir=https%3A%2F%2Faffiliate.shopee.sg%3FrnPath%3DACCOUNT_SETTING&deep_and_deferred=1" target="_blank" rel="noopener" style="color:#6c5ce7;text-decoration:underline;">here</a></div>
-              <input type="text" id="login-name" class="login-input"
-                placeholder="Enter your Affiliate Username">
               ${phoneInputHtml('login-phone', 'login-phone-code', '65', '', 'login-input', 'onkeydown="if(event.key===\'Enter\')document.getElementById(\'login-btn\').click()"')}
               <button id="login-btn" class="login-btn"
-                onclick="handleCreatorLogin(document.getElementById('login-affiliate-id').value, document.getElementById('login-name').value, formatPhoneForStorage(document.getElementById('login-phone-code').value, document.getElementById('login-phone').value))">
+                onclick="handleCreatorLogin(document.getElementById('login-affiliate-id').value, formatPhoneForStorage(document.getElementById('login-phone-code').value, document.getElementById('login-phone').value))">
                 Continue
               </button>
             </div>
@@ -5528,14 +5526,16 @@
               <div class="form-section">
                 <div class="form-row single">
                   <div class="form-group">
-                    <label class="form-label">Affiliate ID <span class="required">*</span></label>
-                    <input type="text" id="profile-affiliate-id" class="form-input" value="${user.id}">
+                    <label class="form-label" style="color:#999;">Affiliate ID</label>
+                    <div style="padding:12px 16px;background:#f0f0f0;border-radius:8px;font-size:14px;color:#888;">${user.id}</div>
+                    <div style="font-size:12px;color:#aaa;margin-top:4px;">Affiliate ID is managed by Shopee and cannot be edited here.</div>
                   </div>
                 </div>
                 <div class="form-row single">
                   <div class="form-group">
-                    <label class="form-label">Affiliate Username <span class="required">*</span></label>
-                    <input type="text" id="profile-username" class="form-input" value="${user.name}">
+                    <label class="form-label" style="color:#999;">Affiliate Username</label>
+                    <div style="padding:12px 16px;background:#f0f0f0;border-radius:8px;font-size:14px;color:#888;">${user.name}</div>
+                    <div style="font-size:12px;color:#aaa;margin-top:4px;">Username is managed by Shopee and cannot be edited here.</div>
                   </div>
                 </div>
                 <div class="form-row single">
@@ -5613,13 +5613,11 @@
     };
 
     const handleSaveCreatorProfile = async () => {
-      const newAffiliateId = document.getElementById('profile-affiliate-id').value.trim();
-      const newName = document.getElementById('profile-username').value.trim();
       const newPhone = formatPhoneForStorage(document.getElementById('profile-phone-code').value, document.getElementById('profile-phone').value);
       const newShippingAddress = document.getElementById('profile-shipping-address').value.trim();
       const newShippingPostalCode = document.getElementById('profile-shipping-postal').value.trim();
-      if (!newAffiliateId || !newName || !newPhone || !newShippingAddress) {
-        showNotification('Affiliate ID, Affiliate Username, Phone Number, and Shipping Address are all required', 'error');
+      if (!newPhone || !newShippingAddress) {
+        showNotification('Phone Number and Shipping Address are required', 'error');
         return;
       }
       if (!/^\d{6}$/.test(newShippingPostalCode)) {
@@ -5627,12 +5625,12 @@
         return;
       }
 
-      const oldAffiliateId = state.currentUser.id;
+      const affiliateId = state.currentUser.id;
       state.isLoading = true;
       render();
       const result = await apiCall('updateAffiliateProfile', {
-        affiliateId: oldAffiliateId,
-        data: { id: newAffiliateId, name: newName, phone: newPhone, shippingAddress: newShippingAddress, shippingPostalCode: newShippingPostalCode }
+        affiliateId,
+        data: { phone: newPhone, shippingAddress: newShippingAddress, shippingPostalCode: newShippingPostalCode }
       });
       if (!result || !result.success) {
         state.isLoading = false;
@@ -5642,15 +5640,11 @@
       }
 
       // Update local state
-      state.currentUser.id = newAffiliateId;
-      state.currentUser.name = newName;
       state.currentUser.phone = newPhone;
       state.currentUser.shippingAddress = newShippingAddress;
       state.currentUser.shippingPostalCode = newShippingPostalCode;
-      const localCreator = state.creators.find(c => c.id === oldAffiliateId);
+      const localCreator = state.creators.find(c => c.id === affiliateId);
       if (localCreator) {
-        localCreator.id = newAffiliateId;
-        localCreator.name = newName;
         localCreator.phone = newPhone;
         localCreator.shippingAddress = newShippingAddress;
         localCreator.shippingPostalCode = newShippingPostalCode;

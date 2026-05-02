@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
         result = await validateBrandLogin(req.query.shopId, req.query.shopName);
         break;
       case 'validateCreatorLogin':
-        result = await validateCreatorLogin(req.query.affiliateId, req.query.affiliateUsername, req.query.phone);
+        result = await validateCreatorLogin(req.query.affiliateId, req.query.phone);
         break;
       case 'updateSellerProfile':
         result = await updateSellerProfile(req.query.shopId, JSON.parse(req.query.data));
@@ -599,34 +599,35 @@ async function validateBrandLogin(shopId, shopName) {
   return { success: true, exists: false };
 }
 
-async function validateCreatorLogin(affiliateId, affiliateUsername, phone) {
-  // Gate check
-  const { data: managedRows } = await db.client.from('managed_affiliates').select('affiliate_id').eq('affiliate_id', String(affiliateId).trim().toLowerCase());
+async function validateCreatorLogin(affiliateId, phone) {
+  // Gate check — also pull the authoritative username from managed_affiliates
+  const { data: managedRows } = await db.client.from('managed_affiliates').select('affiliate_id, affiliate_name').eq('affiliate_id', String(affiliateId).trim().toLowerCase());
   if (!managedRows || managedRows.length === 0) {
     return { success: false, error: 'Login Unavailable. Please contact Shopee Livestream Talent Management PIC - ' + (process.env.FALLBACK_PIC_NUMBER || '+65 9456 8465') + ' if you have any questions.' };
   }
 
-  const affiliates = await db.all('affiliates');
-  const byId    = affiliates.find(a => String(a.id).toLowerCase() === String(affiliateId).toLowerCase());
-  const byName  = affiliates.find(a => String(a.name).toLowerCase() === String(affiliateUsername).toLowerCase());
-  const byPhone = affiliates.find(a => String(a.phone) === String(phone));
-
-  const matched = byId || byName || byPhone;
-  if (matched) {
-    if (
-      String(matched.id).toLowerCase() !== String(affiliateId).toLowerCase() ||
-      String(matched.name).toLowerCase() !== String(affiliateUsername).toLowerCase() ||
-      String(matched.phone) !== String(phone)
-    ) {
-      if (byId && (String(byId.name).toLowerCase() !== String(affiliateUsername).toLowerCase() || String(byId.phone) !== String(phone)))
-        return { success: false, error: 'Affiliate Username or Phone Number does not match the registered Affiliate ID.' };
-      if (byName && (String(byName.id).toLowerCase() !== String(affiliateId).toLowerCase() || String(byName.phone) !== String(phone)))
-        return { success: false, error: 'Affiliate ID or Phone Number does not match the registered Affiliate Username.' };
-      return { success: false, error: 'One or more fields do not match the registered account. Please check your credentials.' };
-    }
-    return { success: true, exists: true, affiliate: matched, pinSet: !!matched.pinHash };
+  const managedName = String(managedRows[0].affiliate_name || '').trim();
+  if (!managedName) {
+    return { success: false, error: 'Your account is not fully set up yet. Please contact Shopee Livestream Talent Management PIC - ' + (process.env.FALLBACK_PIC_NUMBER || '+65 9456 8465') + '.' };
   }
-  return { success: true, exists: false };
+
+  const affiliates = await db.all('affiliates');
+  const byId = affiliates.find(a => String(a.id).toLowerCase() === String(affiliateId).toLowerCase());
+
+  if (byId) {
+    if (String(byId.phone) !== String(phone)) {
+      return { success: false, error: 'Phone Number does not match the registered Affiliate ID.' };
+    }
+    // Sync name from managed_affiliates if it has changed, cascade to all creator applications
+    if (String(byId.name) !== managedName) {
+      await db.updateById('affiliates', byId.id, { name: managedName });
+      await db.client.from('creator_applications').update({ creator_name: managedName, affiliate_username: managedName }).eq('creator_id', String(byId.id));
+      byId.name = managedName;
+    }
+    return { success: true, exists: true, affiliate: byId, managedName, pinSet: !!byId.pinHash };
+  }
+
+  return { success: true, exists: false, managedName };
 }
 
 async function validateInternalLogin(password, email) {
