@@ -77,6 +77,9 @@ router.get('/', async (req, res) => {
       case 'rescheduleCreatorApplication':
         result = await rescheduleCreatorApplication(req.query.id, JSON.parse(req.query.data));
         break;
+      case 'bulkApproveCreatorApplications':
+        result = await bulkApproveCreatorApplications(JSON.parse(req.query.ids));
+        break;
       case 'validateBrandLogin':
         result = await validateBrandLogin(req.query.shopId, req.query.shopName);
         break;
@@ -575,12 +578,30 @@ async function rescheduleCreatorApplication(id, data) {
 
   // Email + Telegram notifications
   sendEmailNotification_SlotRescheduled(updatedRow, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp).catch(console.error);
+  sendRescheduleEmailToInternalTeam(updatedRow, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp).catch(console.error);
   const chatId = await getTelegramChatId(currentRow.telegram);
   if (chatId) {
     sendRescheduledApprovalNotification(updatedRow, chatId, oldDate, oldStartTime, oldEndDate, oldEndTime).catch(console.error);
   }
 
   return { success: true };
+}
+
+// ─── bulkApproveCreatorApplications ──────────────────────────────────────────
+
+async function bulkApproveCreatorApplications(ids) {
+  const approvedAt = new Date().toISOString();
+  const failed = [];
+  let approved = 0;
+  for (const id of ids) {
+    const result = await updateCreatorApplication(id, { status: 'approved', approvedAt });
+    if (result.success) {
+      approved++;
+    } else {
+      failed.push({ id, error: result.error });
+    }
+  }
+  return { success: true, approved, failed };
 }
 
 // ─── Auth / Login ─────────────────────────────────────────────────────────────
@@ -1021,6 +1042,21 @@ async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldSta
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
   await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail);
+}
+
+async function sendRescheduleEmailToInternalTeam(creatorApp, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp) {
+  const emails = await getInternalTeamEmails();
+  if (!emails.length) return;
+  const oldSlotText = oldDate + (oldStartTime ? ' ' + oldStartTime : '') + (oldEndTime ? ' – ' + oldEndTime : '');
+  const newSlotText = (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' – ' + creatorApp.streamEndTime : '');
+  const subject = '[Shopee Live Creator Match] Slot Rescheduled — ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '') + ' / ' + (brandApp?.shopName || brandApp?.brandName || creatorApp.brandName || '');
+  const body = 'FYI — a creator has rescheduled their livestream slot.\n\n'
+    + 'Creator: ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '') + '\n'
+    + 'Brand: ' + (brandApp?.shopName || brandApp?.brandName || creatorApp.brandName || '') + '\n'
+    + 'Old Slot: ' + oldSlotText + '\n'
+    + 'New Slot: ' + newSlotText + '\n\n'
+    + '*This email was automatically generated. Please do not reply.';
+  await sendEmailViaGAS(emails.join(','), subject, body);
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
