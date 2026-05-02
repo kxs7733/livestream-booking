@@ -2195,6 +2195,7 @@
     const toggleBrandAppSelection = (id, checked) => {
       if (checked) { state.selectedBrandAppIds[id] = true; }
       else { delete state.selectedBrandAppIds[id]; }
+      render();
     };
 
     const selectAllVisiblePendingBrandApps = () => {
@@ -2234,6 +2235,7 @@
     const toggleCreatorAppSelection = (id, checked) => {
       if (checked) { state.selectedCreatorAppIds[id] = true; }
       else { delete state.selectedCreatorAppIds[id]; }
+      render();
     };
 
     const selectAllVisiblePendingCreatorApps = () => {
