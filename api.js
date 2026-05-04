@@ -949,7 +949,7 @@ async function sendEmailToSeller_BrandAppApproved(app) {
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
-  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail);
+  await sendEmail(app.sellerPicEmail, subject, body, { cc: rmEmail || undefined });
 }
 
 async function sendRejectionEmailToBrandApp(app, reason) {
@@ -977,7 +977,7 @@ async function sendRejectionEmailToBrandApp(app, reason) {
     + '<p>Best regards,<br/>Shopee Live Team</p>\n\n'
     + '<p><em>*This email was automatically generated. Please do not reply.</em></p>';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
-  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail, htmlBody);
+  await sendEmail(app.sellerPicEmail, subject, body, { cc: rmEmail || undefined, html: htmlBody });
 }
 
 async function sendCancellationEmail_BrandApp(app, reason) {
@@ -994,7 +994,7 @@ async function sendCancellationEmail_BrandApp(app, reason) {
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(app.shopId || app.brandId);
-  await sendEmailViaGAS(app.sellerPicEmail, subject, body, rmEmail);
+  await sendEmail(app.sellerPicEmail, subject, body, { cc: rmEmail || undefined });
 }
 
 async function sendCancellationEmail_CreatorApp(creatorApp, brandApp, reason) {
@@ -1013,7 +1013,7 @@ async function sendCancellationEmail_CreatorApp(creatorApp, brandApp, reason) {
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
-  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail);
+  await sendEmail(brandApp.sellerPicEmail, subject, body, { cc: rmEmail || undefined });
 }
 
 async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
@@ -1051,7 +1051,7 @@ async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
     + '<p>Best regards,<br/>Shopee Live Team</p>\n\n'
     + '<p><em>*This email was automatically generated. Please do not reply.</em></p>';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
-  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail, htmlBody);
+  await sendEmail(brandApp.sellerPicEmail, subject, body, { cc: rmEmail || undefined, html: htmlBody });
 }
 
 async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp) {
@@ -1071,7 +1071,7 @@ async function sendEmailNotification_SlotRescheduled(creatorApp, oldDate, oldSta
     + 'Shopee Live Team\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const rmEmail = await getRmEmail(brandApp.shopId || brandApp.brandId);
-  await sendEmailViaGAS(brandApp.sellerPicEmail, subject, body, rmEmail);
+  await sendEmail(brandApp.sellerPicEmail, subject, body, { cc: rmEmail || undefined });
 }
 
 async function sendRescheduleEmailToInternalTeam(creatorApp, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp) {
@@ -1087,8 +1087,8 @@ async function sendRescheduleEmailToInternalTeam(creatorApp, oldDate, oldStartTi
     + 'New Slot: ' + newSlotText + '\n\n'
     + '*This email was automatically generated. Please do not reply.';
   const [to, ...rest] = emails;
-  const cc = rest.length ? rest.join(',') : null;
-  await sendEmailViaGAS(to, subject, body, cc);
+  const cc = rest.length ? rest.join(',') : undefined;
+  await sendEmail(to, subject, body, { cc });
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
