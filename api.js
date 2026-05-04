@@ -899,7 +899,7 @@ async function handleTelegramCallback(callback) {
 // ─── Email notification functions ─────────────────────────────────────────────
 
 async function getInternalTeamEmails() {
-  const { data } = await db.client.from('internal_team').select('email');
+  const { data } = await db.client.from('internal_team').select('email').eq('send_notif', true);
   return (data || []).map(r => r.email).filter(Boolean);
 }
 
@@ -1483,6 +1483,7 @@ async function addInternalTeamMember(memberData) {
     const { error } = await supabase.from('internal_team').insert({
       id: memberData.id,
       email: memberData.email,
+      send_notif: memberData.send_notif === true || memberData.send_notif === 'true',
       created_at: new Date().toISOString()
     });
     if (error) throw error;
