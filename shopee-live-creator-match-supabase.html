@@ -685,6 +685,11 @@
       internalPinResetUserType: 'brand',
       internalPinResetSearch: '',
       pinResetModal: { show: false, userId: null, userName: '', userType: '' },
+      internalIdUpdateMode: false,
+      internalIdUpdateUserType: 'brand',
+      internalIdUpdateSearch: '',
+      internalIdUpdateSelectedUser: null,
+      internalIdUpdateNewId: '',
       isSyncingManagedData: false,
       adminMenuOpen: false,
       internalConfigMode: false,
@@ -1276,6 +1281,10 @@
     const handleBrandLogin = async (shopId, shopName) => {
       if (!shopId || !shopId.trim() || !shopName || !shopName.trim()) {
         showNotification('Please enter both Shop ID and Shop Name', 'error');
+        return;
+      }
+      if (!/^\d+$/.test(shopId.trim())) {
+        showNotification('Shop ID must be numbers only', 'error');
         return;
       }
       const btn = document.getElementById('login-btn');
@@ -3028,6 +3037,32 @@
       render();
     };
 
+    const handleUpdateUserId = async () => {
+      const user = state.internalIdUpdateSelectedUser;
+      const newId = state.internalIdUpdateNewId.trim();
+      if (!user || !newId) return;
+      const isBrand = state.internalIdUpdateUserType === 'brand';
+      state.isLoading = true;
+      render();
+      const result = await apiCall(
+        isBrand ? 'updateShopId' : 'updateAffiliateId',
+        isBrand ? { oldShopId: user.id, newShopId: newId } : { oldAffiliateId: user.id, newAffiliateId: newId }
+      );
+      state.isLoading = false;
+      if (!result || !result.success) {
+        showNotification(result ? result.error : 'Failed to update ID', 'error');
+        render();
+        return;
+      }
+      const updatedCount = isBrand ? result.brandAppsUpdated : result.creatorAppsUpdated;
+      showNotification(`ID updated successfully. ${updatedCount} application${updatedCount !== 1 ? 's' : ''} updated. Refresh the page to see changes.`);
+      state.internalIdUpdateMode = false;
+      state.internalIdUpdateSelectedUser = null;
+      state.internalIdUpdateNewId = '';
+      state.internalIdUpdateSearch = '';
+      render();
+    };
+
     const handleSyncManagedData = async () => {
       state.adminMenuOpen = false;
       showNotification('⟳ Syncing managed data...', 'success', 0);
@@ -3683,7 +3718,8 @@
               <p class="login-subtitle">Enter your shop details to continue</p>
               <div class="login-form">
                 <input type="text" id="login-shop-id" class="login-input"
-                  placeholder="Enter your Shop ID">
+                  placeholder="Enter your Shop ID" inputmode="numeric"
+                  oninput="this.value = this.value.replace(/\D/g, '')">
                 <input type="text" id="login-shop-name" class="login-input"
                   placeholder="Enter your Shop Username"
                   onkeydown="if(event.key==='Enter')document.getElementById('login-btn').click()">
@@ -6478,6 +6514,7 @@
               ${state.adminMenuOpen ? `
                 <div style="position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid #dfe6e9;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:100;min-width:220px;overflow:hidden;">
                   <button onclick="state.adminMenuOpen=false; state.internalPinResetMode = !state.internalPinResetMode; state.internalPinResetSearch = ''; render();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Reset User's PIN</button>
+                  <button onclick="state.adminMenuOpen=false; state.internalIdUpdateMode = !state.internalIdUpdateMode; state.internalIdUpdateSearch = ''; state.internalIdUpdateSelectedUser = null; state.internalIdUpdateNewId = ''; render();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Update User ID</button>
                   <button onclick="state.adminMenuOpen=false; handleSyncManagedData();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">Sync Managed Data</button>
                   <button onclick="state.adminMenuOpen=false; handleSyncGoogleSheets();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">📊 Sync to Google Sheets</button>
                   <button onclick="state.adminMenuOpen=false; handleArchiveOldApplications();" style="width:100%;text-align:left;padding:11px 16px;border:none;background:none;font-size:13px;color:#222;cursor:pointer;font-weight:500;border-bottom:1px solid #f0f0f0;">📦 Archive Old Data</button>
@@ -6588,6 +6625,65 @@
                       </div>
                     `).join('')}
                   </div>
+                `}
+              </div>
+            `;
+          })()}
+
+          ${(() => {
+            if (!state.internalIdUpdateMode) return '';
+            const isBrand = state.internalIdUpdateUserType === 'brand';
+            const searchVal = state.internalIdUpdateSearch.toLowerCase();
+            const selected = state.internalIdUpdateSelectedUser;
+            const list = selected ? [] : (isBrand
+              ? state.brands.filter(b => !searchVal || b.name?.toLowerCase().includes(searchVal) || String(b.id).toLowerCase().includes(searchVal))
+              : state.creators.filter(c => !searchVal || c.name?.toLowerCase().includes(searchVal) || String(c.id).toLowerCase().includes(searchVal)));
+            return `
+              <div style="background:#f8f9fa;border:1px solid #dfe6e9;border-radius:12px;padding:20px;margin-bottom:24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div style="font-size:14px;font-weight:600;color:#636e72;">Update User ID</div>
+                  <button onclick="state.internalIdUpdateMode = false; state.internalIdUpdateSearch = ''; state.internalIdUpdateSelectedUser = null; state.internalIdUpdateNewId = ''; render();" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">✕</button>
+                </div>
+                ${selected ? `
+                  <div style="margin-bottom:14px;">
+                    <button onclick="state.internalIdUpdateSelectedUser = null; state.internalIdUpdateNewId = ''; render();" style="padding:5px 12px;background:#ecf0f1;color:#636e72;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">← Back</button>
+                  </div>
+                  <div style="background:#fff;border:1px solid #dfe6e9;border-radius:8px;padding:14px 16px;margin-bottom:14px;">
+                    <div style="font-size:13px;font-weight:600;margin-bottom:4px;">${escapeHtml(selected.name || '—')}</div>
+                    <div style="font-size:12px;color:#636e72;">Current ID: <span style="font-family:monospace;">${escapeHtml(String(selected.id))}</span></div>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <input type="text" id="id-update-new-id" placeholder="Enter new ${isBrand ? 'Shop' : 'Affiliate'} ID…" value="${escapeHtml(state.internalIdUpdateNewId)}"
+                      oninput="state.internalIdUpdateNewId = this.value; const _p = this.selectionStart; render(); const _el = document.getElementById('id-update-new-id'); if(_el){_el.focus();_el.setSelectionRange(_p,_p);}"
+                      style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;font-family:monospace;">
+                    <button onclick="handleUpdateUserId();" ${!state.internalIdUpdateNewId.trim() ? 'disabled' : ''}
+                      style="padding:8px 18px;background:${state.internalIdUpdateNewId.trim() ? '#e74c3c' : '#ccc'};color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:${state.internalIdUpdateNewId.trim() ? 'pointer' : 'not-allowed'};">Update ID</button>
+                  </div>
+                  <div style="margin-top:10px;font-size:12px;color:#e74c3c;">⚠ This will update the ID on the account and all linked applications. This cannot be undone.</div>
+                ` : `
+                  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+                    <button onclick="state.internalIdUpdateUserType='brand'; state.internalIdUpdateSearch=''; render();"
+                      style="padding:6px 16px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:${isBrand ? '#636e72' : '#ecf0f1'};color:${isBrand ? '#fff' : '#636e72'};">Brand</button>
+                    <button onclick="state.internalIdUpdateUserType='creator'; state.internalIdUpdateSearch=''; render();"
+                      style="padding:6px 16px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:${!isBrand ? '#636e72' : '#ecf0f1'};color:${!isBrand ? '#fff' : '#636e72'};">Creator</button>
+                    <input type="text" id="id-update-search" placeholder="Search by name or ID…" value="${escapeHtml(state.internalIdUpdateSearch)}"
+                      oninput="state.internalIdUpdateSearch = this.value; const _p = this.selectionStart; render(); const _el = document.getElementById('id-update-search'); if(_el){_el.focus();_el.setSelectionRange(_p,_p);}"
+                      style="flex:1;min-width:180px;padding:7px 12px;border:1px solid #dfe6e9;border-radius:6px;font-size:13px;">
+                  </div>
+                  ${list.length === 0 ? `<div style="font-size:13px;color:#999;">${searchVal ? 'No results found.' : 'Start typing to search.'}</div>` : `
+                    <div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;">
+                      ${list.slice(0, 50).map(u => `
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;border:1px solid #dfe6e9;border-radius:8px;font-size:13px;">
+                          <div>
+                            <span style="font-weight:600;">${escapeHtml(u.name || '—')}</span>
+                            <span style="color:#999;margin-left:8px;font-family:monospace;">${escapeHtml(String(u.id))}</span>
+                          </div>
+                          <button onclick="state.internalIdUpdateSelectedUser = { id: '${escapeHtml(String(u.id))}', name: '${escapeHtml(u.name || '')}' }; state.internalIdUpdateNewId = ''; render();"
+                            style="padding:5px 12px;background:#636e72;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Select</button>
+                        </div>
+                      `).join('')}
+                    </div>
+                  `}
                 `}
               </div>
             `;

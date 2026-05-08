@@ -128,6 +128,12 @@ router.get('/', async (req, res) => {
       case 'updateBriefLink':
         result = await updateBriefLink(req.query.appId, req.query.briefUrl);
         break;
+      case 'updateShopId':
+        result = await updateShopId(req.query.oldShopId, req.query.newShopId);
+        break;
+      case 'updateAffiliateId':
+        result = await updateAffiliateId(req.query.oldAffiliateId, req.query.newAffiliateId);
+        break;
       default:
         result = { error: 'Unknown action' };
     }
@@ -1553,6 +1559,61 @@ async function updateBriefLink(appId, briefUrl) {
   } catch (err) {
     return { success: false, error: err.message };
   }
+}
+
+// ─── Update Shop ID / Affiliate ID ───────────────────────────────────────────
+
+async function updateShopId(oldShopId, newShopId) {
+  oldShopId = String(oldShopId || '').trim();
+  newShopId = String(newShopId || '').trim();
+  if (!oldShopId || !newShopId) return { success: false, error: 'Both old and new Shop ID are required.' };
+  if (oldShopId === newShopId) return { success: false, error: 'New Shop ID is the same as the current one.' };
+
+  const existing = await db.findById('sellers', newShopId);
+  if (existing) return { success: false, error: 'New Shop ID is already in use by another seller.' };
+
+  const seller = await db.findById('sellers', oldShopId);
+  if (!seller) return { success: false, error: 'Seller not found with the given Shop ID.' };
+
+  await db.updateById('sellers', oldShopId, { id: newShopId });
+
+  const [res1, res2] = await Promise.all([
+    supabase.from('brand_applications').update({ shop_id: newShopId }).eq('shop_id', oldShopId),
+    supabase.from('brand_applications').update({ brand_id: newShopId }).eq('brand_id', oldShopId),
+  ]);
+  if (res1.error) throw new Error(res1.error.message);
+  if (res2.error) throw new Error(res2.error.message);
+
+  const { count } = await supabase
+    .from('brand_applications')
+    .select('*', { count: 'exact', head: true })
+    .eq('shop_id', newShopId);
+
+  return { success: true, brandAppsUpdated: count || 0 };
+}
+
+async function updateAffiliateId(oldAffiliateId, newAffiliateId) {
+  oldAffiliateId = String(oldAffiliateId || '').trim();
+  newAffiliateId = String(newAffiliateId || '').trim();
+  if (!oldAffiliateId || !newAffiliateId) return { success: false, error: 'Both old and new Affiliate ID are required.' };
+  if (oldAffiliateId === newAffiliateId) return { success: false, error: 'New Affiliate ID is the same as the current one.' };
+
+  const existing = await db.findById('affiliates', newAffiliateId);
+  if (existing) return { success: false, error: 'New Affiliate ID is already in use by another creator.' };
+
+  const affiliate = await db.findById('affiliates', oldAffiliateId);
+  if (!affiliate) return { success: false, error: 'Affiliate not found with the given ID.' };
+
+  await db.updateById('affiliates', oldAffiliateId, { id: newAffiliateId });
+
+  const { data: updatedCAs, error: caErr } = await supabase
+    .from('creator_applications')
+    .update({ creator_id: newAffiliateId })
+    .eq('creator_id', oldAffiliateId)
+    .select('id');
+  if (caErr) throw new Error(caErr.message);
+
+  return { success: true, creatorAppsUpdated: (updatedCAs || []).length };
 }
 
 module.exports = router;
