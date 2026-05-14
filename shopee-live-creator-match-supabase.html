@@ -1519,7 +1519,7 @@
       const briefFileName = briefFileInput.files[0].name.replace(/\.[^/.]+$/, '');
       const normalise = s => s.toLowerCase().replace(/\s+/g, '');
       if (!normalise(briefFileName).includes(normalise(state.currentUser.shopName || ''))) {
-        showNotification('Filename must include your shop username. Please rename your file and re-upload (e.g., innisfree_sg_May26_v1).', 'error');
+        showNotification('Filename must include your shop username. Please rename your file and re-upload (e.g., innisfreesg_Jun26_CreatorMatch).', 'error');
         return;
       }
 
@@ -3314,7 +3314,7 @@
     const handleBriefFileSelected = (file, shopName) => {
       if (!file) return;
       if (!validateBriefFilename(file.name, shopName)) {
-        showNotification('Filename must include shop name. Please rename your file and re-upload (e.g., innisfree_sg_May26_v1).', 'error');
+        showNotification('Filename must include shop name. Please rename your file and re-upload (e.g., innisfreesg_Jun26_CreatorMatch).', 'error');
         return;
       }
       const validTypes = ['.xlsx', '.xls', '.csv', '.ods'];
@@ -4542,7 +4542,7 @@
                 <div class="form-group">
                   <label class="form-label">Upload Livestream Brief for Creator <span class="required">*</span></label>
                   <input type="file" id="f-brief-file" class="form-input" accept=".xlsx,.xls,.csv,.ods" style="padding:10px 16px;width:100%;max-width:100%;box-sizing:border-box;">
-                  <div class="form-hint">Please include your shop username in the filename - e.g., innisfree_sg_May26_v1</div>
+                  <div class="form-hint">Please include your shop username in the filename - e.g., innisfreesg_Jun26_CreatorMatch</div>
                   <div class="form-hint">Supported formats: Excel (.xlsx, .xls), CSV (.csv), OpenDocument Spreadsheet (.ods). Max 10 MB.</div>
                 </div>
               </div>
@@ -6797,7 +6797,7 @@
                         style="padding:10px 12px;border:1px solid #dfe6e9;border-radius:6px;width:100%;box-sizing:border-box;margin-bottom:12px;">
                       <div style="font-size:12px;color:#999;margin-bottom:12px;">
                         Supported formats: Excel (.xlsx, .xls), CSV (.csv), OpenDocument (.ods). Max 10 MB.<br>
-                        Filename must include shop name (e.g., innisfree_sg_May26_v1)
+                        Filename must include shop name (e.g., innisfreesg_Jun26_CreatorMatch)
                       </div>
                       ${state.briefUploadFile ? `
                         <div style="padding:10px 12px;background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;margin-bottom:12px;font-size:13px;">
