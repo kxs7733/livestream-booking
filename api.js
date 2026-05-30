@@ -1155,37 +1155,40 @@ async function syncManagedData() {
       throw new Error('GAS returned empty data for sellers or affiliates');
     }
 
-    let sellerCount = 0, affiliateCount = 0;
+    // Dedupe by primary key — the source sheet can contain duplicate IDs, and a
+    // batch insert with a repeated PK fails the whole batch. Last row wins.
+    const dedupeBy = (rows, key) => Array.from(new Map(rows.map(r => [r[key], r])).values());
+    const sellers = dedupeBy(managedSellers, 'shop_id');
+    const affiliates = dedupeBy(managedAffiliates, 'affiliate_id');
 
-    // Clear all existing rows to ensure exact match with Google Sheet
-    console.log('[syncManagedData] Clearing managed_sellers...');
-    const { error: delError1 } = await supabase.from('managed_sellers').delete().not('shop_id', 'is', null);
-    if (delError1) throw new Error(`Delete managed_sellers: ${delError1.message}`);
-
-    console.log('[syncManagedData] Clearing managed_affiliates...');
-    const { error: delError2 } = await supabase.from('managed_affiliates').delete().not('affiliate_id', 'is', null);
-    if (delError2) throw new Error(`Delete managed_affiliates: ${delError2.message}`);
-
-    // Insert fresh data from Google Sheet
-    if (managedSellers.length > 0) {
+    // Idempotent, crash-safe sync: upsert fresh rows first, then prune the ones
+    // no longer in the sheet. Never delete-then-insert — a failed insert used to
+    // leave the table EMPTY, which locks every creator out of login.
+    const syncTable = async (table, key, rows) => {
       const BATCH = 500;
-      for (let i = 0; i < managedSellers.length; i += BATCH) {
-        const batch = managedSellers.slice(i, i + BATCH);
-        const { error } = await supabase.from('managed_sellers').insert(batch);
-        if (error) throw new Error(`Insert managed_sellers: ${error.message}`);
-        sellerCount += batch.length;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const batch = rows.slice(i, i + BATCH);
+        const { error } = await supabase.from(table).upsert(batch, { onConflict: key });
+        if (error) throw new Error(`Upsert ${table}: ${error.message}`);
       }
-    }
+      const freshKeys = new Set(rows.map(r => r[key]));
+      const existing = [];
+      for (let page = 0; ; page++) {
+        const { data, error } = await supabase.from(table).select(key).range(page * BATCH, (page + 1) * BATCH - 1);
+        if (error) throw new Error(`Read ${table}: ${error.message}`);
+        existing.push(...(data || []));
+        if (!data || data.length < BATCH) break;
+      }
+      const stale = existing.map(r => r[key]).filter(k => !freshKeys.has(k));
+      for (let i = 0; i < stale.length; i += BATCH) {
+        const { error } = await supabase.from(table).delete().in(key, stale.slice(i, i + BATCH));
+        if (error) throw new Error(`Prune ${table}: ${error.message}`);
+      }
+      return rows.length;
+    };
 
-    if (managedAffiliates.length > 0) {
-      const BATCH = 500;
-      for (let i = 0; i < managedAffiliates.length; i += BATCH) {
-        const batch = managedAffiliates.slice(i, i + BATCH);
-        const { error } = await supabase.from('managed_affiliates').insert(batch);
-        if (error) throw new Error(`Insert managed_affiliates: ${error.message}`);
-        affiliateCount += batch.length;
-      }
-    }
+    const sellerCount = await syncTable('managed_sellers', 'shop_id', sellers);
+    const affiliateCount = await syncTable('managed_affiliates', 'affiliate_id', affiliates);
 
     console.log(`[syncManagedData] Done. Sellers: ${sellerCount}, Affiliates: ${affiliateCount}`);
     return { success: true, sellerCount, affiliateCount };
