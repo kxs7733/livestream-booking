@@ -1024,6 +1024,7 @@ async function sendCancellationEmail_CreatorApp(creatorApp, brandApp, reason) {
 
 async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
   const brandApp = await db.findById('brand_applications', creatorApp.brandApplicationId);
+  console.log('[email] CreatorConfirmed — brandApp found:', !!brandApp, '| sellerPicEmail:', brandApp && brandApp.sellerPicEmail);
   if (!brandApp || !brandApp.sellerPicEmail) return;
   const slotText = (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' – ' + creatorApp.streamEndTime : '');
   const appUrl = 'https://shopeelivecreatormatch.up.railway.app/';
