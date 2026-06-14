@@ -1633,7 +1633,7 @@
     const startCreatorApplication = (brandAppId) => {
       state.showCreatorApplyForm = brandAppId;
       state.creatorFormTimeslots = [];
-      state.creatorFormData = { telegram: '', recipientName: '', address: '', postalCode: '', deliveryInstructions: '', willingToTravel: false };
+      state.creatorFormData = { telegram: state.currentUser?.telegram || '', recipientName: '', address: '', postalCode: '', deliveryInstructions: '', willingToTravel: false };
       render();
     };
 
@@ -1920,7 +1920,7 @@
       state.internalCreatorApplyMode = brandAppId;
       const creator = state.creators.find(c => c.id === state.internalSelectedCreatorId);
       state.creatorFormTimeslots = [];
-      state.creatorFormData = { telegram: '', recipientName: '', address: creator?.shippingAddress || '', postalCode: creator?.shippingPostalCode || '', deliveryInstructions: '', willingToTravel: false };
+      state.creatorFormData = { telegram: creator?.telegram || '', recipientName: '', address: creator?.shippingAddress || '', postalCode: creator?.shippingPostalCode || '', deliveryInstructions: '', willingToTravel: false };
       render();
     };
 
@@ -2038,6 +2038,17 @@
       } else {
         showNotification('Application submitted! Internal team will review.');
       }
+
+      // Sync telegram to profile if it changed (non-internal, non-empty)
+      if (!isInternal && telegram && telegram !== (state.currentUser.telegram || '')) {
+        try {
+          await apiCall('updateAffiliateProfile', { affiliateId: state.currentUser.id, data: { telegram } });
+          state.currentUser.telegram = telegram;
+          const localCreator = state.creators.find(c => c.id === state.currentUser.id);
+          if (localCreator) localCreator.telegram = telegram;
+        } catch (_) {}
+      }
+
       state.creatorFormTimeslots = [];
       state.creatorFormData = { telegram: '', recipientName: '', address: '', postalCode: '', deliveryInstructions: '', willingToTravel: false };
       state.isSubmitting = false;
@@ -5317,6 +5328,7 @@
                 <div class="form-group">
                   <label class="form-label">Telegram Username <span class="required">*</span></label>
                   <input type="text" id="f-telegram" class="form-input" placeholder="username (without @)" value="${state.creatorFormData.telegram || ''}">
+                  ${!isInternal && state.currentUser?.telegram ? '<div class="form-hint" style="margin-top:4px;">Updating this will also update your Telegram username on your profile and all existing applications.</div>' : ''}
                 </div>
                 <div class="form-group" style="grid-column: span 1;">
                 </div>
@@ -5744,6 +5756,13 @@
                     </div>
                   </div>
                 </div>
+                <div class="form-row single">
+                  <div class="form-group">
+                    <label class="form-label">Telegram Username</label>
+                    <input type="text" id="profile-telegram" class="form-input" placeholder="username (without @)" value="${user.telegram || ''}">
+                    <div class="form-hint" style="margin-top:4px;">Updating this will also update your Telegram username on all existing applications.</div>
+                  </div>
+                </div>
               </div>
               <div class="form-actions">
                 <button class="btn-primary creator-accent" onclick="handleSaveCreatorProfile()">Save Changes</button>
@@ -5791,6 +5810,12 @@
                   <div style="padding:12px 16px;background:#f9f9f9;border-radius:8px;font-size:14px;color:#333;">${user.shippingPostalCode || '—'}</div>
                 </div>
               </div>
+              <div class="form-row single">
+                <div class="form-group">
+                  <label class="form-label" style="color:#999;">Telegram Username</label>
+                  <div style="padding:12px 16px;background:#f9f9f9;border-radius:8px;font-size:14px;color:#333;">${user.telegram || '—'}</div>
+                </div>
+              </div>
             </div>
             <div class="form-actions">
               <button class="btn-primary creator-accent" onclick="state.profileEditMode = true; render();">Edit Profile</button>
@@ -5805,6 +5830,7 @@
       const newPhone = formatPhoneForStorage(document.getElementById('profile-phone-code').value, document.getElementById('profile-phone').value);
       const newShippingAddress = document.getElementById('profile-shipping-address').value.trim();
       const newShippingPostalCode = document.getElementById('profile-shipping-postal').value.trim();
+      const newTelegram = document.getElementById('profile-telegram').value.trim().replace('@', '').toLowerCase();
       if (!newPhone || !newShippingAddress) {
         showNotification('Phone Number and Shipping Address are required', 'error');
         return;
@@ -5817,10 +5843,9 @@
       const affiliateId = state.currentUser.id;
       state.isLoading = true;
       render();
-      const result = await apiCall('updateAffiliateProfile', {
-        affiliateId,
-        data: { phone: newPhone, shippingAddress: newShippingAddress, shippingPostalCode: newShippingPostalCode }
-      });
+      const profileData = { phone: newPhone, shippingAddress: newShippingAddress, shippingPostalCode: newShippingPostalCode };
+      if (newTelegram) profileData.telegram = newTelegram;
+      const result = await apiCall('updateAffiliateProfile', { affiliateId, data: profileData });
       if (!result || !result.success) {
         state.isLoading = false;
         showNotification(result ? result.error : 'Failed to update profile', 'error');
@@ -5832,11 +5857,13 @@
       state.currentUser.phone = newPhone;
       state.currentUser.shippingAddress = newShippingAddress;
       state.currentUser.shippingPostalCode = newShippingPostalCode;
+      if (newTelegram) state.currentUser.telegram = newTelegram;
       const localCreator = state.creators.find(c => c.id === affiliateId);
       if (localCreator) {
         localCreator.phone = newPhone;
         localCreator.shippingAddress = newShippingAddress;
         localCreator.shippingPostalCode = newShippingPostalCode;
+        if (newTelegram) localCreator.telegram = newTelegram;
       }
 
       // Reload all data to reflect cascading changes

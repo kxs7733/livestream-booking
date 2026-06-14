@@ -787,6 +787,7 @@ async function updateAffiliateProfile(affiliateId, data) {
   if (data.shippingPostalCode !== undefined)    affUpdates.shippingPostalCode = data.shippingPostalCode;
   if (data.deliveryInstructions !== undefined)  affUpdates.deliveryInstructions = data.deliveryInstructions;
   if (data.shippingRecipientName !== undefined) affUpdates.shippingRecipientName = data.shippingRecipientName;
+  if (data.telegram !== undefined && data.telegram !== '') affUpdates.telegram = data.telegram;
 
   await db.updateById('affiliates', affiliateId, affUpdates);
 
@@ -797,8 +798,18 @@ async function updateAffiliateProfile(affiliateId, data) {
   if (data.phone !== undefined)           caUpdates.phone = data.phone;
   if (data.shippingAddress !== undefined) caUpdates.shipping_address = data.shippingAddress;
   if (data.shippingPostalCode !== undefined) caUpdates.shipping_postal_code = data.shippingPostalCode;
+  if (data.telegram !== undefined && data.telegram !== '') caUpdates.telegram = data.telegram;
   if (Object.keys(caUpdates).length) {
     await db.client.from('creator_applications').update(caUpdates).eq('creator_id', String(affiliateId));
+  }
+
+  // Rename telegram_users row if username changed (keeps chatId intact)
+  if (data.telegram !== undefined && data.telegram !== '') {
+    const oldClean = String(current.telegram || '').replace('@', '').toLowerCase();
+    const newClean = String(data.telegram).replace('@', '').toLowerCase();
+    if (oldClean && oldClean !== newClean) {
+      await db.client.from('telegram_users').update({ username: newClean }).eq('username', oldClean);
+    }
   }
 
   return { success: true };

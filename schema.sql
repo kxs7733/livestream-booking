@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS affiliates (
   phone TEXT DEFAULT '',
   shipping_address TEXT DEFAULT '',
   shipping_postal_code TEXT DEFAULT '',
+  telegram TEXT DEFAULT '',
   pin_salt TEXT DEFAULT '',
   pin_hash TEXT DEFAULT ''
 );
