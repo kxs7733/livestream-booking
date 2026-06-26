@@ -748,6 +748,8 @@
       editingBrandApp: null,
       selectedBrandAppIds: {},
       currentPageBrandAppIds: [],
+      selectedPauseBrandAppIds: {},
+      currentPageApprovedBrandAppIds: [],
       selectedCreatorAppIds: {},
       currentPageCreatorAppIds: [],
       brandBehalfMenuOpen: false,
@@ -2354,6 +2356,50 @@
       }
       state.selectedBrandAppIds = {};
       const msg = `${result.approved} brand application${result.approved !== 1 ? 's' : ''} approved` +
+        (result.failed && result.failed.length ? `, ${result.failed.length} failed` : '');
+      showNotification(msg, result.failed && result.failed.length ? 'error' : undefined);
+      render();
+    };
+
+    const togglePauseBrandAppSelection = (id, checked) => {
+      if (checked) { state.selectedPauseBrandAppIds[id] = true; }
+      else { delete state.selectedPauseBrandAppIds[id]; }
+      render();
+    };
+
+    const selectAllVisibleApprovedBrandApps = () => {
+      for (const id of state.currentPageApprovedBrandAppIds) { state.selectedPauseBrandAppIds[id] = true; }
+      render();
+    };
+
+    const clearPauseBrandAppSelection = () => {
+      state.selectedPauseBrandAppIds = {};
+      render();
+    };
+
+    const handleBulkPauseBrandApps = async (pause) => {
+      const allIds = Object.keys(state.selectedPauseBrandAppIds);
+      const ids = allIds.filter(id => {
+        const app = state.brandApplications.find(a => a.id === id);
+        return app && (pause ? String(app.isPaused) !== 'true' : String(app.isPaused) === 'true');
+      });
+      if (!ids.length) return;
+      const verb = pause ? 'pause' : 'resume';
+      if (!confirm(`${pause ? 'Pause' : 'Resume'} ${ids.length} brand application${ids.length !== 1 ? 's' : ''}?`)) return;
+      state.isSubmitting = true;
+      render();
+      const result = await apiCall('bulkPauseBrandApplications', { ids: JSON.stringify(ids), pause: String(pause) });
+      state.isSubmitting = false;
+      if (!result || !result.success) {
+        showNotification(result?.error || `Bulk ${verb} failed. Please try again.`, 'error');
+        await loadAllData(); return;
+      }
+      const failedIds = new Set((result.failed || []).map(r => r.id));
+      for (const id of ids) {
+        if (!failedIds.has(id)) updateStateBA(id, { isPaused: String(pause) });
+      }
+      state.selectedPauseBrandAppIds = {};
+      const msg = `${result.updated} brand application${result.updated !== 1 ? 's' : ''} ${pause ? 'paused' : 'resumed'}` +
         (result.failed && result.failed.length ? `, ${result.failed.length} failed` : '');
       showNotification(msg, result.failed && result.failed.length ? 'error' : undefined);
       render();
@@ -7274,6 +7320,7 @@
       const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
       const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
       state.currentPageBrandAppIds = paginated.filter(a => a.status === 'pending').map(a => a.id);
+      state.currentPageApprovedBrandAppIds = paginated.filter(a => a.status === 'approved').map(a => a.id);
       const from = page * PAGE_SIZE + 1;
       const to = Math.min((page + 1) * PAGE_SIZE, sorted.length);
 
@@ -7298,6 +7345,41 @@
         </div>
       ` : '';
 
+      const selectedPauseCount = Object.keys(state.selectedPauseBrandAppIds).length;
+      const allPageApprovedSelected = state.currentPageApprovedBrandAppIds.length > 0 && state.currentPageApprovedBrandAppIds.every(id => state.selectedPauseBrandAppIds[id]);
+      const pauseCountInSelection = Object.keys(state.selectedPauseBrandAppIds).filter(id => {
+        const app = state.brandApplications.find(a => a.id === id);
+        return app && String(app.isPaused) === 'true';
+      }).length;
+      const activeCountInSelection = selectedPauseCount - pauseCountInSelection;
+      const pauseBulkActionBar = sf === 'approved' ? `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff8f0;border:1px solid #fcd9b0;border-radius:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+            <input type="checkbox" style="width:16px;height:16px;cursor:pointer;accent-color:#e67e22;"
+              ${allPageApprovedSelected ? 'checked' : ''}
+              onchange="${allPageApprovedSelected ? 'clearPauseBrandAppSelection()' : 'selectAllVisibleApprovedBrandApps()'}">
+            <span style="font-size:13px;color:#555;">Select all on page (${state.currentPageApprovedBrandAppIds.length})</span>
+          </label>
+          ${selectedPauseCount > 0 ? `
+            <span style="font-size:13px;color:#e67e22;font-weight:600;">${selectedPauseCount} selected</span>
+            ${activeCountInSelection > 0 ? `
+              <button onclick="handleBulkPauseBrandApps(true)"
+                style="padding:6px 18px;border-radius:6px;border:none;background:#e67e22;color:#fff;font-size:13px;cursor:pointer;font-weight:600;"
+                ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:default;"' : ''}>
+                Pause (${activeCountInSelection})
+              </button>
+            ` : ''}
+            ${pauseCountInSelection > 0 ? `
+              <button onclick="handleBulkPauseBrandApps(false)"
+                style="padding:6px 18px;border-radius:6px;border:none;background:#27ae60;color:#fff;font-size:13px;cursor:pointer;font-weight:600;"
+                ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:default;"' : ''}>
+                Resume (${pauseCountInSelection})
+              </button>
+            ` : ''}
+          ` : ''}
+        </div>
+      ` : '';
+
       const paginationBar = `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
           <div style="font-size:13px;color:#888;">Showing <strong>${from}–${to}</strong> of <strong>${sorted.length}</strong> applications</div>
@@ -7311,7 +7393,7 @@
         </div>
       `;
 
-      return bulkPanel + filterBar + brandBulkActionBar + paginationBar + paginated.map(app => {
+      return bulkPanel + filterBar + brandBulkActionBar + pauseBulkActionBar + paginationBar + paginated.map(app => {
         const isExpanded = state.expandedCards['int-' + app.id];
         return `
           <div class="app-card">
@@ -7320,6 +7402,11 @@
                 <input type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:2px;margin-right:4px;"
                   ${state.selectedBrandAppIds[app.id] ? 'checked' : ''}
                   onchange="toggleBrandAppSelection('${app.id}', this.checked)">
+              ` : ''}
+              ${sf === 'approved' && app.status === 'approved' ? `
+                <input type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:2px;margin-right:4px;accent-color:#e67e22;"
+                  ${state.selectedPauseBrandAppIds[app.id] ? 'checked' : ''}
+                  onchange="togglePauseBrandAppSelection('${app.id}', this.checked)">
               ` : ''}
               <div style="flex:1;">
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">

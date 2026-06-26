@@ -83,6 +83,9 @@ router.get('/', async (req, res) => {
       case 'bulkApproveBrandApplications':
         result = await bulkApproveBrandApplications(JSON.parse(req.query.ids));
         break;
+      case 'bulkPauseBrandApplications':
+        result = await bulkPauseBrandApplications(JSON.parse(req.query.ids), req.query.pause === 'true');
+        break;
       case 'validateBrandLogin':
         result = await validateBrandLogin(req.query.shopId, req.query.shopName);
         break;
@@ -652,6 +655,22 @@ async function bulkApproveBrandApplications(ids) {
     }
   }
   return { success: true, approved, failed };
+}
+
+// ─── bulkPauseBrandApplications ──────────────────────────────────────────────
+
+async function bulkPauseBrandApplications(ids, pause) {
+  const failed = [];
+  let updated = 0;
+  for (const id of ids) {
+    try {
+      await db.updateById('brand_applications', id, { isPaused: String(pause) });
+      updated++;
+    } catch (e) {
+      failed.push({ id, error: e.message });
+    }
+  }
+  return { success: true, updated, failed };
 }
 
 // ─── bulkApproveCreatorApplications ──────────────────────────────────────────
