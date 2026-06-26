@@ -307,23 +307,40 @@ async function bulkAddBrandApplications(applications) {
 async function addCreatorApplication(data) {
   const timeslots = Array.isArray(data.timeslots) ? data.timeslots : [];
 
+  // Fetch brand app to determine capacity limit (seller site = 1, creator site = 2)
+  const { data: brandAppRow } = await db.client
+    .from('brand_applications')
+    .select('seller_site_required')
+    .eq('id', String(data.brandApplicationId))
+    .single();
+  const slotCapacity = String(brandAppRow?.seller_site_required) === 'true' ? 1 : 2;
+
   // Fetch existing rows for this brand application to check conflicts
   const { data: existing } = await db.client
     .from('creator_applications')
-    .select('stream_date, stream_time, stream_end_date, stream_end_time, status')
+    .select('creator_id, stream_date, stream_time, stream_end_date, stream_end_time, status')
     .eq('brand_application_id', String(data.brandApplicationId))
     .not('status', 'in', '("rejected","cancelled")');
 
-  const existingRows = (existing || []).map(r => ({
+  const allRows = (existing || []).map(r => ({
+    creatorId: r.creator_id,
     streamDate: r.stream_date, streamTime: r.stream_time,
     streamEndDate: r.stream_end_date, streamEndTime: r.stream_end_time,
   }));
+  const sameCreatorRows = allRows.filter(r => String(r.creatorId) === String(data.creatorId));
+  const otherCreatorRows = allRows.filter(r => String(r.creatorId) !== String(data.creatorId));
 
   for (const slot of timeslots) {
-    for (const ex of existingRows) {
+    // Self-conflict: same creator cannot book overlapping slots for this brand
+    for (const ex of sameCreatorRows) {
       if (timeslotsOverlap(slot, ex)) {
-        return { error: 'One or more of your selected timeslots has just been taken by another creator. Please go back and pick an available slot.' };
+        return { error: 'One or more of your selected timeslots overlaps with a slot you have already applied for with this brand.' };
       }
+    }
+    // Slot capacity: seller site = max 1 creator, creator site = max 2
+    const overlappingCreatorIds = new Set(otherCreatorRows.filter(r => timeslotsOverlap(slot, r)).map(r => r.creatorId));
+    if (overlappingCreatorIds.size >= slotCapacity) {
+      return { error: 'One or more of your selected timeslots has just been taken by another creator. Please go back and pick an available slot.' };
     }
   }
 
@@ -568,15 +585,29 @@ async function rescheduleCreatorApplication(id, data) {
 
   const { data: conflictRows } = await db.client
     .from('creator_applications')
-    .select('id, stream_date, stream_time, stream_end_date, stream_end_time, status')
+    .select('id, creator_id, stream_date, stream_time, stream_end_date, stream_end_time, status')
     .in('brand_application_id', baIdsForShop)
     .not('status', 'in', '("rejected","cancelled")')
     .neq('id', id);
 
   const newSlot = { date: data.newDate, startTime: data.newStartTime, endDate: data.newEndDate || data.newDate, endTime: data.newEndTime || '' };
+  const slotCapacity = isSellerSite ? 1 : 2;
+
+  const overlappingOtherCreatorIds = new Set(
+    (conflictRows || [])
+      .filter(r => String(r.creator_id) !== String(currentRow.creatorId) &&
+        timeslotsOverlap(newSlot, { date: r.stream_date, startTime: r.stream_time, endDate: r.stream_end_date, endTime: r.stream_end_time }))
+      .map(r => r.creator_id)
+  );
+  if (overlappingOtherCreatorIds.size >= slotCapacity) {
+    return { success: false, error: 'This timeslot is already fully booked. Please pick a different time.' };
+  }
+
+  // Self-conflict: same creator cannot reschedule to a slot they already have
   for (const r of (conflictRows || [])) {
-    if (timeslotsOverlap(newSlot, { date: r.stream_date, startTime: r.stream_time, endDate: r.stream_end_date, endTime: r.stream_end_time })) {
-      return { success: false, error: 'This timeslot conflicts with another approved stream for this shop.' };
+    if (String(r.creator_id) === String(currentRow.creatorId) &&
+        timeslotsOverlap(newSlot, { date: r.stream_date, startTime: r.stream_time, endDate: r.stream_end_date, endTime: r.stream_end_time })) {
+      return { success: false, error: 'You already have another stream scheduled at the same time.' };
     }
   }
 
