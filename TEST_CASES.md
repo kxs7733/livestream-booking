@@ -9,38 +9,80 @@ Run these whenever you add a feature or improvement. Deployed at: https://shopee
 - §11 **Past-bug regressions** — always run the ones in the area you changed. These bugs happened once already.
 - §12 **Watch-outs** — not tests, but traps to re-check whenever you modify forms or the API.
 
+🔒 **Before running anything, read §0.** This is a live production app: the test uses dedicated demo accounts, creates its own brand app, acts only on that self-created data, labels everything `[DO NOT APPLY]` / `[test, do not select]`, and tears the data down afterward.
+
 ---
 
-## 0. Prerequisites — fill in before a round (required for AI-agent runs)
+## 0. Prerequisites & isolation protocol — READ FIRST
 
-A cold-start agent (verified with Opus 4.8, 2026-07-06) can execute this checklist **only** if this block is filled in first:
+⚠️ **There is no staging environment. Every write in this checklist hits production Supabase and real users can see it.** The rules below are mandatory, not optional. A cold-start agent (verified with Opus 4.8, 2026-07-06) must follow all of §0 before running any case.
 
-1. **Test identities** (create once, reuse every round):
-   - Test brand: Shop ID `______`, Shop Username `______`, PIN `______`
-   - Test creator: Affiliate ID `______` (must be added to the Managed Affiliates sheet), phone `______`, PIN `______`
-   - Internal: registered email `______` + team password
-2. **Controlled recipients**: set the test brand's PIC email to an inbox you/the agent can read, and link a Telegram account you control to the bot via `/start`. Notification-*receipt* checks are otherwise human-only.
-3. **Environment**: there is no staging — writes hit **production Supabase** and real crons. Prefix all test rows (shop name, creator name, reasons) with `ZZTEST_` so they are findable, and always finish a round with the S10 cascade-cancel cleanup. Never bulk-action rows without the prefix.
-4. **Verification channel legend** used below:
-   - **[H]** = human-only leg (message arriving on a phone/inbox you don't control, Railway logs, true concurrency). Agent substitute: assert the DB state via `GET /api?action=getAllData` (e.g. `approvedAt`, `sampleSentAt`, `cancelReason`, `reminder1dTelegramSentAt`) and/or the controlled inbox from item 2.
-   - **[CR]** = do NOT execute against production — verify by code review of the cited file/function instead (sync failure paths, races, archive deletion).
-5. **Do not trust `npm test`**: the Playwright suite's mocks intercept the old `**/macros/**` GAS URLs and never fire against the current `/api` app (see W8). Until rewritten, this checklist is manual/agent-driven only.
-6. **Mass-upload template** (for I12): Excel with row 1 = legend, row 2 = headers, row 3 = example, data from row 4. Header names (lowercased, spaces→underscores): `shop_id, month, stream_count, stream_location, seller_type, num_products_sponsored, ams_commission, has_package_activation, brand_activation_type, preferred_date, voucher_tier, seller_pic_name, seller_pic_mobile, seller_pic_email, transportation_covered, livestream_brief`.
+### 0.1 Dedicated test accounts (do not use any other identity)
+
+| Role | Credentials |
+|---|---|
+| **Brand** | Shop ID `2468` · Shop Name `[DO NOT APPLY] Demoseller` · PIN `123456` |
+| **Creator** | Affiliate ID `8642` · Phone `90000000` · PIN `000000` (must exist in the Managed Affiliates sheet, else login is blocked by design) |
+| **Internal** | registered email `______` + team password `______` *(fill in; needed for approval/dashboard cases)* |
+
+### 0.2 The golden isolation rule — self-contained loop
+
+**The test creates its own world and only touches that world.**
+
+1. As the **Brand** (`2468`), first create a brand application. Its shop name is already `[DO NOT APPLY] Demoseller`, so real creators know to skip it. This app is the *only* brand the test creator may interact with.
+2. As the **Creator** (`8642`), apply **only** to the `[DO NOT APPLY] Demoseller` brand app created in step 1. **Never apply to, approve, reject, pause, or cancel any real brand's application or any real creator's application.**
+3. As **Internal**, only ever act on rows belonging to shop `2468` / creator `8642`. Filter by shop name `Demoseller` before any approve/reject/cancel, and **never** use bulk/select-all actions unless the selection is filtered down to test rows only (bulk approve/pause on an unfiltered list would hit live applications — see §0.5).
+
+### 0.3 Labelling — every test entry must be self-identifying
+
+- Brand app: shop name stays `[DO NOT APPLY] Demoseller`.
+- Any free-text you enter (reject/cancel reasons, PIC name, delivery instructions, recipient name, brief filename, config entries): prefix with **`[test, do not select]`**.
+- This makes every test row greppable and signals real users/staff to ignore it if a cleanup step is missed.
+
+### 0.4 Teardown — restore original state after every round
+
+Test rows live in production, so you must remove them:
+
+1. Record what you create. As you go, note each created `brand_applications.id` and `creator_applications.id` (visible in the getAllData response, filter `shopName == "[DO NOT APPLY] Demoseller"` / `creatorId == "8642"`).
+2. **Cancel-cascade first**: as Internal, cancel the demo brand application → this cascade-cancels all its creator applications (sets status `cancelled`; it does not delete rows).
+3. **Hard-delete** the demo rows so the DB returns to its pre-test state: delete every `creator_applications` row with `brand_application_id` = the demo app, then the `brand_applications` row for shop `2468`. There is no delete button in the UI for these, so do it via the Supabase table editor (or a one-off SQL `DELETE`), scoped strictly by the recorded IDs. **Never** run a delete not filtered to the recorded test IDs.
+4. Verify: re-run getAllData with `allMonths=true` → zero rows for shop `2468` / creator `8642` (except the persistent seller/affiliate account rows themselves, which are fine to keep for reuse).
+5. Leave the seller row (`sellers.2468`) and affiliate row (`affiliates.8642`) in place for the next round — only application/booking rows are torn down.
+
+> If any teardown step can't be completed (e.g. no Supabase access), STOP and report which test rows remain, with their IDs, so a human can remove them. Do not leave undocumented test data.
+
+### 0.5 Hard don'ts
+
+- ❌ Never approve/reject/cancel/pause a row whose shop name isn't `[DO NOT APPLY] Demoseller`.
+- ❌ Never use bulk approve / bulk pause / select-all on an unfiltered list.
+- ❌ Never run Sync Managed Data, Sync to Google Sheets, or Archive Old Data as a live action (§7 marks these [CR] — code-review only).
+- ❌ Never induce sync/upload failures on prod (§7, §9).
+
+### 0.6 Supporting details
+
+- **Controlled recipients**: set the demo brand's PIC email to an inbox you can read, and link a Telegram account you control to the bot via `/start`, if you want to verify notification *receipt*; otherwise those legs are [H] (see legend).
+- **Verification channel legend**:
+  - **[H]** = human-only leg (message arriving on a phone/inbox you don't control, Railway logs, true concurrency). Agent substitute: assert DB state via `GET /api?action=getAllData` (`approvedAt`, `sampleSentAt`, `cancelReason`, `reminder1dTelegramSentAt`, …) and/or the controlled inbox above.
+  - **[CR]** = do NOT execute against production — verify by code review of the cited file/function (sync failure paths, races, archive deletion).
+- **Do not trust `npm test`**: the Playwright suite's mocks intercept the old `**/macros/**` GAS URLs and never fire against the current `/api` app (see W8). Until rewritten, this checklist is manual/agent-driven only.
+- **Mass-upload template** (for I12): Excel with row 1 = legend, row 2 = headers, row 3 = example, data from row 4. Header names (lowercased, spaces→underscores): `shop_id, month, stream_count, stream_location, seller_type, num_products_sponsored, ams_commission, has_package_activation, brand_activation_type, preferred_date, voucher_tier, seller_pic_name, seller_pic_mobile, seller_pic_email, transportation_covered, livestream_brief`. For I12, use shop_id `2468` only.
 
 ---
 
 ## 1. Smoke suite [S] — after every deploy
 
+Run the smoke suite as one self-contained loop with the §0.1 demo accounts. It builds its own brand app, exercises all three portals against only that app, then tears it down (§0.4).
+
 - [ ] S1 — App loads at `/`, no console errors, role picker (Brand / Creator) renders.
-- [ ] S2 — Brand login with existing test shop (ID + username + PIN) → lands on My Applications with data.
-- [ ] S3 — Creator login with managed test affiliate (ID + phone + PIN) → Available Brands shows approved, non-full, non-paused brands.
-- [ ] S4 — Internal login (email + team password) → dashboard stat cards show non-zero counts.
-- [ ] S5 — Refresh page mid-session → session restored from sessionStorage, same view.
-- [ ] S6 — Brand submits application (happy path incl. brief upload) → appears as *pending* in internal Brand Apps tab.
-- [ ] S7 — Internal approves it → status approved; brand PIC receives approval email.
-- [ ] S8 — Creator applies 2 timeslots to that brand → rows appear pending in internal Creator Apps tab.
-- [ ] S9 — Internal approves one creator slot → creator receives Telegram; seller PIC receives email; slot appears in all three portals' confirmed views.
-- [ ] S10 — Clean up: cancel the test brand app (with reason) → linked creator apps cascade-cancel; creator gets cancellation Telegram.
+- [ ] S2 — Brand login as Demoseller (`2468` / `[DO NOT APPLY] Demoseller` / `123456`) → lands on My Applications.
+- [ ] S3 — Brand submits an application (happy path incl. brief upload; pick the nearest available month, Creator Site, stream count 2) → appears as *pending*. **Record its app id.**
+- [ ] S4 — Internal login → filter Brand Apps by shop name `Demoseller` → approve **only** the demo app → status approved; PIC email fires ([H]/DB: `approvedAt` set).
+- [ ] S5 — Creator login as `8642` / `90000000` / `000000` → Available Brands lists the now-approved `[DO NOT APPLY] Demoseller` app (and the test only ever applies to this one).
+- [ ] S6 — Creator applies 2 timeslots to the demo brand → 2 rows appear *pending* in internal Creator Apps. **Record their ids.**
+- [ ] S7 — Internal → filter Creator Apps to creator `8642` → approve one slot → creator Telegram + PIC email fire ([H]/DB: `approvedAt`); slot shows in all three portals' confirmed views.
+- [ ] S8 — Refresh page mid-session → session restored from sessionStorage, same view.
+- [ ] S9 — Sanity: getAllData shows exactly the demo rows you created and nothing else was touched.
+- [ ] S10 — **Teardown (§0.4)**: cancel the demo brand app (cancel reason `[test, do not select]`) → linked creator apps cascade-cancel → then hard-delete the recorded demo application rows so the DB returns to its pre-test state. Verify zero `2468`/`8642` application rows remain.
 
 ---
 
@@ -81,17 +123,17 @@ A cold-start agent (verified with Opus 4.8, 2026-07-06) can execute this checkli
 
 ## 4. Creator portal
 
-**Available Brands visibility** (client-side filter)
-- [ ] C1 [P1] Brand hidden when: not approved, OR paused, OR approved-creator-slots ≥ streamCount. Un-pause / free a slot → reappears.
+**Available Brands visibility** (client-side filter) — test using the demo brand's own states, not by observing real brands
+- [ ] C1 [P1] Using the demo app: while it's pending/rejected → not listed; approve it → listed; pause it (as Demoseller) → disappears, un-pause → reappears; fill all its slots with the demo creator → disappears once approved-slots ≥ streamCount.
 - [ ] C2 [P2] Creator view must **not** expose shop IDs (anti-impersonation strip). Check the **network response**, not just the DOM — today the API sends shopId to every client and only the render hides it (**currently failing** at the network layer, see §8 warning).
 - [ ] C3 [P2] "Already applied" state shows with "Apply Again" option; filters (brand/category/month) work.
 
 **Apply form**
 - [ ] C4 [P1] Fewer than 2 timeslots → "minimum of 2 livestreams per brand"; odd count → blocked.
 - [ ] C5 [P1] Timeslot rules, test each: end ≤ start; duration < 2 h; date < tomorrow; date outside brand month; more slots than brand has left — each blocked with specific message.
-- [ ] C6 [P1] **Capacity**: creator-site brand slot already held by 2 other creators at overlapping time → blocked ("just been taken by another creator" if racing). Seller-site: predefined chips; taken/conflicting chips disabled; cap is 1 creator.
-- [ ] C7 [P1] Self-overlap: same creator, same brand, overlapping slots → blocked (client and server).
-- [ ] C8 [P2] Cross-brand double-booking: creator has a confirmed slot for brand A; try overlapping slot for brand B → client blocks. ⚠️ server does NOT check this on creation (only on reschedule) — see W4.
+- [ ] C6 [P1] **Capacity**: [CR]/code-review the 2-creator (creator-site) / 1-creator (seller-site) cap in `addCreatorApplication` — genuinely testing it needs a *second* real creator, which the isolation rule forbids. The seller-site chip-disable UI can be observed on a demo seller-site app. Do not recruit a second live creator/brand to force this.
+- [ ] C7 [P1] Self-overlap: as the demo creator, add two overlapping slots on the demo brand → blocked (client and server).
+- [ ] C8 [P2] Cross-brand double-booking is inherently multi-brand; with a single demo brand it's [CR] — code-review W4 (server does NOT check this on creation, only on reschedule). Do not create a second brand to test it live.
 - [ ] C9 [P1] Required fields: phone, telegram, recipient name, address, 6-digit postal; seller-site brand additionally requires "willing to travel" checked.
 - [ ] C10 [P2] "I already have samples" checkbox → slot shows "Using Existing Samples" immediately (sampleSent/Received pre-filled).
 - [ ] C11 [P2] Changing Telegram username in apply form → syncs to profile and existing application rows.
@@ -109,8 +151,8 @@ A cold-start agent (verified with Opus 4.8, 2026-07-06) can execute this checkli
 - [ ] I2 [P1] Approve creator slot beyond brand's streamCount → blocked: "Cannot approve. This brand has N livestream slot(s)…".
 - [ ] I3 [P1] Cancel brand app: reason required; modal lists linked creator apps; confirm → cascade-cancels all non-rejected/cancelled creator apps, emails seller + each creator, Telegram to each creator.
 - [ ] I4 [P1] Cancel a single confirmed slot (Confirmed Slots tab) → reason required, creator emailed + Telegram'd.
-- [ ] I5 [P1] Bulk approve (brand and creator tabs): select-all header checkbox works; **individual checkbox alone also reveals the button** (past bug); result reports per-row failures, e.g. "(slot limit reached)".
-- [ ] I6 [P2] Bulk pause/resume approved brand apps → isPaused flips for all selected; creator Available list reflects it.
+- [ ] I5 [P1] Bulk approve: **first filter the list to shop `Demoseller` / creator `8642` so the selection contains only demo rows** (§0.5 — never bulk-action an unfiltered live list). Then check select-all header checkbox works and **an individual checkbox alone also reveals the button** (past bug); result reports per-row failures, e.g. "(slot limit reached)". The button-visibility behaviour can also be observed without submitting.
+- [ ] I6 [P2] Bulk pause/resume: filter to the demo brand first, then bulk pause/resume → isPaused flips; creator Available list reflects it. Never pause/resume an unfiltered live list.
 - [ ] I7 [P1] **Concurrency guard**: open the same pending app in two tabs; approve in one, reject in the other → second gets "already approved/rejected by another user. Please refresh." Same-status re-update is a silent no-op.
 - [ ] I8 [P2] Edit brand app: stream count editable only for non-seller-site apps (field hidden for seller-site); AMS editable.
 - [ ] I9 [P2] Filters & counts: status pills counts match cards; RM filter (from managed_sellers), managed/unmanaged filter, month filter, pagination; "Show Past Months" loads full history.
@@ -131,7 +173,7 @@ A cold-start agent (verified with Opus 4.8, 2026-07-06) can execute this checkli
 
 ## 6. Notifications matrix
 
-For each event, verify the right person gets the right channel (and *nobody else*). **Receipt legs are [H]** unless routed to the controlled recipients from §0.2 — an agent asserts the *send-side state* instead: `approvedAt`/`rejectedAt`/`cancelledAt`/`sampleSentAt` set in getAllData, and (for Telegram) the recipient exists in `telegram_users`.
+For each event, verify the right person gets the right channel (and *nobody else*). **Receipt legs are [H]** unless routed to the controlled recipients from §0.6 — an agent asserts the *send-side state* instead: `approvedAt`/`rejectedAt`/`cancelledAt`/`sampleSentAt` set in getAllData, and (for Telegram) the recipient exists in `telegram_users`.
 
 | # | Event | Telegram → creator | Email → seller PIC (CC RM) | Email → internal (send_notif) |
 |---|---|---|---|---|
@@ -144,7 +186,7 @@ For each event, verify the right person gets the right channel (and *nobody else
 | N7 [P2] | T-1 stream reminder (GAS cron, SGT) [H] | ✅ once per slot — agent alt: `reminder1dTelegramSentAt` set once, unchanged on cron re-run | — | — |
 | N8 [P2] | Sync/archive failure [CR] | ✅ to SyncAlertsPIC config user — do not induce failures on prod; code-review the failure branches (api.js sync/archive catch blocks) | — | — |
 
-- [ ] N9 [P1] Telegram linking [H for the /start leg — needs the controlled Telegram account from §0.2]: creator sends `/start` to bot → row appears in `telegram_users` with chat_id; notifications reach them. Unlinked creator → app flows still succeed (notification failure must never block the action) — this half is fully agent-checkable.
+- [ ] N9 [P1] Telegram linking [H for the /start leg — needs the controlled Telegram account from §0.6]: creator sends `/start` to bot → row appears in `telegram_users` with chat_id; notifications reach them. Unlinked creator → app flows still succeed (notification failure must never block the action) — this half is fully agent-checkable.
 - [ ] N10 [P2] Telegram "I've Received the Samples" button [H — needs the controlled Telegram account; agent alt: assert `sampleReceivedAt` transitions via API]: works once; after brand undoes dispatch → button press says "notification is outdated"; second press → "already marked as received".
 - [ ] N11 [P2] No notifications fire on: submission (brand or creator), pause/resume, brief re-upload, profile edits. (If you *add* one, update this row.)
 
@@ -192,7 +234,7 @@ Most G-cases point at an earlier case ID (`= I2` etc.) — they are the same tes
 - [ ] G7 — Transportation-covered/fee displays in ALL six places: brand form, brand My Applications, creator Available card, creator My Applications, creator Confirmed tab, internal cards. (Took 6 commits to get right.)
 - [ ] G8 — `c9ae220` Brief re-upload search returns results and shows the existing brief.
 - [ ] G9 — `a115ef4` Brand login shop ID digits-only (= L1); internal ID update cascades (= I14).
-- [ ] G10 — `e8fe0ce` [H unless PIC email is the controlled inbox from §0.2] Emails actually deliver from Railway (Brevo HTTP API, not SMTP — SMTP ports are blocked). Any email change: verify a real delivery from the deployed app, not localhost.
+- [ ] G10 — `e8fe0ce` [H unless PIC email is the controlled inbox from §0.6] Emails actually deliver from Railway (Brevo HTTP API, not SMTP — SMTP ports are blocked). Any email change: verify a real delivery from the deployed app, not localhost.
 - [ ] G11 — `9090e4c` Archive uses separate archive tabs with matching columns (= D4).
 - [ ] G12 — `beba481` Config `active` compares against string `'ACTIVE'`, not boolean — INACTIVE rows excluded everywhere (= I17).
 - [ ] G13 — `551c80d` Stream-count edit hidden for seller-site apps (= I8).
