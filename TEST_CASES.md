@@ -9,7 +9,23 @@ Run these whenever you add a feature or improvement. Deployed at: https://shopee
 - §11 **Past-bug regressions** — always run the ones in the area you changed. These bugs happened once already.
 - §12 **Watch-outs** — not tests, but traps to re-check whenever you modify forms or the API.
 
-Test with throwaway data: a test shop ID, a test affiliate ID added to Managed Affiliates, and your own Telegram/email as recipient. Remember rows go to the production Supabase — clean up after.
+---
+
+## 0. Prerequisites — fill in before a round (required for AI-agent runs)
+
+A cold-start agent (verified with Opus 4.8, 2026-07-06) can execute this checklist **only** if this block is filled in first:
+
+1. **Test identities** (create once, reuse every round):
+   - Test brand: Shop ID `______`, Shop Username `______`, PIN `______`
+   - Test creator: Affiliate ID `______` (must be added to the Managed Affiliates sheet), phone `______`, PIN `______`
+   - Internal: registered email `______` + team password
+2. **Controlled recipients**: set the test brand's PIC email to an inbox you/the agent can read, and link a Telegram account you control to the bot via `/start`. Notification-*receipt* checks are otherwise human-only.
+3. **Environment**: there is no staging — writes hit **production Supabase** and real crons. Prefix all test rows (shop name, creator name, reasons) with `ZZTEST_` so they are findable, and always finish a round with the S10 cascade-cancel cleanup. Never bulk-action rows without the prefix.
+4. **Verification channel legend** used below:
+   - **[H]** = human-only leg (message arriving on a phone/inbox you don't control, Railway logs, true concurrency). Agent substitute: assert the DB state via `GET /api?action=getAllData` (e.g. `approvedAt`, `sampleSentAt`, `cancelReason`, `reminder1dTelegramSentAt`) and/or the controlled inbox from item 2.
+   - **[CR]** = do NOT execute against production — verify by code review of the cited file/function instead (sync failure paths, races, archive deletion).
+5. **Do not trust `npm test`**: the Playwright suite's mocks intercept the old `**/macros/**` GAS URLs and never fire against the current `/api` app (see W8). Until rewritten, this checklist is manual/agent-driven only.
+6. **Mass-upload template** (for I12): Excel with row 1 = legend, row 2 = headers, row 3 = example, data from row 4. Header names (lowercased, spaces→underscores): `shop_id, month, stream_count, stream_location, seller_type, num_products_sponsored, ams_commission, has_package_activation, brand_activation_type, preferred_date, voucher_tier, seller_pic_name, seller_pic_mobile, seller_pic_email, transportation_covered, livestream_brief`.
 
 ---
 
@@ -32,7 +48,7 @@ Test with throwaway data: a test shop ID, a test affiliate ID added to Managed A
 
 - [ ] L1 [P1] Brand login: shop ID with letters → "Shop ID must be numbers only" (client blocks before API).
 - [ ] L2 [P1] Brand login: correct ID + wrong shop name → "Shop Name does not match the registered Shop ID."
-- [ ] L3 [P2] Brand login: shop name already registered under a *different* ID → distinct error, no login.
+- [ ] L3 [P2] Brand login: shop name already registered under a *different* ID → "This Shop Name is already registered under a different Shop ID. Please check your credentials." (must be this message, not the L2 mismatch one), no login.
 - [ ] L4 [P1] Brand login: brand-new shop ID+name → registration flow, then PIN setup (set + confirm, 6 digits, must match), then site-address setup screen before dashboard.
 - [ ] L5 [P1] Creator login: affiliate ID **not** in Managed Affiliates → "Login Unavailable… contact Shopee Livestream Talent Management PIC" (this is the access gate — must never silently pass).
 - [ ] L6 [P1] Creator login: managed ID but wrong phone → error, no login.
@@ -50,7 +66,7 @@ Test with throwaway data: a test shop ID, a test affiliate ID added to Managed A
 - [ ] B2 [P1] Products sponsored < 3 → blocked. (Hint text says EL=5 / non-EL=8 but code enforces ≥3 — see W2.)
 - [ ] B3 [P1] AMS: 5, or 6.5 → "whole number of at least 6%"; 6 passes.
 - [ ] B4 [P1] Required consents: product-nomination confirm, bundle deals, voucher tier, creator assignment, loaned-product return costs, PDPA — omit each once → each blocks submit.
-- [ ] B5 [P1] Brief upload: filename **must contain shop username** (e.g. `innisfreesg_Jun26_CreatorMatch.xlsx`); wrong ext or >10 MB rejected; upload failure aborts submit and **form draft is preserved** (re-open form, fields still filled).
+- [ ] B5 [P1] Brief upload: filename **must contain shop username** (e.g. `innisfreesg_Jun26_CreatorMatch.xlsx`); wrong ext or >10 MB rejected; upload failure aborts submit and **form draft is preserved**. To induce the failure: fill the whole form, then set the browser to offline (DevTools → Network → Offline) before clicking Submit → expect an upload-error toast, no application created, and on re-opening the form all fields still filled.
 - [ ] B6 [P1] Seller Site location: address required, postal must be 6 digits, timeslot count must **equal** stream count, each slot fixed 2 h / within month / ≥ tomorrow / no overlap with each other or with the shop's other active seller-site apps. Transportation-covered checkbox appears only for Seller Site.
 - [ ] B7 [P2] Package activation: type + preferred date required; preferred date outside stream month → blocked. (21-day rule is hint-only — see W3.)
 - [ ] B8 [P1] Month dropdown only offers ACTIVE `AvailableMonth` config rows; nomination link follows `ProductNominationLink` config for the chosen month.
@@ -67,7 +83,7 @@ Test with throwaway data: a test shop ID, a test affiliate ID added to Managed A
 
 **Available Brands visibility** (client-side filter)
 - [ ] C1 [P1] Brand hidden when: not approved, OR paused, OR approved-creator-slots ≥ streamCount. Un-pause / free a slot → reappears.
-- [ ] C2 [P2] Creator view must **not** expose shop IDs (anti-impersonation strip). Check network response/DOM.
+- [ ] C2 [P2] Creator view must **not** expose shop IDs (anti-impersonation strip). Check the **network response**, not just the DOM — today the API sends shopId to every client and only the render hides it (**currently failing** at the network layer, see §8 warning).
 - [ ] C3 [P2] "Already applied" state shows with "Apply Again" option; filters (brand/category/month) work.
 
 **Apply form**
@@ -102,7 +118,7 @@ Test with throwaway data: a test shop ID, a test affiliate ID added to Managed A
 
 **Apply on behalf**
 - [ ] I11 [P1] Single create for brand: free month input, "Retrieve Shop Info" fills profile; shop-name-mismatch and name-used-by-other-ID validations fire.
-- [ ] I12 [P1] Mass upload: prepare a file with one bad row per rule — bad month format, invalid stream_count, unknown seller_type, invalid voucher tier code, bad PIC mobile/email, seller-site without transportation flag, activation without valid type/date, and a shop_id not in sellers/managed_sellers → each row individually blocked with its reason; good rows still import as pending.
+- [ ] I12 [P1] Mass upload (template in §0.6): prepare a file with one bad row per rule — bad month format (not `YYYY-MM`), invalid stream_count, unknown seller_type, invalid voucher tier code, bad PIC mobile (`\d{8,15}`) / email, seller-site row without transportation_covered, activation without valid brand_activation_type/preferred_date, and a shop_id not in sellers/managed_sellers → each row individually blocked with its reason; good rows still import as pending.
 - [ ] I13 [P2] Apply on behalf of creator: shop → brand app → creator picker; submitted rows carry the selected creator's ID, not the internal user.
 
 **Admin menu**
@@ -115,7 +131,7 @@ Test with throwaway data: a test shop ID, a test affiliate ID added to Managed A
 
 ## 6. Notifications matrix
 
-For each event, verify the right person gets the right channel (and *nobody else*):
+For each event, verify the right person gets the right channel (and *nobody else*). **Receipt legs are [H]** unless routed to the controlled recipients from §0.2 — an agent asserts the *send-side state* instead: `approvedAt`/`rejectedAt`/`cancelledAt`/`sampleSentAt` set in getAllData, and (for Telegram) the recipient exists in `telegram_users`.
 
 | # | Event | Telegram → creator | Email → seller PIC (CC RM) | Email → internal (send_notif) |
 |---|---|---|---|---|
@@ -125,35 +141,37 @@ For each event, verify the right person gets the right channel (and *nobody else
 | N4 [P1] | Brand app approved / rejected / cancelled | — | ✅ each | — |
 | N5 [P1] | Sample sent / undo | ✅ button / ✅ strip button | — | — |
 | N6 [P1] | Reschedule | ✅ old vs new | ✅ | ✅ |
-| N7 [P2] | T-1 stream reminder (GAS cron, SGT) | ✅ once per slot (idempotent — re-run cron, no duplicate) | — | — |
-| N8 [P2] | Sync/archive failure | ✅ to SyncAlertsPIC config user | — | — |
+| N7 [P2] | T-1 stream reminder (GAS cron, SGT) [H] | ✅ once per slot — agent alt: `reminder1dTelegramSentAt` set once, unchanged on cron re-run | — | — |
+| N8 [P2] | Sync/archive failure [CR] | ✅ to SyncAlertsPIC config user — do not induce failures on prod; code-review the failure branches (api.js sync/archive catch blocks) | — | — |
 
-- [ ] N9 [P1] Telegram linking: creator sends `/start` to bot → username↔chat_id stored; notifications reach them. Unlinked creator → app flows still succeed (notification failure must never block the action).
-- [ ] N10 [P2] Telegram "I've Received the Samples" button: works once; after brand undoes dispatch → button press says "notification is outdated"; second press → "already marked as received".
+- [ ] N9 [P1] Telegram linking [H for the /start leg — needs the controlled Telegram account from §0.2]: creator sends `/start` to bot → row appears in `telegram_users` with chat_id; notifications reach them. Unlinked creator → app flows still succeed (notification failure must never block the action) — this half is fully agent-checkable.
+- [ ] N10 [P2] Telegram "I've Received the Samples" button [H — needs the controlled Telegram account; agent alt: assert `sampleReceivedAt` transitions via API]: works once; after brand undoes dispatch → button press says "notification is outdated"; second press → "already marked as received".
 - [ ] N11 [P2] No notifications fire on: submission (brand or creator), pause/resume, brief re-upload, profile edits. (If you *add* one, update this row.)
 
 ## 7. Background jobs & data integrity
 
-- [ ] D1 [P1] **Managed-data sync safety** (the big one — caused a real outage): sync with GAS returning an empty dataset → sync must REFUSE (never wipe managed_affiliates, which is the creator login gate). Duplicate IDs in the sheet → last row wins, no crash, no wipe.
-- [ ] D2 [P2] Hourly sync cron (:05) and daily Sheets-export cron (02:00) ran — check Railway logs after deploy.
-- [ ] D3 [P2] Sheets export: all 7 tabs repopulated; a sync failure sends Telegram to SyncAlertsPIC, and the sheet is not left half-cleared.
-- [ ] D4 [P2] Archive: append-to-sheet succeeds *before* Supabase delete; archive tab columns match live table structure (past bug).
+- [ ] D1 [P1] [CR] **Managed-data sync safety** (the big one — caused a real outage): do NOT feed empty data on prod. Code-review `syncManagedData` in api.js: empty dataset → refuses (never wipes managed_affiliates, the creator login gate); duplicate IDs → deduped last-row-wins; upsert-then-prune, never delete-then-insert. Then run the manual sync (I15) and confirm counts unchanged/expected.
+- [ ] D2 [P2] [H] Hourly sync cron (:05) and daily Sheets-export cron (02:00) ran — check Railway logs after deploy (human/log access required).
+- [ ] D3 [P2] Sheets export: all 7 tabs repopulated (agent-checkable via the export Google Sheet); failure alert to SyncAlertsPIC is [CR].
+- [ ] D4 [P2] [CR] Archive: code-review `archive-old-applications` — append-to-sheet must succeed *before* Supabase delete; archive tab columns match live table structure (past bug). Only exercise for real when you actually intend to archive.
 - [ ] D5 [P2] Profile/ID cascades stay consistent: rename seller → brand_name/shop_name updated in brand apps AND shop_name in linked creator apps; rename affiliate → creator apps + telegram_users follow. No orphaned rows (creator_applications.brand_application_id always resolves).
-- [ ] D6 [P2] getAllData default window: brand apps from current month, creator apps from current month onward; past data only via toggles.
+- [ ] D6 [P2] getAllData default window: brand apps from current month **onward** (`month >= current`), creator apps with stream_date from the 1st of the current month onward; past data only via the past-months/all-months toggles.
 
 ## 8. Security & access [P1]
 
-- [ ] X1 — Creator cannot see other creators' applications or any shop IDs; brand cannot see other brands' applications.
+> ⚠️ **As of 2026-07-06, X5 and C2 FAIL in production.** `getAllData` (no auth) returns `pinSalt`+`pinHash` for every seller and affiliate, plus affiliate phone, Telegram handle, and full shipping address, and `shopId` on every brand application — the role-based hiding is client-render-only. Fix: strip these fields server-side in `getAllData` (api.js). Re-check these two first on every round until fixed.
+
+- [ ] X1 — Creator cannot see other creators' applications or any shop IDs; brand cannot see other brands' applications. **Check at the network layer** (the API response), not just the rendered DOM — see warning above.
 - [ ] X2 — Internal view unreachable without passing validateInternalLogin (try navigating state directly / setView guard).
 - [ ] X3 — Non-managed affiliate cannot create an account by any path.
 - [ ] X4 — No secrets in browser: check page source & console for Supabase service key, bot token, passwords (past cleanup: console logging of sensitive data was removed — keep it removed).
-- [ ] X5 — Direct API probe: `GET /api?action=getAllData` returns data without auth — known design (shared-secret-free API). Any new endpoint you add must not expose more than this baseline (e.g. never return pin_hash/pin_salt).
+- [ ] X5 — Direct API probe: `curl 'https://<host>/api?action=getAllData'` → response must NOT contain `pinSalt`/`pinHash` anywhere, and affiliate contact/shipping fields must not be exposed beyond what each role needs. (**Currently failing** — see warning above.) Any new endpoint must meet the same bar.
 
-## 9. Race conditions [P2]
+## 9. Race conditions [P2] — all [CR] on production (true concurrency isn't reproducible safely; verify the guards in code, or exercise on a copy of the DB)
 
-- [ ] R1 — Two creators submit the last remaining overlapping slot near-simultaneously → second gets "just been taken by another creator."
-- [ ] R2 — Two internal users bulk-approve overlapping selections → per-row transition guards produce failures, not double approvals; slot-limit never exceeded (approved count ≤ streamCount afterwards).
-- [ ] R3 — Telegram webhook retries (same update_id twice) → deduped, action applied once.
+- [ ] R1 — Two creators submit the last remaining overlapping slot near-simultaneously → second gets "just been taken by another creator." (Code: capacity re-check inside `addCreatorApplication`, api.js.)
+- [ ] R2 — Two internal users bulk-approve overlapping selections → per-row transition guards produce failures, not double approvals; slot-limit never exceeded. (Code: transition guard + slot-limit count in `updateCreatorApplication`.)
+- [ ] R3 — Telegram webhook retries (same update_id twice) → deduped, action applied once. (Code: `lastUpdateId` in properties table, webhook handler.)
 
 ## 10. Non-functional quick checks [P2]
 
@@ -162,6 +180,8 @@ For each event, verify the right person gets the right channel (and *nobody else
 - [ ] Q3 — Brand app with 30 streams / creator with many slots: calendar views render correctly.
 
 ## 11. Past-bug regressions (from git history — always run the ones in your area)
+
+Most G-cases point at an earlier case ID (`= I2` etc.) — they are the same test, listed here with the originating commit so you know *why* it exists. Run the referenced case; tick both. G2/G10/G11 inherit the [CR]/[H] markers of their referenced cases.
 
 - [ ] G1 — `f556783` Managed-data sync with duplicate IDs must not wipe the login gate (= D1).
 - [ ] G2 — `862fcfa` Sync must upsert-then-prune, never delete-then-insert; failed insert must not leave tables empty.
@@ -172,7 +192,7 @@ For each event, verify the right person gets the right channel (and *nobody else
 - [ ] G7 — Transportation-covered/fee displays in ALL six places: brand form, brand My Applications, creator Available card, creator My Applications, creator Confirmed tab, internal cards. (Took 6 commits to get right.)
 - [ ] G8 — `c9ae220` Brief re-upload search returns results and shows the existing brief.
 - [ ] G9 — `a115ef4` Brand login shop ID digits-only (= L1); internal ID update cascades (= I14).
-- [ ] G10 — `e8fe0ce` Emails actually deliver from Railway (Brevo HTTP API, not SMTP — SMTP ports are blocked). Any email change: verify a real delivery from the deployed app, not localhost.
+- [ ] G10 — `e8fe0ce` [H unless PIC email is the controlled inbox from §0.2] Emails actually deliver from Railway (Brevo HTTP API, not SMTP — SMTP ports are blocked). Any email change: verify a real delivery from the deployed app, not localhost.
 - [ ] G11 — `9090e4c` Archive uses separate archive tabs with matching columns (= D4).
 - [ ] G12 — `beba481` Config `active` compares against string `'ACTIVE'`, not boolean — INACTIVE rows excluded everywhere (= I17).
 - [ ] G13 — `551c80d` Stream-count edit hidden for seller-site apps (= I8).
