@@ -236,8 +236,9 @@ const BRIEF_FOLDER_ID = '1hAlgJfaTVhz7qtaWXwXCIySv-PlxHIfF';
 // Telegram Bot Token — replace with your bot token from @BotFather
 const TELEGRAM_BOT_TOKEN = '8527763047:AAG0pCj2YZurmmucqUC3z9r2p1Zt2NqQP6I';
 
-// Internal team dashboard password
-const INTERNAL_PASSWORD = 'shopeelive2025';
+// Internal team dashboard password — legacy, unused since migration to Node/Supabase backend.
+// Left unset since validateInternalLogin below is dead code (no live caller).
+const INTERNAL_PASSWORD = null;
 
 function getBriefFolder() {
   return DriveApp.getFolderById(BRIEF_FOLDER_ID);

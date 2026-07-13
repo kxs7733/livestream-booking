@@ -23,7 +23,10 @@ const {
   sendCancellationNotification_CreatorApp,
 } = require('./lib/telegram');
 
-const INTERNAL_PASSWORD = process.env.INTERNAL_PASSWORD || 'shopeelive2025';
+if (!process.env.INTERNAL_PASSWORD) {
+  throw new Error('INTERNAL_PASSWORD env var is not set — refusing to start with a default password');
+}
+const INTERNAL_PASSWORD = process.env.INTERNAL_PASSWORD;
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
