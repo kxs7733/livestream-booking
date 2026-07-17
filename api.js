@@ -371,7 +371,9 @@ async function addCreatorApplication(data) {
     willingToTravel: data.willingToTravel,
     status: data.status,
     createdAt: data.createdAt,
-    sampleSentAt: '', sampleReceivedAt: '', hasSamples: '',
+    hasSamples: data.hasSamples || false,
+    sampleSentAt: data.hasSamples ? data.createdAt : '',
+    sampleReceivedAt: data.hasSamples ? data.createdAt : '',
     cancelReason: '', cancelledAt: '', courier: '', trackingId: '',
     rejectedAt: '', rejectionReason: '',
   }));
