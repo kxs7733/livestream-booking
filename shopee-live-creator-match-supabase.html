@@ -686,7 +686,7 @@
       internalCalendarStatusFilter: { approved: true, pending: true },
       confirmedSlotsFilters: { shopName: '', creatorUsername: '', category: '', dateFrom: '', dateTo: '', month: '', rm: '' },
       brandAppsFilters: { shopName: '', category: '', month: '', rm: '', managed: '' },
-      creatorAppsFilters: { creatorUsername: '', category: '', month: '', rm: '', affiliateStatus: '' },
+      creatorAppsFilters: { shopName: '', creatorUsername: '', category: '', month: '', rm: '', affiliateStatus: '' },
       brandAppStatusFilter: 'pending',
       creatorAppStatusFilter: 'pending',
       internalBrandAppsPage: 0,
@@ -704,6 +704,7 @@
       rescheduleModal: null,
       brandCancelModal: { show: false, id: null, shopName: '', linkedCreators: [] },
       creatorCancelModal: { show: false, id: null, reason: '' },
+      creatorSubmitSuccessModal: { show: false },
       rejectModal: { show: false, type: null, id: null, reason: '' },
       internalShowPast: false,
       internalBrandApplyMode: false,
@@ -2119,7 +2120,7 @@
         state.isLoading = false;
         render();
         return;
-      } else {
+      } else if (isInternal) {
         showNotification('Application submitted! Internal team will review.');
       }
 
@@ -2174,6 +2175,7 @@
         rebuildInternalDisplayArrays();
         state.showCreatorApplyForm = null;
         state.creatorTab = 'my-applications';
+        state.creatorSubmitSuccessModal = { show: true };
         render();
       }
     };
@@ -2861,6 +2863,7 @@
 
     const applyCreatorAppsFilters = () => {
       state.creatorAppsFilters = {
+        shopName: document.getElementById('caf-shop')?.value || '',
         creatorUsername: document.getElementById('caf-creator')?.value || '',
         category: document.getElementById('caf-category')?.value || '',
         month: document.getElementById('caf-month')?.value || '',
@@ -2933,6 +2936,23 @@
                 Back
               </button>
             </div>
+          </div>
+        </div>`;
+    };
+
+    const renderCreatorSubmitSuccessModal = () => {
+      if (!state.creatorSubmitSuccessModal.show) return '';
+      return `
+        <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;">
+          <div class="cancel-modal-inner" style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);text-align:center;">
+            <div style="font-size:38px;margin-bottom:12px;">✅</div>
+            <div style="font-size:18px;font-weight:700;color:#222;margin-bottom:10px;">Application Submitted</div>
+            <div style="font-size:14px;color:#555;line-height:1.5;margin-bottom:22px;">
+              Thank you for submitting your application. Do take note, applications are subjected to Shopee's approval and are not guaranteed.
+            </div>
+            <button class="btn-primary creator-accent" style="width:100%;" onclick="state.creatorSubmitSuccessModal = { show: false }; render();">
+              OK
+            </button>
           </div>
         </div>`;
     };
@@ -3713,7 +3733,7 @@
 
       const footerHtml = state.view === 'landing' ? `<div class="shopee-powered">Powered by <a href="https://shopee.sg" target="_blank">Shopee</a> &middot; Shopee Live Creator Match</div>` : '';
       const loadingHtml = state.isLoading ? `<div class="loading-overlay"><div class="loading-spinner"></div></div>` : '';
-      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderRescheduleModal()}${renderRejectModal()}${renderArchiveModal()}${renderPinResetModal()}`;
+      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderCreatorSubmitSuccessModal()}${renderRescheduleModal()}${renderRejectModal()}${renderArchiveModal()}${renderPinResetModal()}`;
       // Scroll booking calendars to 8am after render
       requestAnimationFrame(() => {
         const sy = document.getElementById('creator-cal-scroll-y');
@@ -7524,9 +7544,16 @@
       const f = state.creatorAppsFilters;
       const categories = [...new Set(filtered.map(a => state.brandApplications.find(ba => ba.id === a.brandApplicationId)?.sellerType).filter(Boolean))].sort();
       const months = [...new Set(filtered.map(a => state.brandApplications.find(ba => ba.id === a.brandApplicationId)?.month).filter(Boolean))].sort();
-      const hasFilters = f.creatorUsername || f.category || f.month || f.rm || f.affiliateStatus;
+      const hasFilters = f.shopName || f.creatorUsername || f.category || f.month || f.rm || f.affiliateStatus;
 
       // Apply search filters
+      if (f.shopName) {
+        filtered = filtered.filter(a => {
+          const brandApp = state.brandApplications.find(ba => ba.id === a.brandApplicationId);
+          const shopName = brandApp?.shopName || a.shopName || a.brandName || '';
+          return shopName.toLowerCase().includes(f.shopName.toLowerCase());
+        });
+      }
       if (f.creatorUsername) filtered = filtered.filter(a => (a.affiliateUsername || a.creatorName).toLowerCase().includes(f.creatorUsername.toLowerCase()));
       if (f.category) {
         filtered = filtered.filter(a => {
@@ -7565,6 +7592,11 @@
           <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:12px;">Filters</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;">
             <div style="min-width:0;">
+              <label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">Shop Name</label>
+              <input type="text" id="caf-shop" class="form-input" style="font-size:13px;padding:8px 12px;width:100%;" placeholder="Search shop..." value="${f.shopName}"
+                onkeydown="if(event.key==='Enter') applyCreatorAppsFilters();">
+            </div>
+            <div style="min-width:0;">
               <label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">Creator Username</label>
               <input type="text" id="caf-creator" class="form-input" style="font-size:13px;padding:8px 12px;width:100%;" placeholder="Search creator..." value="${f.creatorUsername}"
                 onkeydown="if(event.key==='Enter') applyCreatorAppsFilters();">
@@ -7600,7 +7632,7 @@
           <div style="display:flex;gap:8px;margin-top:12px;">
             <button class="btn-primary" style="font-size:13px;padding:8px 20px;" onclick="applyCreatorAppsFilters();">Search</button>
             ${hasFilters ? `<button class="btn-secondary" style="font-size:13px;padding:8px 16px;"
-              onclick="state.creatorAppsFilters = { creatorUsername:'', category:'', month:'', rm:'', affiliateStatus:'' }; state.internalCreatorAppsPage = 0; render();">
+              onclick="state.creatorAppsFilters = { shopName:'', creatorUsername:'', category:'', month:'', rm:'', affiliateStatus:'' }; state.internalCreatorAppsPage = 0; render();">
               Clear Filters
             </button>` : ''}
           </div>
@@ -7715,8 +7747,21 @@
             </div>
             ${row.status === 'rejected' && row.rejectionReason ? `<div style="margin-top:8px;padding:8px 12px;background:#ffebee;border-radius:6px;font-size:13px;color:#e74c3c;"><strong>Rejection Reason:</strong> ${row.rejectionReason}</div>` : ''}
             <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
-              <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(row.streamDate)} ${formatTime(row.streamTime)}${row.streamEndTime ? ' – ' + (row.streamEndDate && row.streamEndDate !== row.streamDate ? formatDate(row.streamEndDate) + ' ' : '') + formatTime(row.streamEndTime) : ''}</span>${String(row.hasSamples) === 'true' ? '<span style="display:inline-block;padding:4px 10px;background:#e8f4f8;color:#2980b9;border-radius:6px;font-size:12px;font-weight:600;">📦 Has Existing Samples</span>' : ''}</div></div>
+              <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(row.streamDate)} ${formatTime(row.streamTime)}${row.streamEndTime ? ' – ' + (row.streamEndDate && row.streamEndDate !== row.streamDate ? formatDate(row.streamEndDate) + ' ' : '') + formatTime(row.streamEndTime) : ''}</span>${row.status !== 'approved' && String(row.hasSamples) === 'true' ? '<span style="display:inline-block;padding:4px 10px;background:#e8f4f8;color:#2980b9;border-radius:6px;font-size:12px;font-weight:600;">📦 Has Existing Samples</span>' : ''}</div></div>
             </div>
+            ${row.status === 'approved' ? `
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;">
+              ${String(row.hasSamples) === 'true'
+                ? `<span style="display:inline-block;padding:4px 10px;background:#e8f4f8;color:#2980b9;border-radius:6px;font-size:12px;font-weight:600;">📦 Using Existing Samples — No New Samples to be Sent</span>`
+                : row.sampleReceivedAt
+                  ? `<span style="background:#e3f2fd;color:#1565c0;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">📬 Sample Received — ${new Date(row.sampleReceivedAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })}</span>`
+                  : row.sampleSentAt
+                    ? `<span style="background:#fff8e1;color:#e65100;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">📦 Sample Sent — ${new Date(row.sampleSentAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })} · Awaiting creator confirmation</span>`
+                    : `<span style="background:#f5f5f5;color:#888;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">⏳ Sample Not Yet Sent</span>`
+              }
+            </div>
+            ${row.sampleSentAt && (row.courier || row.trackingId) ? `<div style="margin-top:6px;font-size:12px;color:#555;">Courier: <strong>${row.courier || '—'}</strong> &nbsp;·&nbsp; Tracking ID: <strong>${row.trackingId || '—'}</strong></div>` : ''}
+            ` : ''}
             <div style="margin-top:8px;">
               <span style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="state.expandedCards['ca-details-${row.id}'] = !state.expandedCards['ca-details-${row.id}']; render();">
                 ${isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
