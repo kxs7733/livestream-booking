@@ -129,6 +129,24 @@ CREATE INDEX IF NOT EXISTS idx_creator_applications_creator_id ON creator_applic
 CREATE INDEX IF NOT EXISTS idx_creator_applications_stream_date ON creator_applications(stream_date);
 CREATE INDEX IF NOT EXISTS idx_creator_applications_status ON creator_applications(status);
 
+CREATE TABLE IF NOT EXISTS reschedule_history (
+  id SERIAL PRIMARY KEY,
+  creator_application_id TEXT DEFAULT '',
+  old_stream_date TEXT DEFAULT '',
+  old_stream_time TEXT DEFAULT '',
+  old_stream_end_date TEXT DEFAULT '',
+  old_stream_end_time TEXT DEFAULT '',
+  new_stream_date TEXT DEFAULT '',
+  new_stream_time TEXT DEFAULT '',
+  new_stream_end_date TEXT DEFAULT '',
+  new_stream_end_time TEXT DEFAULT '',
+  reschedule_reason_code TEXT DEFAULT '',
+  reschedule_reason_desc TEXT DEFAULT '',
+  rescheduled_at TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_reschedule_history_creator_application_id ON reschedule_history(creator_application_id);
+
 CREATE TABLE IF NOT EXISTS telegram_users (
   username TEXT PRIMARY KEY,
   chat_id TEXT DEFAULT '',

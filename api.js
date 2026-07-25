@@ -204,13 +204,14 @@ async function getAllData(allMonths, pastMonths) {
   }
 
   // Fetch all tables in parallel — filter brand/creator applications server-side
-  const [sellers, affiliates, managedSellers, managedAffiliates, businessMappingValues] =
+  const [sellers, affiliates, managedSellers, managedAffiliates, businessMappingValues, rescheduleHistory] =
     await Promise.all([
       db.all('sellers'),
       db.all('affiliates'),
       db.all('managed_sellers'),
       db.all('managed_affiliates'),
       db.all('business_mapping_values'),
+      db.all('reschedule_history'),
     ]);
 
   // Fetch all rows for a table in parallel pages (get count first, then all pages simultaneously)
@@ -270,7 +271,7 @@ async function getAllData(allMonths, pastMonths) {
     return obj;
   });
 
-  return { sellers, affiliates, slots: [], bookings: [], brandApplications, creatorApplications, managedSellers, managedAffiliates, businessMappingValues };
+  return { sellers, affiliates, slots: [], bookings: [], brandApplications, creatorApplications, managedSellers, managedAffiliates, businessMappingValues, rescheduleHistory };
 }
 
 function snakeToCamelLocal(s) {
@@ -547,6 +548,12 @@ async function rescheduleCreatorApplication(id, data) {
     return { success: false, error: 'Only approved slots can be rescheduled. (current status: ' + currentRow.status + ')' };
   }
 
+  const rescheduleReasonCode = String(data.rescheduleReasonCode || '').trim();
+  const rescheduleReasonDesc = String(data.rescheduleReasonDesc || '').trim();
+  if (!rescheduleReasonCode || !rescheduleReasonDesc) {
+    return { success: false, error: 'A reschedule reason is required.' };
+  }
+
   // 3-day rule
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const slotDate = new Date(String(currentRow.streamDate) + 'T00:00:00');
@@ -631,6 +638,21 @@ async function rescheduleCreatorApplication(id, data) {
     streamEndTime: data.newEndTime || '',
   };
   await db.updateById('creator_applications', id, updates);
+
+  await db.insert('reschedule_history', {
+    creatorApplicationId: id,
+    oldStreamDate: oldDate,
+    oldStreamTime: oldStartTime,
+    oldStreamEndDate: oldEndDate,
+    oldStreamEndTime: oldEndTime,
+    newStreamDate: updates.streamDate,
+    newStreamTime: updates.streamTime,
+    newStreamEndDate: updates.streamEndDate,
+    newStreamEndTime: updates.streamEndTime,
+    rescheduleReasonCode,
+    rescheduleReasonDesc,
+    rescheduledAt: new Date().toISOString(),
+  });
 
   const updatedRow = Object.assign({}, currentRow, updates);
 
@@ -1362,21 +1384,22 @@ const syncToGoogleSheets = async () => {
     const sheets = await getGoogleSheetsClient();
     console.log('[syncToGoogleSheets] Starting sync...');
 
-    // Fetch all data from Supabase (7 tables)
-    const [brandApps, creatorApps, sellers, affiliates, businessMappings, internalTeam, telegramUsers] = await Promise.all([
+    // Fetch all data from Supabase (8 tables)
+    const [brandApps, creatorApps, sellers, affiliates, businessMappings, internalTeam, telegramUsers, rescheduleHistory] = await Promise.all([
       db.all('brand_applications'),
       db.all('creator_applications'),
       db.all('sellers'),
       db.all('affiliates'),
       db.all('business_mapping_values'),
       db.all('internal_team'),
-      db.all('telegram_users')
+      db.all('telegram_users'),
+      db.all('reschedule_history')
     ]);
 
     // Validate all data is non-null before touching any sheet
     if (!Array.isArray(brandApps) || !Array.isArray(creatorApps) || !Array.isArray(sellers) ||
         !Array.isArray(affiliates) || !Array.isArray(businessMappings) || !Array.isArray(internalTeam) ||
-        !Array.isArray(telegramUsers)) {
+        !Array.isArray(telegramUsers) || !Array.isArray(rescheduleHistory)) {
       throw new Error('Supabase returned corrupted data: not all arrays');
     }
 
@@ -1396,7 +1419,8 @@ const syncToGoogleSheets = async () => {
       { range: 'Affiliates', values: toRows(affiliates, Object.keys(affiliates[0] || {})) },
       { range: 'BusinessMappingValues', values: toRows(businessMappings, Object.keys(businessMappings[0] || {})) },
       { range: 'InternalTeam', values: toRows(internalTeam, Object.keys(internalTeam[0] || {})) },
-      { range: 'TelegramUsers', values: toRows(telegramUsers, Object.keys(telegramUsers[0] || {})) }
+      { range: 'TelegramUsers', values: toRows(telegramUsers, Object.keys(telegramUsers[0] || {})) },
+      { range: 'RescheduleHistory', values: toRows(rescheduleHistory, Object.keys(rescheduleHistory[0] || {})) }
     ];
 
     // Clear and update each sheet
@@ -1493,13 +1517,45 @@ const archiveOldApplications = async () => {
       archivedCount += oldCreatorApps.length;
     }
 
+    // Archive reschedule history belonging to the old creator applications
+    const oldCreatorAppIdsForHistory = (oldCreatorApps || []).map(a => a.id);
+    let oldRescheduleHistory = [];
+    if (oldCreatorAppIdsForHistory.length > 0) {
+      const { data: historyRowsRaw } = await supabase
+        .from('reschedule_history')
+        .select('*')
+        .in('creator_application_id', oldCreatorAppIdsForHistory);
+      oldRescheduleHistory = historyRowsRaw || [];
+    }
+
+    if (oldRescheduleHistory.length > 0) {
+      const historyHeaders = Object.keys(oldRescheduleHistory[0]);
+      const historyRows = oldRescheduleHistory.map(row => historyHeaders.map(h => String(row[h] || '')));
+
+      const historyAppendResult = await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: 'archive_RescheduleHistory',
+        valueInputOption: 'RAW',
+        requestBody: { values: historyRows }
+      });
+      if (!historyAppendResult.data || historyAppendResult.status !== 200) {
+        throw new Error(`Failed to append reschedule history to Google Sheets`);
+      }
+      archivedCount += oldRescheduleHistory.length;
+    }
+
     // Delete old records from Supabase (only after successful appends)
     const oldBrandAppIds = (oldBrandApps || []).map(a => a.id);
     const oldCreatorAppIds = (oldCreatorApps || []).map(a => a.id);
+    const oldRescheduleHistoryIds = oldRescheduleHistory.map(r => r.id);
 
     if (oldBrandAppIds.length > 0) {
       const { error: brandDelError } = await supabase.from('brand_applications').delete().in('id', oldBrandAppIds);
       if (brandDelError) throw new Error(`Delete brand applications: ${brandDelError.message}`);
+    }
+    if (oldRescheduleHistoryIds.length > 0) {
+      const { error: historyDelError } = await supabase.from('reschedule_history').delete().in('id', oldRescheduleHistoryIds);
+      if (historyDelError) throw new Error(`Delete reschedule history: ${historyDelError.message}`);
     }
     if (oldCreatorAppIds.length > 0) {
       const { error: creatorDelError } = await supabase.from('creator_applications').delete().in('id', oldCreatorAppIds);

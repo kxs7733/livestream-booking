@@ -1250,6 +1250,7 @@
           state.managedSellers = data.managedSellers || [];
           state.managedAffiliates = data.managedAffiliates || [];
           state.businessMappingValues = data.businessMappingValues || [];
+          state.rescheduleHistory = data.rescheduleHistory || [];
           // Strip shopId from brand applications when viewed by creators to prevent account impersonation
           if (state.currentUser?.type === 'creator') {
             state.brandApplications = state.brandApplications.map(({ shopId, ...rest }) => rest);
@@ -2586,8 +2587,14 @@
       const ca = state.creatorApplications.find(a => a.id === caId);
       if (!ca) return;
       const brandApp = state.brandApplications.find(ba => ba.id === ca.brandApplicationId);
-      state.rescheduleModal = { caId, ca, brandApp, selectedSlotIdx: null, showCalendar: false, calendarWeekOffset: 0 };
+      state.rescheduleModal = { caId, ca, brandApp, selectedSlotIdx: null, showCalendar: false, calendarWeekOffset: 0, reasonCode: '', reasonDesc: '' };
       render();
+    };
+
+    const getLatestRescheduleHistory = (caId) => {
+      const rows = (state.rescheduleHistory || []).filter(h => String(h.creatorApplicationId) === String(caId));
+      if (!rows.length) return null;
+      return rows.slice().sort((a, b) => new Date(b.rescheduledAt) - new Date(a.rescheduledAt))[0];
     };
 
     const handleCreatorRescheduleSubmit = async (caId) => {
@@ -2694,9 +2701,16 @@
         }
       }
 
+      const reasonCode = String(state.rescheduleModal?.reasonCode || '').trim();
+      const reasonDesc = String(state.rescheduleModal?.reasonDesc || '').trim();
+      if (!reasonCode || !reasonDesc) {
+        showNotification('Please select a reschedule reason.', 'error');
+        return;
+      }
+
       state.isSubmitting = true;
       render();
-      const result = await apiCall('rescheduleCreatorApplication', { id: caId, data: { newDate, newStartTime, newEndDate: newEndDate || newDate, newEndTime } });
+      const result = await apiCall('rescheduleCreatorApplication', { id: caId, data: { newDate, newStartTime, newEndDate: newEndDate || newDate, newEndTime, rescheduleReasonCode: reasonCode, rescheduleReasonDesc: reasonDesc } });
       state.isSubmitting = false;
       if (!result || !result.success) {
         showNotification(result?.error || 'Failed to reschedule. Please try again.', 'error');
@@ -3021,40 +3035,61 @@
           </div>
         </div>` : '';
 
+      const rm = state.rescheduleModal;
       const freeDatePickerHtml = !isSellerSite ? `
         <div style="margin-bottom:16px;">
           <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:10px;">New Date & Time <span style="font-size:11px;font-weight:400;color:#888;">(must be within ${formatMonth(slotMonth)})</span></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div>
               <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;">Start Date <span style="color:#e74c3c;">*</span></label>
-              <input type="date" id="reschedule-start-date" min="${minDate}" max="${maxDate}" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
+              <input type="date" id="reschedule-start-date" min="${minDate}" max="${maxDate}" value="${rm.newStartDate || ''}" oninput="state.rescheduleModal.newStartDate = this.value;" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
               <div style="display:flex;align-items:center;gap:6px;">
-                <select id="reschedule-start-hour" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  ${reschedHours.map(h=>`<option value="${h}">${h}</option>`).join('')}
+                <select id="reschedule-start-hour" onchange="state.rescheduleModal.newStartHour = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
+                  ${reschedHours.map(h=>`<option value="${h}" ${(rm.newStartHour || '00') === h ? 'selected' : ''}>${h}</option>`).join('')}
                 </select>
                 <span style="font-weight:700;color:#888;flex-shrink:0;">:</span>
-                <select id="reschedule-start-min" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  <option value="00">00</option>
-                  <option value="30">30</option>
+                <select id="reschedule-start-min" onchange="state.rescheduleModal.newStartMin = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
+                  <option value="00" ${(rm.newStartMin || '00') === '00' ? 'selected' : ''}>00</option>
+                  <option value="30" ${rm.newStartMin === '30' ? 'selected' : ''}>30</option>
                 </select>
               </div>
             </div>
             <div>
               <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;">End Date</label>
-              <input type="date" id="reschedule-end-date" min="${minDate}" max="${maxDate}" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
+              <input type="date" id="reschedule-end-date" min="${minDate}" max="${maxDate}" value="${rm.newEndDate || ''}" oninput="state.rescheduleModal.newEndDate = this.value;" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
               <div style="display:flex;align-items:center;gap:6px;">
-                <select id="reschedule-end-hour" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  ${reschedHours.map(h=>`<option value="${h}">${h}</option>`).join('')}
+                <select id="reschedule-end-hour" onchange="state.rescheduleModal.newEndHour = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
+                  ${reschedHours.map(h=>`<option value="${h}" ${(rm.newEndHour || '00') === h ? 'selected' : ''}>${h}</option>`).join('')}
                 </select>
                 <span style="font-weight:700;color:#888;flex-shrink:0;">:</span>
-                <select id="reschedule-end-min" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  <option value="00">00</option>
-                  <option value="30">30</option>
+                <select id="reschedule-end-min" onchange="state.rescheduleModal.newEndMin = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
+                  <option value="00" ${(rm.newEndMin || '00') === '00' ? 'selected' : ''}>00</option>
+                  <option value="30" ${rm.newEndMin === '30' ? 'selected' : ''}>30</option>
                 </select>
               </div>
             </div>
           </div>
         </div>` : '';
+
+      const reasonOptions = state.businessMappingValues
+        .filter(r => r.type === 'RescheduleReason' && String(r.active).toUpperCase() === 'ACTIVE');
+      const selectedReasonCode = state.rescheduleModal.reasonCode || '';
+      const isOthersReason = selectedReasonCode === 'OTHERS';
+      const reasonHtml = `
+        <div style="margin-bottom:16px;">
+          <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:10px;">Reschedule Reason <span style="color:#e74c3c;">*</span></div>
+          <select id="reschedule-reason-code" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;" ${busy ? 'disabled' : ''}
+            onchange="const opt = this.options[this.selectedIndex]; state.rescheduleModal.reasonCode = this.value; state.rescheduleModal.reasonDesc = this.value === 'OTHERS' ? '' : (opt.dataset.desc || ''); render();">
+            <option value="">Select a reason</option>
+            ${reasonOptions.map(r => `<option value="${r.code}" data-desc="${r.description}" ${selectedReasonCode === String(r.code) ? 'selected' : ''}>${r.description}</option>`).join('')}
+            <option value="OTHERS" ${isOthersReason ? 'selected' : ''}>Others</option>
+          </select>
+          ${isOthersReason ? `
+            <textarea id="reschedule-reason-other" rows="2" placeholder="Please specify the reason" ${busy ? 'disabled' : ''}
+              style="width:100%;margin-top:8px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical;"
+              oninput="state.rescheduleModal.reasonDesc = this.value;">${state.rescheduleModal.reasonDesc || ''}</textarea>
+          ` : ''}
+        </div>`;
 
       return `
         <div class="brand-detail-overlay" onclick="${close}" style="z-index:1100;">
@@ -3087,6 +3122,7 @@
                 ${calendarHtml}
                 ${freeDatePickerHtml}`;
             })()}
+            ${reasonHtml}
             <div style="display:flex;gap:10px;">
               <button onclick="handleCreatorRescheduleSubmit('${caId}')" ${busy ? 'disabled' : ''} style="flex:1;padding:12px;background:${busy ? '#ccc' : '#6c5ce7'};color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:${busy ? 'not-allowed' : 'pointer'};">
                 ${busy ? '⏳ Rescheduling...' : '🔄 Confirm Reschedule'}
@@ -6896,7 +6932,7 @@
 
           ${(() => {
             if (!state.internalConfigMode) return '';
-            const typeOptions = ['VoucherTier', 'ProductNominationLink', 'InternalPIC', 'InternalPICNumber', 'AvailableMonth', 'BrandActivation', 'SyncAlertsPIC'];
+            const typeOptions = ['VoucherTier', 'ProductNominationLink', 'InternalPIC', 'InternalPICNumber', 'AvailableMonth', 'BrandActivation', 'SyncAlertsPIC', 'RescheduleReason'];
             return `
               <div style="background:#f8f9fa;border:1px solid #dfe6e9;border-radius:12px;padding:20px;margin-bottom:24px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -7746,6 +7782,14 @@
               <div class="app-card-meta-item">Stream Month: <strong>${formatMonth(brandApp?.month)}</strong></div>
             </div>
             ${row.status === 'rejected' && row.rejectionReason ? `<div style="margin-top:8px;padding:8px 12px;background:#ffebee;border-radius:6px;font-size:13px;color:#e74c3c;"><strong>Rejection Reason:</strong> ${row.rejectionReason}</div>` : ''}
+            ${(() => {
+              const latestReschedule = getLatestRescheduleHistory(row.id);
+              if (!latestReschedule) return '';
+              return `<div style="margin-top:8px;padding:8px 12px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#666;">
+                <strong style="color:#555;">🔄 Reschedule Reason:</strong> ${latestReschedule.rescheduleReasonDesc}
+                <div style="margin-top:4px;font-size:12px;color:#888;">Previous Slot: ${formatDate(latestReschedule.oldStreamDate)} ${formatTime(latestReschedule.oldStreamTime)}${latestReschedule.oldStreamEndTime ? ' – ' + (latestReschedule.oldStreamEndDate && latestReschedule.oldStreamEndDate !== latestReschedule.oldStreamDate ? formatDate(latestReschedule.oldStreamEndDate) + ' ' : '') + formatTime(latestReschedule.oldStreamEndTime) : ''}</div>
+              </div>`;
+            })()}
             <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
               <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(row.streamDate)} ${formatTime(row.streamTime)}${row.streamEndTime ? ' – ' + (row.streamEndDate && row.streamEndDate !== row.streamDate ? formatDate(row.streamEndDate) + ' ' : '') + formatTime(row.streamEndTime) : ''}</span>${row.status !== 'approved' && String(row.hasSamples) === 'true' ? '<span style="display:inline-block;padding:4px 10px;background:#e8f4f8;color:#2980b9;border-radius:6px;font-size:12px;font-weight:600;">📦 Has Existing Samples</span>' : ''}</div></div>
             </div>
@@ -7976,6 +8020,14 @@
               <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
                 <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(s.date)} ${formatTime(s.startTime)}${s.endTime ? ' – ' + (s.endDate !== s.date ? formatDate(s.endDate) + ' ' : '') + formatTime(s.endTime) : ''}</span></div></div>
               </div>
+              ${(() => {
+                const latestReschedule = getLatestRescheduleHistory(s.caId);
+                if (!latestReschedule) return '';
+                return `<div style="margin-top:8px;padding:8px 12px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#666;">
+                  <strong style="color:#555;">🔄 Reschedule Reason:</strong> ${latestReschedule.rescheduleReasonDesc}
+                  <div style="margin-top:4px;font-size:12px;color:#888;">Previous Slot: ${formatDate(latestReschedule.oldStreamDate)} ${formatTime(latestReschedule.oldStreamTime)}${latestReschedule.oldStreamEndTime ? ' – ' + (latestReschedule.oldStreamEndDate && latestReschedule.oldStreamEndDate !== latestReschedule.oldStreamDate ? formatDate(latestReschedule.oldStreamEndDate) + ' ' : '') + formatTime(latestReschedule.oldStreamEndTime) : ''}</div>
+                </div>`;
+              })()}
               <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;">
                 ${s.sampleReceivedAt
                   ? `<span style="background:#e3f2fd;color:#1565c0;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;">📬 Sample Received — ${new Date(s.sampleReceivedAt).toLocaleDateString('en-SG', { day:'numeric', month:'short', year:'numeric' })}</span>`
