@@ -706,6 +706,7 @@
       creatorCancelModal: { show: false, id: null, reason: '' },
       creatorSubmitSuccessModal: { show: false },
       rejectModal: { show: false, type: null, id: null, reason: '' },
+      rescheduleConflictModal: { show: false, historyId: null, message: '' },
       internalShowPast: false,
       internalBrandApplyMode: false,
       internalCreatorApplyMode: null,   // brandAppId when active
@@ -2245,6 +2246,18 @@
       state.isSubmitting = true;
       state.rejectModal = { show: false, type: null, id: null, reason: '' };
       render();
+      if (type === 'reschedule') {
+        const result = await apiCall('rejectRescheduleRequest', { id, reason: reason.trim() });
+        state.isSubmitting = false;
+        if (!result || !result.success) {
+          showNotification(result?.error || 'Failed to reject. Please try again.', 'error');
+          await loadAllData(); return;
+        }
+        await loadAllData();
+        showNotification('Reschedule request rejected. Creator has been notified.');
+        render();
+        return;
+      }
       const rejectedAt = new Date().toISOString();
       const data = { status: 'rejected', rejectedAt, rejectionReason: reason.trim() };
       if (type === 'brand') {
@@ -2289,6 +2302,56 @@
     };
 
     const handleRejectCreatorApp = (caId) => openRejectModal('creator', caId);
+
+    const handleApproveReschedule = async (historyId) => {
+      if (state.isSubmitting) return;
+      state.isSubmitting = true;
+      render();
+      const result = await apiCall('approveRescheduleRequest', { id: historyId });
+      state.isSubmitting = false;
+      if (result && result.conflict) {
+        state.rescheduleConflictModal = { show: true, historyId, message: result.error || 'This timeslot has since been booked by another creator.' };
+        render();
+        return;
+      }
+      if (!result || !result.success) {
+        showNotification(result?.error || 'Failed to approve reschedule. Please try again.', 'error');
+        render();
+        return;
+      }
+      await loadAllData();
+      showNotification('Reschedule approved. Creator has been notified.');
+      render();
+    };
+
+    const closeRescheduleConflictModal = () => {
+      state.rescheduleConflictModal = { show: false, historyId: null, message: '' };
+      render();
+    };
+
+    const confirmApproveRescheduleAnyway = async () => {
+      const { historyId } = state.rescheduleConflictModal;
+      if (!historyId || state.isSubmitting) return;
+      state.rescheduleConflictModal = { show: false, historyId: null, message: '' };
+      state.isSubmitting = true;
+      render();
+      const result = await apiCall('approveRescheduleRequest', { id: historyId, force: true });
+      state.isSubmitting = false;
+      if (!result || !result.success) {
+        showNotification(result?.error || 'Failed to approve reschedule. Please try again.', 'error');
+        render();
+        return;
+      }
+      await loadAllData();
+      showNotification('Reschedule approved (double-booked). Creator has been notified.');
+      render();
+    };
+
+    const handleRejectReschedule = (historyId) => {
+      if (state.isSubmitting) return;
+      state.rejectModal = { show: true, type: 'reschedule', id: historyId, reason: '' };
+      render();
+    };
 
     const handleSaveBrandAppEdit = async (appId) => {
       if (state.isSubmitting) return;
@@ -2717,9 +2780,14 @@
         render();
         return;
       }
-      updateStateCA(caId, { streamDate: newDate, streamTime: newStartTime, streamEndDate: newEndDate || newDate, streamEndTime: newEndTime });
       state.rescheduleModal = null;
-      showNotification('Slot rescheduled successfully!');
+      if (result.pendingApproval) {
+        await loadAllData();
+        showNotification("Rescheduling within 3 days of your scheduled livestream requires approval from the Shopee Live Team. You'll be notified of the outcome via Telegram, or you can check your dashboard for updates.", 'success', 8000);
+      } else {
+        updateStateCA(caId, { streamDate: newDate, streamTime: newStartTime, streamEndDate: newEndDate || newDate, streamEndTime: newEndTime });
+        showNotification('Slot rescheduled successfully!');
+      }
       render();
     };
 
@@ -3138,11 +3206,12 @@
     const renderRejectModal = () => {
       if (!state.rejectModal.show) return '';
       const close = `state.rejectModal = { show: false, type: null, id: null, reason: '' }; render();`;
+      const isReschedule = state.rejectModal.type === 'reschedule';
       return `
         <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;" onclick="${close}">
           <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);" onclick="event.stopPropagation();">
-            <h3 style="margin:0 0 8px;font-size:18px;color:#e74c3c;">Reject Application</h3>
-            <p style="margin:0 0 16px;color:#666;font-size:14px;">Please provide a reason for rejection. This will be sent to the applicant.</p>
+            <h3 style="margin:0 0 8px;font-size:18px;color:#e74c3c;">${isReschedule ? 'Reject Reschedule Request' : 'Reject Application'}</h3>
+            <p style="margin:0 0 16px;color:#666;font-size:14px;">${isReschedule ? 'Please provide a reason for rejecting this reschedule request. The creator will be notified that their original slot still stands.' : 'Please provide a reason for rejection. This will be sent to the applicant.'}</p>
             <textarea id="reject-reason-input" rows="4"
               style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;"
               placeholder="e.g. Creator does not meet follower requirements for this brand"
@@ -3150,6 +3219,21 @@
             <div style="display:flex;gap:12px;margin-top:16px;">
               <button class="btn-secondary" style="flex:1;" onclick="${close}" ${state.isSubmitting ? 'disabled' : ''}>Cancel</button>
               <button class="btn-reject" style="flex:1;padding:10px 0;border-radius:8px;border:none;font-weight:600;cursor:pointer;" onclick="submitReject();" ${state.isSubmitting ? 'disabled' : ''}>Confirm Reject</button>
+            </div>
+          </div>
+        </div>`;
+    };
+
+    const renderRescheduleConflictModal = () => {
+      if (!state.rescheduleConflictModal.show) return '';
+      return `
+        <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;" onclick="closeRescheduleConflictModal();">
+          <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2);" onclick="event.stopPropagation();">
+            <h3 style="margin:0 0 8px;font-size:18px;color:#e67e22;">⚠️ Slot Already Taken</h3>
+            <p style="margin:0 0 16px;color:#555;font-size:14px;line-height:1.5;">${state.rescheduleConflictModal.message}</p>
+            <div style="display:flex;gap:12px;">
+              <button class="btn-secondary" style="flex:1;" onclick="closeRescheduleConflictModal();" ${state.isSubmitting ? 'disabled' : ''}>Leave Pending</button>
+              <button style="flex:1;padding:10px 0;border-radius:8px;border:none;font-weight:600;cursor:pointer;background:#e67e22;color:#fff;" onclick="confirmApproveRescheduleAnyway();" ${state.isSubmitting ? 'disabled' : ''}>Approve Anyway</button>
             </div>
           </div>
         </div>`;
@@ -3769,7 +3853,7 @@
 
       const footerHtml = state.view === 'landing' ? `<div class="shopee-powered">Powered by <a href="https://shopee.sg" target="_blank">Shopee</a> &middot; Shopee Live Creator Match</div>` : '';
       const loadingHtml = state.isLoading ? `<div class="loading-overlay"><div class="loading-spinner"></div></div>` : '';
-      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderCreatorSubmitSuccessModal()}${renderRescheduleModal()}${renderRejectModal()}${renderArchiveModal()}${renderPinResetModal()}`;
+      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderCreatorSubmitSuccessModal()}${renderRescheduleModal()}${renderRejectModal()}${renderRescheduleConflictModal()}${renderArchiveModal()}${renderPinResetModal()}`;
       // Scroll booking calendars to 8am after render
       requestAnimationFrame(() => {
         const sy = document.getElementById('creator-cal-scroll-y');
@@ -4894,9 +4978,8 @@
         } else {
           const renderCreatorConfirmedCard = (ca, idx) => {
             const brandApp = state.brandApplications.find(ba => ba.id === ca.brandApplicationId);
-            const today = new Date(); today.setHours(0,0,0,0);
-            const slotDate = new Date(ca.streamDate + 'T00:00:00');
-            const canReschedule = Math.floor((slotDate - today) / 86400000) >= 3;
+            const latestReschedule = getLatestRescheduleHistory(ca.id);
+            const hasPendingReschedule = !!latestReschedule && latestReschedule.status === 'pending';
             const streamDateTime = formatDate(ca.streamDate) + ' ' + formatTime(ca.streamTime) +
               (ca.streamEndTime ? ' – ' + (ca.streamEndDate && ca.streamEndDate !== ca.streamDate ? formatDate(ca.streamEndDate) + ' ' : '') + formatTime(ca.streamEndTime) : '');
             const cardKey = `creator-confirmed-${idx}`;
@@ -4920,7 +5003,9 @@
                 <div class="app-card-header">
                   <div class="app-card-title">🏪 ${ca.brandName || ca.shopName || '—'}</div>
                   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                    ${canReschedule ? `<button onclick="handleCreatorReschedule('${ca.id}')" ${state.isSubmitting ? 'disabled' : ''} style="padding:4px 12px;background:#f5f5f5;color:#888;border:1px solid #ddd;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;cursor:${state.isSubmitting ? 'not-allowed' : 'pointer'};">🔄 Reschedule</button>` : ''}
+                    ${hasPendingReschedule
+                      ? `<span style="padding:4px 12px;background:#fff8e1;color:#e67e22;border:1px solid #f5cb8c;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">⏳ Reschedule Pending Approval</span>`
+                      : `<button onclick="handleCreatorReschedule('${ca.id}')" ${state.isSubmitting ? 'disabled' : ''} style="padding:4px 12px;background:#f5f5f5;color:#888;border:1px solid #ddd;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;cursor:${state.isSubmitting ? 'not-allowed' : 'pointer'};">🔄 Reschedule</button>`}
                     <span class="status-badge status-approved">Approved</span>
                   </div>
                 </div>
@@ -4936,6 +5021,12 @@
                 <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
                   <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${streamDateTime}</span></div></div>
                 </div>
+                ${latestReschedule && latestReschedule.status === 'rejected' ? `
+                  <div style="margin-top:10px;padding:8px 12px;background:#ffebee;border-radius:6px;font-size:13px;color:#e74c3c;">
+                    <strong>Your reschedule request was rejected:</strong> ${latestReschedule.rejectionReason}
+                    <div style="margin-top:2px;">Your original slot above stands — please adhere to it.</div>
+                  </div>
+                ` : ''}
                 ${sampleBadge}
                 <div style="margin-top:10px;">
                   <span style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="state.expandedCards['${cardKey}'] = !state.expandedCards['${cardKey}']; render();">
@@ -7571,9 +7662,12 @@
     const renderInternalCreatorApps = () => {
       const all = state.internalDisplayCreatorApps || filterCreatorAppsByDisplayWindow(state.creatorApplications);
       const sf = state.creatorAppStatusFilter;
-      let filtered = sf ? all.filter(a => a.status === sf) : all;
+      let filtered = sf === 'pending_reschedule'
+        ? all.filter(a => getLatestRescheduleHistory(a.id)?.status === 'pending')
+        : sf ? all.filter(a => a.status === sf) : all;
 
       const approvedCount = all.filter(a => a.status === 'approved').length;
+      const pendingRescheduleCount = all.filter(a => getLatestRescheduleHistory(a.id)?.status === 'pending').length;
       const statusCounts = { pending: 0, rejected: 0, cancelled: 0 };
       all.forEach(a => { if (statusCounts[a.status] !== undefined) statusCounts[a.status]++; });
 
@@ -7615,11 +7709,11 @@
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
           <label style="font-size:13px;color:#888;white-space:nowrap;">Status:</label>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${[['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['cancelled','Cancelled'],['','All']].map(([val, label]) => `
+            ${[['pending','Pending'],['pending_reschedule','Pending Reschedule'],['approved','Approved'],['rejected','Rejected'],['cancelled','Cancelled'],['','All']].map(([val, label]) => `
               <button onclick="state.creatorAppStatusFilter = '${val}'; state.internalCreatorAppsPage = 0; render();"
                 class="status-filter-pill"
                 style="padding:5px 14px;border-radius:20px;border:1px solid ${sf === val ? '#6c5ce7' : '#ddd'};background:${sf === val ? '#6c5ce7' : '#fff'};color:${sf === val ? '#fff' : '#555'};font-size:13px;cursor:pointer;font-weight:${sf === val ? '600' : '400'};">
-                ${label} (${val === 'approved' ? approvedCount : val ? (statusCounts[val] || 0) : all.length})
+                ${label} (${val === 'approved' ? approvedCount : val === 'pending_reschedule' ? pendingRescheduleCount : val ? (statusCounts[val] || 0) : all.length})
               </button>
             `).join('')}
           </div>
@@ -7679,7 +7773,7 @@
         return filterBar + `<div class="empty-state"><p style="color:#888;">No creator applications yet</p></div>`;
       }
       if (filtered.length === 0) {
-        return filterBar + `<div class="empty-state"><p style="color:#888;">No ${sf || 'matching'} applications match filters</p></div>`;
+        return filterBar + `<div class="empty-state"><p style="color:#888;">No ${sf === 'pending_reschedule' ? 'pending reschedule' : sf || 'matching'} applications match filters</p></div>`;
       }
 
       const rows = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -7735,6 +7829,8 @@
         const slotsLeft = brandApp ? (brandApp.streamCount - countTakenSlots(brandApp.id)) : 0;
         const pendingOrApprovedCount = countPendingOrApprovedApps(row.brandApplicationId);
         const confirmedSlotsThisMonth = countCreatorConfirmedSlotsForShopMonth(row.creatorId, brandApp?.shopId, brandApp?.month);
+        const latestReschedule = getLatestRescheduleHistory(row.id);
+        const hasPendingReschedule = !!latestReschedule && latestReschedule.status === 'pending';
         return `
           <div class="app-card creator-app">
             <div class="app-card-header">
@@ -7763,7 +7859,13 @@
               </div>
               <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">
                 <span class="status-badge status-${row.status}">${row.status}</span>
-                ${row.status === 'pending' ? `
+                ${hasPendingReschedule ? `
+                  <span style="display:inline-block;padding:3px 10px;background:#fff8e1;color:#e67e22;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;">⏳ Reschedule Pending</span>
+                  <div class="action-btns">
+                    <button class="action-btn btn-approve" onclick="handleApproveReschedule('${latestReschedule.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Approve Reschedule</button>
+                    <button class="action-btn btn-reject" onclick="handleRejectReschedule('${latestReschedule.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reject Reschedule</button>
+                  </div>
+                ` : row.status === 'pending' ? `
                   <div class="action-btns">
                     <button class="action-btn btn-approve" onclick="handleApproveCreatorApp('${row.id}')" ${state.isSubmitting || slotsLeft === 0 ? 'disabled style="opacity:0.5;"' : ''}>Approve</button>
                     <button class="action-btn btn-reject" onclick="handleRejectCreatorApp('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reject</button>
@@ -7782,14 +7884,23 @@
               <div class="app-card-meta-item">Stream Month: <strong>${formatMonth(brandApp?.month)}</strong></div>
             </div>
             ${row.status === 'rejected' && row.rejectionReason ? `<div style="margin-top:8px;padding:8px 12px;background:#ffebee;border-radius:6px;font-size:13px;color:#e74c3c;"><strong>Rejection Reason:</strong> ${row.rejectionReason}</div>` : ''}
-            ${(() => {
-              const latestReschedule = getLatestRescheduleHistory(row.id);
-              if (!latestReschedule) return '';
-              return `<div style="margin-top:8px;padding:8px 12px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#666;">
+            ${hasPendingReschedule ? `
+              <div style="margin-top:8px;padding:8px 12px;background:#fff8e1;border:1px solid #f5cb8c;border-radius:6px;font-size:13px;color:#7a5c1e;">
+                <strong style="color:#e67e22;">⏳ Pending Reschedule Request:</strong> ${latestReschedule.rescheduleReasonDesc}
+                <div style="margin-top:4px;font-size:12px;color:#8a6d2f;">Current Slot: ${formatDate(latestReschedule.oldStreamDate)} ${formatTime(latestReschedule.oldStreamTime)}${latestReschedule.oldStreamEndTime ? ' – ' + (latestReschedule.oldStreamEndDate && latestReschedule.oldStreamEndDate !== latestReschedule.oldStreamDate ? formatDate(latestReschedule.oldStreamEndDate) + ' ' : '') + formatTime(latestReschedule.oldStreamEndTime) : ''}</div>
+                <div style="margin-top:2px;font-size:12px;color:#8a6d2f;">Requested Slot: ${formatDate(latestReschedule.newStreamDate)} ${formatTime(latestReschedule.newStreamTime)}${latestReschedule.newStreamEndTime ? ' – ' + (latestReschedule.newStreamEndDate && latestReschedule.newStreamEndDate !== latestReschedule.newStreamDate ? formatDate(latestReschedule.newStreamEndDate) + ' ' : '') + formatTime(latestReschedule.newStreamEndTime) : ''}</div>
+              </div>
+            ` : latestReschedule && latestReschedule.status === 'approved' ? `
+              <div style="margin-top:8px;padding:8px 12px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#666;">
                 <strong style="color:#555;">🔄 Reschedule Reason:</strong> ${latestReschedule.rescheduleReasonDesc}
                 <div style="margin-top:4px;font-size:12px;color:#888;">Previous Slot: ${formatDate(latestReschedule.oldStreamDate)} ${formatTime(latestReschedule.oldStreamTime)}${latestReschedule.oldStreamEndTime ? ' – ' + (latestReschedule.oldStreamEndDate && latestReschedule.oldStreamEndDate !== latestReschedule.oldStreamDate ? formatDate(latestReschedule.oldStreamEndDate) + ' ' : '') + formatTime(latestReschedule.oldStreamEndTime) : ''}</div>
-              </div>`;
-            })()}
+              </div>
+            ` : latestReschedule && latestReschedule.status === 'rejected' ? `
+              <div style="margin-top:8px;padding:8px 12px;background:#ffebee;border-radius:6px;font-size:13px;color:#e74c3c;">
+                <strong>🔄 Reschedule Request Rejected:</strong> ${latestReschedule.rejectionReason}
+                <div style="margin-top:4px;font-size:12px;color:#c0392b;">Requested Slot: ${formatDate(latestReschedule.newStreamDate)} ${formatTime(latestReschedule.newStreamTime)}${latestReschedule.newStreamEndTime ? ' – ' + (latestReschedule.newStreamEndDate && latestReschedule.newStreamEndDate !== latestReschedule.newStreamDate ? formatDate(latestReschedule.newStreamEndDate) + ' ' : '') + formatTime(latestReschedule.newStreamEndTime) : ''}</div>
+              </div>
+            ` : ''}
             <div class="app-card-detail-grid" style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
               <div class="app-card-detail" style="grid-column:1/-1;"><div class="label">Stream Date & Time</div><div class="value" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;"><span class="stream-date-pill" style="display:inline-block;padding:5px 12px;background:#f0f0ff;border-radius:6px;font-size:13px;color:#6c5ce7;font-weight:600;">📅 ${formatDate(row.streamDate)} ${formatTime(row.streamTime)}${row.streamEndTime ? ' – ' + (row.streamEndDate && row.streamEndDate !== row.streamDate ? formatDate(row.streamEndDate) + ' ' : '') + formatTime(row.streamEndTime) : ''}</span>${row.status !== 'approved' && String(row.hasSamples) === 'true' ? '<span style="display:inline-block;padding:4px 10px;background:#e8f4f8;color:#2980b9;border-radius:6px;font-size:12px;font-weight:600;">📦 Has Existing Samples</span>' : ''}</div></div>
             </div>
@@ -8023,6 +8134,19 @@
               ${(() => {
                 const latestReschedule = getLatestRescheduleHistory(s.caId);
                 if (!latestReschedule) return '';
+                if (latestReschedule.status === 'pending') {
+                  return `<div style="margin-top:8px;padding:8px 12px;background:#fff8e1;border:1px solid #f5cb8c;border-radius:6px;font-size:13px;color:#7a5c1e;">
+                    <strong style="color:#e67e22;">⏳ Reschedule Pending Approval:</strong> ${latestReschedule.rescheduleReasonDesc}
+                    <div style="margin-top:4px;font-size:12px;color:#8a6d2f;">Requested Slot: ${formatDate(latestReschedule.newStreamDate)} ${formatTime(latestReschedule.newStreamTime)}${latestReschedule.newStreamEndTime ? ' – ' + (latestReschedule.newStreamEndDate && latestReschedule.newStreamEndDate !== latestReschedule.newStreamDate ? formatDate(latestReschedule.newStreamEndDate) + ' ' : '') + formatTime(latestReschedule.newStreamEndTime) : ''}</div>
+                  </div>`;
+                }
+                if (latestReschedule.status === 'rejected') {
+                  return `<div style="margin-top:8px;padding:8px 12px;background:#ffebee;border-radius:6px;font-size:13px;color:#e74c3c;">
+                    <strong>🔄 Reschedule Request Rejected:</strong> ${latestReschedule.rejectionReason}
+                    <div style="margin-top:4px;font-size:12px;color:#c0392b;">Requested Slot: ${formatDate(latestReschedule.newStreamDate)} ${formatTime(latestReschedule.newStreamTime)}${latestReschedule.newStreamEndTime ? ' – ' + (latestReschedule.newStreamEndDate && latestReschedule.newStreamEndDate !== latestReschedule.newStreamDate ? formatDate(latestReschedule.newStreamEndDate) + ' ' : '') + formatTime(latestReschedule.newStreamEndTime) : ''}</div>
+                  </div>`;
+                }
+                if (latestReschedule.status !== 'approved') return '';
                 return `<div style="margin-top:8px;padding:8px 12px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#666;">
                   <strong style="color:#555;">🔄 Reschedule Reason:</strong> ${latestReschedule.rescheduleReasonDesc}
                   <div style="margin-top:4px;font-size:12px;color:#888;">Previous Slot: ${formatDate(latestReschedule.oldStreamDate)} ${formatTime(latestReschedule.oldStreamTime)}${latestReschedule.oldStreamEndTime ? ' – ' + (latestReschedule.oldStreamEndDate && latestReschedule.oldStreamEndDate !== latestReschedule.oldStreamDate ? formatDate(latestReschedule.oldStreamEndDate) + ' ' : '') + formatTime(latestReschedule.oldStreamEndTime) : ''}</div>

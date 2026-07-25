@@ -17,6 +17,7 @@ const {
   getRmEmail,
   sendApprovalNotificationForRow,
   sendRescheduledApprovalNotification,
+  sendRescheduleRejectionNotification,
   sendSampleSentNotification,
   sendSampleUndoNotification,
   sendRejectionNotification_CreatorApp,
@@ -79,6 +80,12 @@ router.get('/', async (req, res) => {
         break;
       case 'rescheduleCreatorApplication':
         result = await rescheduleCreatorApplication(req.query.id, JSON.parse(req.query.data));
+        break;
+      case 'approveRescheduleRequest':
+        result = await approveRescheduleRequest(req.query.id, req.query.force === 'true');
+        break;
+      case 'rejectRescheduleRequest':
+        result = await rejectRescheduleRequest(req.query.id, req.query.reason);
         break;
       case 'bulkApproveCreatorApplications':
         result = await bulkApproveCreatorApplications(JSON.parse(req.query.ids));
@@ -554,11 +561,22 @@ async function rescheduleCreatorApplication(id, data) {
     return { success: false, error: 'A reschedule reason is required.' };
   }
 
-  // 3-day rule
+  // 3-day rule: >3 days away reschedules instantly; 3 days or less requires internal approval
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const slotDate = new Date(String(currentRow.streamDate) + 'T00:00:00');
-  if (Math.floor((slotDate - today) / 86400000) < 3) {
-    return { success: false, error: 'This slot is too close to today and cannot be rescheduled. Slots must be at least 3 days away.' };
+  const daysUntilSlot = Math.floor((slotDate - today) / 86400000);
+  const needsApproval = daysUntilSlot <= 3;
+
+  if (needsApproval) {
+    const { data: existingPending } = await db.client
+      .from('reschedule_history')
+      .select('id')
+      .eq('creator_application_id', id)
+      .eq('status', 'pending')
+      .limit(1);
+    if (existingPending && existingPending.length) {
+      return { success: false, error: 'You already have a pending reschedule request awaiting approval.' };
+    }
   }
 
   const brandApp = await db.findById('brand_applications', currentRow.brandApplicationId);
@@ -631,11 +649,35 @@ async function rescheduleCreatorApplication(id, data) {
   const oldEndDate = currentRow.streamEndDate;
   const oldEndTime = currentRow.streamEndTime;
 
+  const newStreamDate = data.newDate;
+  const newStreamTime = data.newStartTime || '';
+  const newStreamEndDate = data.newEndDate || data.newDate;
+  const newStreamEndTime = data.newEndTime || '';
+
+  if (needsApproval) {
+    await db.insert('reschedule_history', {
+      creatorApplicationId: id,
+      oldStreamDate: oldDate,
+      oldStreamTime: oldStartTime,
+      oldStreamEndDate: oldEndDate,
+      oldStreamEndTime: oldEndTime,
+      newStreamDate,
+      newStreamTime,
+      newStreamEndDate,
+      newStreamEndTime,
+      rescheduleReasonCode,
+      rescheduleReasonDesc,
+      rescheduledAt: new Date().toISOString(),
+      status: 'pending',
+    });
+    return { success: true, pendingApproval: true };
+  }
+
   const updates = {
-    streamDate: data.newDate,
-    streamTime: data.newStartTime || '',
-    streamEndDate: data.newEndDate || data.newDate,
-    streamEndTime: data.newEndTime || '',
+    streamDate: newStreamDate,
+    streamTime: newStreamTime,
+    streamEndDate: newStreamEndDate,
+    streamEndTime: newStreamEndTime,
   };
   await db.updateById('creator_applications', id, updates);
 
@@ -652,6 +694,7 @@ async function rescheduleCreatorApplication(id, data) {
     rescheduleReasonCode,
     rescheduleReasonDesc,
     rescheduledAt: new Date().toISOString(),
+    status: 'approved',
   });
 
   const updatedRow = Object.assign({}, currentRow, updates);
@@ -662,6 +705,102 @@ async function rescheduleCreatorApplication(id, data) {
   const chatId = await getTelegramChatId(currentRow.telegram);
   if (chatId) {
     sendRescheduledApprovalNotification(updatedRow, chatId, oldDate, oldStartTime, oldEndDate, oldEndTime).catch(console.error);
+  }
+
+  return { success: true };
+}
+
+// ─── approveRescheduleRequest / rejectRescheduleRequest ──────────────────────
+
+async function approveRescheduleRequest(historyId, force) {
+  const historyRow = await db.findById('reschedule_history', historyId);
+  if (!historyRow) return { success: false, error: 'Reschedule request not found.' };
+  if (String(historyRow.status) !== 'pending') {
+    return { success: false, error: 'This request has already been resolved.' };
+  }
+
+  const currentRow = await db.findById('creator_applications', historyRow.creatorApplicationId);
+  if (!currentRow) return { success: false, error: 'Creator application not found.' };
+
+  const brandApp = await db.findById('brand_applications', currentRow.brandApplicationId);
+  const isSellerSite = brandApp && String(brandApp.sellerSiteRequired || '').trim().toLowerCase() === 'true';
+
+  const shopId = brandApp ? String(brandApp.shopId || brandApp.brandId || '') : '';
+  let baIdsForShop = [String(currentRow.brandApplicationId)];
+  if (shopId) {
+    const { data: baRows } = await db.client.from('brand_applications').select('id').eq('shop_id', shopId);
+    if (baRows && baRows.length) baIdsForShop = baRows.map(r => String(r.id));
+  }
+
+  const { data: conflictRows } = await db.client
+    .from('creator_applications')
+    .select('id, creator_id, stream_date, stream_time, stream_end_date, stream_end_time, status')
+    .in('brand_application_id', baIdsForShop)
+    .not('status', 'in', '("rejected","cancelled")')
+    .neq('id', currentRow.id);
+
+  const newSlot = {
+    date: historyRow.newStreamDate,
+    startTime: historyRow.newStreamTime,
+    endDate: historyRow.newStreamEndDate || historyRow.newStreamDate,
+    endTime: historyRow.newStreamEndTime || '',
+  };
+  const slotCapacity = isSellerSite ? 1 : 2;
+
+  const overlappingOtherCreatorIds = new Set(
+    (conflictRows || [])
+      .filter(r => String(r.creator_id) !== String(currentRow.creatorId) &&
+        timeslotsOverlap(newSlot, { date: r.stream_date, startTime: r.stream_time, endDate: r.stream_end_date, endTime: r.stream_end_time }))
+      .map(r => r.creator_id)
+  );
+
+  if (overlappingOtherCreatorIds.size >= slotCapacity && !force) {
+    return { success: false, conflict: true, error: 'This timeslot has since been booked by another creator. You can approve anyway (double-book) or reject this request.' };
+  }
+
+  const updates = {
+    streamDate: historyRow.newStreamDate,
+    streamTime: historyRow.newStreamTime || '',
+    streamEndDate: historyRow.newStreamEndDate || historyRow.newStreamDate,
+    streamEndTime: historyRow.newStreamEndTime || '',
+  };
+  await db.updateById('creator_applications', currentRow.id, updates);
+  await db.updateById('reschedule_history', historyId, { status: 'approved', respondedAt: new Date().toISOString() });
+
+  const updatedRow = Object.assign({}, currentRow, updates);
+
+  sendEmailNotification_SlotRescheduled(updatedRow, historyRow.oldStreamDate, historyRow.oldStreamTime, historyRow.oldStreamEndDate, historyRow.oldStreamEndTime, brandApp).catch(console.error);
+  sendRescheduleEmailToInternalTeam(updatedRow, historyRow.oldStreamDate, historyRow.oldStreamTime, historyRow.oldStreamEndDate, historyRow.oldStreamEndTime, brandApp).catch(console.error);
+  const chatId = await getTelegramChatId(currentRow.telegram);
+  if (chatId) {
+    sendRescheduledApprovalNotification(updatedRow, chatId, historyRow.oldStreamDate, historyRow.oldStreamTime, historyRow.oldStreamEndDate, historyRow.oldStreamEndTime).catch(console.error);
+  }
+
+  return { success: true };
+}
+
+async function rejectRescheduleRequest(historyId, reason) {
+  const historyRow = await db.findById('reschedule_history', historyId);
+  if (!historyRow) return { success: false, error: 'Reschedule request not found.' };
+  if (String(historyRow.status) !== 'pending') {
+    return { success: false, error: 'This request has already been resolved.' };
+  }
+
+  const rejectionReason = String(reason || '').trim();
+  if (!rejectionReason) return { success: false, error: 'A rejection reason is required.' };
+
+  await db.updateById('reschedule_history', historyId, {
+    status: 'rejected',
+    rejectionReason,
+    respondedAt: new Date().toISOString(),
+  });
+
+  const currentRow = await db.findById('creator_applications', historyRow.creatorApplicationId);
+  if (currentRow) {
+    const chatId = await getTelegramChatId(currentRow.telegram);
+    if (chatId) {
+      sendRescheduleRejectionNotification(currentRow, historyRow, rejectionReason).catch(console.error);
+    }
   }
 
   return { success: true };

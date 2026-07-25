@@ -142,7 +142,10 @@ CREATE TABLE IF NOT EXISTS reschedule_history (
   new_stream_end_time TEXT DEFAULT '',
   reschedule_reason_code TEXT DEFAULT '',
   reschedule_reason_desc TEXT DEFAULT '',
-  rescheduled_at TEXT DEFAULT ''
+  rescheduled_at TEXT DEFAULT '',
+  status TEXT DEFAULT '',
+  rejection_reason TEXT DEFAULT '',
+  responded_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_reschedule_history_creator_application_id ON reschedule_history(creator_application_id);
