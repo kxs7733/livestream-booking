@@ -7,6 +7,15 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
+const OLD_HOST = 'shopeelivecreatormatch.up.railway.app';
+const NEW_HOST = 'creatormatch.shopeelivesg.com';
+app.use((req, res, next) => {
+  if (req.hostname === OLD_HOST) {
+    return res.redirect(301, `https://${NEW_HOST}${req.originalUrl}`);
+  }
+  next();
+});
+
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.text({ limit: '50mb' }));

@@ -9,3 +9,5 @@ ReferenceDocs/
 tests/
 playwright.config.js
 seed_data.gs
+Bulk Upload Fields/
+generate_upload_template.py

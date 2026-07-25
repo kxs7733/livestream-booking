@@ -1028,7 +1028,7 @@ async function sendRejectionEmailToBrandApp(app, reason) {
   if (!app.sellerPicEmail) return;
   const contactString = await getInternalPicContactString();
   const subject = '[Shopee Live Creator Match] Brand Application Rejected — ' + (app.shopName || app.brandName || '');
-  const appUrl = 'https://shopeelivecreatormatch.up.railway.app/';
+  const appUrl = 'https://creatormatch.shopeelivesg.com/';
   const body = 'Hello, ' + (app.shopName || app.brandName || '') + '!\n\n'
     + 'Unfortunately, your brand\'s livestream application has been rejected by Shopee for the following reason:\n\n'
     + 'Stream month: ' + (app.month || '') + '\n'
@@ -1092,7 +1092,7 @@ async function sendEmailToSeller_CreatorConfirmed(creatorApp) {
   const brandApp = await db.findById('brand_applications', creatorApp.brandApplicationId);
   if (!brandApp || !brandApp.sellerPicEmail) return;
   const slotText = (creatorApp.streamDate || '') + (creatorApp.streamTime ? ' ' + creatorApp.streamTime : '') + (creatorApp.streamEndTime ? ' – ' + creatorApp.streamEndTime : '');
-  const appUrl = 'https://shopeelivecreatormatch.up.railway.app/';
+  const appUrl = 'https://creatormatch.shopeelivesg.com/';
   const subject = '[Shopee Live Creator Match] Creator Approved - ' + (creatorApp.affiliateUsername || creatorApp.creatorName || '');
   const body = 'Hello, ' + (brandApp.shopName || brandApp.brandName || '') + '!\n\n'
     + 'A creator has been approved and confirmed for a livestream slot.\n\n'
