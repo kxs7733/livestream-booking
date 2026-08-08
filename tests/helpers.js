@@ -189,9 +189,16 @@ async function loginAsCreator(page, username = 'TestCreator', phone = '91234567'
   await page.evaluate(() => sessionStorage.clear());
   await page.goto('/');
   await page.getByText("I'm a Creator").click();
-  await page.fill('#login-name', username);
+  await page.fill('#login-affiliate-id', username);
   await page.fill('#login-phone', phone);
   await page.click('#login-btn');
+  // PIN step: validateCreatorLogin routes to pin-setup (no pinSet on the mocked affiliate) or
+  // pin-entry (pinSet: true) — handle whichever renders. #pin-confirm-input only exists on pin-setup.
+  await page.waitForSelector('#pin-input');
+  await page.fill('#pin-input', '123456');
+  const confirmInput = page.locator('#pin-confirm-input');
+  if (await confirmInput.count()) await confirmInput.fill('123456');
+  await page.click('#pin-submit-btn');
   await page.waitForSelector('.dashboard-title');
 }
 

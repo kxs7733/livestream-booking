@@ -652,6 +652,7 @@
     // State
     let state = {
       view: 'landing',
+      loginBanner: null, // { message } — fetched once on boot, shown on landing/login screens
       currentUser: null, // { id, name, type: 'brand'|'creator', shopId?, shopName? }
 
       brands: [],
@@ -676,6 +677,7 @@
       calendarMonth: new Date().getMonth(),
       calendarYear: new Date().getFullYear(),
       creatorFormTimeslots: [],
+      pillPickerSelectedDate: null, // 'YYYY-MM-DD' — day currently expanded in the time-pill picker
       creatorFormData: { telegram: '', recipientName: '', address: '', postalCode: '', willingToTravel: false },
       profileEditMode: false,
       creatorCategoryFilter: 'all',
@@ -1703,78 +1705,77 @@
     const startCreatorApplication = (brandAppId) => {
       state.showCreatorApplyForm = brandAppId;
       state.creatorFormTimeslots = [];
+      state.pillPickerSelectedDate = null;
       state.creatorCalendarWeekOffset = 0;
       state.creatorFormData = { telegram: state.currentUser?.telegram || '', recipientName: '', address: '', postalCode: '', deliveryInstructions: '', willingToTravel: false };
       render();
     };
 
-    const autoFillEndDate = () => {};
+    // Add `minutesToAdd` to a date+time, rolling over into the next day if needed (used for fixed 2hr pill slots)
+    const addMinutesToDateTime = (date, time, minutesToAdd) => {
+      const [h, m] = time.split(':').map(Number);
+      const base = new Date(`${date}T00:00:00`);
+      base.setMinutes(base.getMinutes() + h * 60 + m + minutesToAdd);
+      const endDate = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
+      const endTime = `${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}`;
+      return { endDate, endTime };
+    };
 
-    const addTimeslot = (brandAppId) => {
-      const sDate = document.getElementById('f-start-date').value;
-      const sHour = document.getElementById('f-start-hour').value;
-      const sMin  = document.getElementById('f-start-min').value;
-      const eDate = document.getElementById('f-end-date').value;
-      const eHour = document.getElementById('f-end-hour').value;
-      const eMin  = document.getElementById('f-end-min').value;
+    // All possible 2hr-slot start times, every 30 minutes across a full day
+    const PILL_START_TIMES = Array.from({ length: 48 }, (_, i) => {
+      const totalMin = i * 30;
+      return `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+    });
 
-      if (!sDate || !eDate) {
-        showNotification('Please select stream start and end date/time', 'error');
-        return;
-      }
+    // Toggle a fixed 2hr timeslot pill on/off for the given day + start time
+    const togglePillSlot = (brandAppId, date, startTime) => {
+      const brandApp = state.brandApplications.find(a => a.id === brandAppId);
+      if (!brandApp) return;
 
-      const startDt = `${sDate}T${sHour}:${sMin}`;
-      const endDt   = `${eDate}T${eHour}:${eMin}`;
-      const startMs = new Date(startDt).getTime();
-      const endMs = new Date(endDt).getTime();
-      const durationMs = endMs - startMs;
-
-      if (durationMs <= 0) {
-        showNotification('Stream end must be after start', 'error');
-        return;
-      }
-      if (durationMs < 120 * 60000) {
-        showNotification('Each stream must be at least 2 hours long', 'error');
-        return;
-      }
-
-      const date = startDt.substring(0, 10);
-      const startTime = startDt.substring(11, 16);
-      const endDate = endDt.substring(0, 10);
-      const endTime = endDt.substring(11, 16);
-
-      // Validate start date is tomorrow or later
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-      if (new Date(date) < tomorrow) {
-        showNotification('Stream date must be tomorrow or later', 'error');
-        return;
-      }
-
-      // Validate start date is within the brand's stream month
-      const brandAppForDate = state.brandApplications.find(a => a.id === brandAppId);
-      if (brandAppForDate && brandAppForDate.month) {
-        const dateMonth = date.substring(0, 7); // "YYYY-MM"
-        if (dateMonth !== brandAppForDate.month) {
-          showNotification(`Stream must start within ${formatMonth(brandAppForDate.month)}`, 'error');
-          return;
+      const saveFormData = () => {
+        const form = document.getElementById('creator-app-form');
+        if (form) {
+          state.creatorFormData = {
+            telegram: form.querySelector('#f-telegram')?.value || '',
+            recipientName: form.querySelector('#f-recipient-name')?.value || '',
+            address: form.querySelector('#f-address')?.value || '',
+            postalCode: form.querySelector('#f-postal-code')?.value || '',
+            deliveryInstructions: form.querySelector('#f-delivery-instructions')?.value || '',
+            willingToTravel: form.querySelector('#f-travel')?.checked || false,
+            affiliateUser: form.querySelector('#f-affiliate-user')?.value || '',
+            phoneCode: form.querySelector('#f-phone-code')?.value || '65',
+            phoneNumber: form.querySelector('#f-phone')?.value || '',
+          };
         }
+      };
+
+      // Deselect if already selected
+      const selectedIdx = state.creatorFormTimeslots.findIndex(s => s.date === date && s.startTime === startTime);
+      if (selectedIdx !== -1) {
+        saveFormData();
+        state.creatorFormTimeslots.splice(selectedIdx, 1);
+        render();
+        return;
+      }
+
+      const { endDate, endTime } = addMinutesToDateTime(date, startTime, 120);
+      const newSlot = { date, startTime, endDate, endTime };
+
+      // Check for overlap with a slot already picked in this submission
+      const formConflict = state.creatorFormTimeslots.find(s => timeslotsOverlap(newSlot, s));
+      if (formConflict) {
+        showNotification(`This timeslot overlaps with ${formatDate(formConflict.date)} ${formatTime(formConflict.startTime)}–${formConflict.endDate && formConflict.endDate !== formConflict.date ? formatDate(formConflict.endDate) + ' ' : ''}${formatTime(formConflict.endTime)} already in your list`, 'error');
+        return;
       }
 
       // Check slots remaining for this brand (each timeslot = 1 slot)
-      const brandApp = state.brandApplications.find(a => a.id === brandAppId);
-      if (brandApp) {
-        const slotsLeft = brandApp.streamCount - countTakenSlots(brandAppId);
-        if (state.creatorFormTimeslots.length >= slotsLeft) {
-          showNotification(`Only ${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} left for this brand. You cannot add more timeslots.`, 'error');
-          return;
-        }
+      const slotsLeft = brandApp.streamCount - countTakenSlots(brandAppId);
+      if (state.creatorFormTimeslots.length >= slotsLeft) {
+        showNotification(`Only ${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} left for this brand. You cannot add more timeslots.`, 'error');
+        return;
       }
 
       // Check deconfliction — prevent this creator from booking a slot they already have
-      const newSlot = { date, startTime, endDate, endTime };
       const selfCreatorId = (state.internalCreatorApplyMode && state.internalSelectedCreatorId)
         ? state.internalSelectedCreatorId : state.currentUser?.id;
       const takenSlots = getTakenTimeslotObjects(brandAppId, selfCreatorId);
@@ -1783,9 +1784,10 @@
         showNotification(`This timeslot overlaps with an existing booking for this brand (${formatDate(takenConflict.date)} ${formatTime(takenConflict.startTime)}–${takenConflict.endDate && takenConflict.endDate !== takenConflict.date ? formatDate(takenConflict.endDate) + ' ' : ''}${formatTime(takenConflict.endTime)})`, 'error');
         return;
       }
-      const isSellerSiteFlow = String(brandApp?.sellerSiteRequired) === 'true';
-      if (countOtherCreatorsForSlot(newSlot, brandAppId, selfCreatorId) >= (isSellerSiteFlow ? 1 : 2)) {
-        showNotification('One or more of your selected timeslots has just been taken by another creator. Please go back and pick an available slot.', 'error');
+
+      // Capacity check — max 2 creators per timeslot (race-condition safety net; pills at capacity are already hidden)
+      if (countOtherCreatorsForSlot(newSlot, brandAppId, selfCreatorId) >= 2) {
+        showNotification('This timeslot has just been taken by another creator. Please pick another slot.', 'error');
         return;
       }
 
@@ -1797,30 +1799,95 @@
         return;
       }
 
-      // Check for overlap in current selection
-      const formConflict = state.creatorFormTimeslots.find(s => timeslotsOverlap(newSlot, s));
-      if (formConflict) {
-        showNotification(`This timeslot overlaps with ${formatDate(formConflict.date)} ${formatTime(formConflict.startTime)}–${formConflict.endDate && formConflict.endDate !== formConflict.date ? formatDate(formConflict.endDate) + ' ' : ''}${formatTime(formConflict.endTime)} already in your list`, 'error');
-        return;
+      saveFormData();
+      state.creatorFormTimeslots.push(newSlot);
+      render();
+    };
+
+    // Render the 30-min-interval time pills for one day; each pill = a fixed 2hr slot starting at that time.
+    // Pills already at capacity (2 other creators booked) are omitted entirely; pills that would overlap
+    // a slot already selected in this submission are shown disabled.
+    const renderTimePills = (brandAppId, date) => {
+      const creatorUserId = (state.internalCreatorApplyMode && state.internalSelectedCreatorId)
+        ? state.internalSelectedCreatorId : state.currentUser?.id;
+      const creatorTakenSlots = getTakenTimeslotObjects(brandAppId, creatorUserId);
+      const creatorConfirmedSlots = getCreatorConfirmedTimeslots();
+      const buildPill = (startTime) => {
+        const { endDate, endTime } = addMinutesToDateTime(date, startTime, 120);
+        const candidate = { date, startTime, endDate, endTime };
+        const isSelected = state.creatorFormTimeslots.some(s => s.date === date && s.startTime === startTime);
+        const isFull = !isSelected && countOtherCreatorsForSlot(candidate, brandAppId, creatorUserId) >= 2;
+        const isSelfConflict = !isSelected && (
+          creatorTakenSlots.some(s => timeslotsOverlap(candidate, s)) ||
+          creatorConfirmedSlots.some(s => timeslotsOverlap(candidate, s))
+        );
+        if (isFull || isSelfConflict) return null;
+        const overlapsSelection = !isSelected && state.creatorFormTimeslots.some(s => timeslotsOverlap(candidate, s));
+        let bg, border, color, cursor;
+        if (isSelected)          { bg = '#EE4D2D'; border = '#EE4D2D'; color = '#fff'; cursor = 'pointer'; }
+        else if (overlapsSelection) { bg = '#f5f5f5'; border = '#ddd'; color = '#aaa'; cursor = 'not-allowed'; }
+        else                     { bg = '#fff';    border = '#ddd'; color = '#333'; cursor = 'pointer'; }
+        return `<button type="button"
+          ${overlapsSelection ? 'disabled' : `onclick="togglePillSlot('${brandAppId}', '${date}', '${startTime}')"`}
+          style="width:100%;box-sizing:border-box;padding:8px 4px;background:${bg};border:2px solid ${border};border-radius:20px;font-size:12px;color:${color};cursor:${cursor};font-weight:${isSelected ? '600' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${formatTime(startTime)}
+        </button>`;
+      };
+      const amPills = PILL_START_TIMES.slice(0, 24).map(buildPill).filter(Boolean);
+      const pmPills = PILL_START_TIMES.slice(24).map(buildPill).filter(Boolean);
+      if (amPills.length === 0 && pmPills.length === 0) {
+        return `<div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:8px;border:1px dashed #ddd;"><p style="font-size:13px;color:#999;">No timeslots available on this day — fully booked.</p></div>`;
+      }
+      const renderSection = (label, pills) => `
+        <div style="margin-bottom:14px;">
+          <div style="font-size:12px;font-weight:600;color:#888;margin-bottom:6px;">${label}</div>
+          ${pills.length === 0
+            ? `<div style="padding:12px;text-align:center;background:#f9f9f9;border-radius:8px;border:1px dashed #ddd;"><p style="font-size:12px;color:#999;">Fully booked</p></div>`
+            : `<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;">${pills.join('')}</div>`
+          }
+        </div>`;
+      return renderSection('AM', amPills) + renderSection('PM', pmPills);
+    };
+
+    // Render the small clickable day-picker calendar (scoped to the brand's single stream month) + time pills for the selected day
+    const renderPillDayPicker = (brandAppId) => {
+      const brandApp = state.brandApplications.find(a => a.id === brandAppId);
+      const [yr, mo] = brandApp.month.split('-').map(Number);
+      const firstDay = new Date(yr, mo - 1, 1).getDay();
+      const daysInMonth = new Date(yr, mo, 0).getDate();
+      const monthName = new Date(yr, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      let cells = '';
+      for (let i = 0; i < firstDay; i++) cells += '<div class="calendar-day empty" style="min-height:auto;padding:10px 4px;"></div>';
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${yr}-${String(mo).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isPast = new Date(dateStr) < tomorrow;
+        const isSelectedDay = state.pillPickerSelectedDate === dateStr;
+        const hasSlot = state.creatorFormTimeslots.some(s => s.date === dateStr);
+        cells += `<div class="calendar-day" style="min-height:auto;padding:10px 4px;text-align:center;cursor:${isPast ? 'not-allowed' : 'pointer'};background:${isSelectedDay ? '#EE4D2D' : hasSlot ? '#fff0f0' : '#fff'};opacity:${isPast ? '0.35' : '1'};"
+          ${isPast ? '' : `onclick="state.pillPickerSelectedDate='${dateStr}'; render();"`}>
+          <div class="calendar-day-num" style="color:${isSelectedDay ? '#fff' : '#888'};margin:0;">${day}</div>
+          ${hasSlot ? `<div style="width:5px;height:5px;border-radius:50%;background:${isSelectedDay ? '#fff' : '#EE4D2D'};margin:3px auto 0;"></div>` : ''}
+        </div>`;
       }
 
-      // Save current form field values before re-render so they aren't wiped
-      const form = document.getElementById('creator-app-form');
-      if (form) {
-        state.creatorFormData = {
-          telegram: form.querySelector('#f-telegram')?.value || '',
-          recipientName: form.querySelector('#f-recipient-name')?.value || '',
-          address: form.querySelector('#f-address')?.value || '',
-          postalCode: form.querySelector('#f-postal-code')?.value || '',
-          deliveryInstructions: form.querySelector('#f-delivery-instructions')?.value || '',
-          willingToTravel: form.querySelector('#f-travel')?.checked || false,
-          affiliateUser: form.querySelector('#f-affiliate-user')?.value || '',
-          phoneCode: form.querySelector('#f-phone-code')?.value || '65',
-          phoneNumber: form.querySelector('#f-phone')?.value || '',
-        };
-      }
-      state.creatorFormTimeslots.push({ date, startTime, endDate, endTime });
-      render();
+      return `
+        <h4 style="font-size:14px;color:#555;margin-bottom:8px;">${monthName}</h4>
+        <div class="calendar-month">
+          ${dayHeaders.map(d => `<div class="calendar-day-header">${d}</div>`).join('')}
+          ${cells}
+        </div>
+        <div style="margin-top:16px;">
+          ${state.pillPickerSelectedDate
+            ? `<label class="form-label" style="margin-bottom:8px;display:block;">Available Times for ${formatDate(state.pillPickerSelectedDate)}</label>${renderTimePills(brandAppId, state.pillPickerSelectedDate)}`
+            : `<div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:8px;border:1px dashed #ddd;"><p style="font-size:13px;color:#999;">Click a day above to see available times.</p></div>`
+          }
+        </div>`;
     };
 
     const removeTimeslot = (index) => {
@@ -3867,8 +3934,18 @@
     // RENDER: Landing
     // ========================
 
+    // Blue info banner shown on the landing/login screens (before any authentication),
+    // sourced from a business_mapping_values row: type='LoginBanner', active='ACTIVE'.
+    const renderLoginBanner = () => !state.loginBanner ? '' : `
+      <div style="max-width:480px;margin:0 auto 20px;background:#e3f2fd;border:1px solid #1976d2;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:10px;text-align:left;">
+        <span style="font-size:18px;flex-shrink:0;">🔔</span>
+        <span style="font-size:13px;color:#0d47a1;">${escapeHtml(state.loginBanner.message)}</span>
+      </div>
+    `;
+
     const renderLanding = () => `
       <div class="landing">
+        ${renderLoginBanner()}
         <div class="hero-section">
           <div style="margin-bottom:24px;">
             <img src="${SHOPEE_LOGO}" style="height:80px;" alt="Shopee">
@@ -3910,6 +3987,7 @@
         const userName = isBrand ? state.loginPendingData?.brand?.name : state.loginPendingData?.creator?.name;
         return `
           <div class="login-container">
+            ${renderLoginBanner()}
             <button class="back-btn" onclick="state.loginStep='credentials'; state.loginPendingData=null; render();">← Back</button>
             <div class="login-card ${cardClass}">
               <div class="login-icon" style="background:${iconBg};">${icon}</div>
@@ -3935,6 +4013,7 @@
         const userName = isBrand ? state.loginPendingData?.brand?.name : state.loginPendingData?.creator?.name;
         return `
           <div class="login-container">
+            ${renderLoginBanner()}
             <button class="back-btn" onclick="state.loginStep='credentials'; state.loginPendingData=null; render();">← Back</button>
             <div class="login-card ${cardClass}">
               <div class="login-icon" style="background:${iconBg};">${icon}</div>
@@ -3957,6 +4036,7 @@
       if (isBrand) {
         return `
           <div class="login-container">
+            ${renderLoginBanner()}
             <button class="back-btn" onclick="setView('landing')">← Back</button>
             <div class="login-card">
               <div class="login-icon" style="background:${iconBg};">${icon}</div>
@@ -3992,6 +4072,7 @@
       }
       return `
         <div class="login-container">
+            ${renderLoginBanner()}
           <button class="back-btn" onclick="setView('landing')">← Back</button>
           <div class="login-card creator">
             <div class="login-icon" style="background:#f0f0ff;">🎬</div>
@@ -5685,47 +5766,12 @@
                     ${chipsHtml}
                   </div>`;
               } else {
-                // ── Creator site: free-form picker (unchanged) ──
-                const [yr, mo] = brandApp.month.split('-').map(Number);
-                const lastDay = new Date(yr, mo, 0).getDate();
-                const monthMin = `${brandApp.month}-01`;
-                const monthMax = `${brandApp.month}-${String(lastDay).padStart(2,'0')}`;
-                const hours = Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+                // ── Creator site: day-picker + time pills ──
                 return `
                   <div class="form-section">
                     <div class="form-section-title creator-accent">Stream Schedule</div>
-                    <p style="font-size:13px;color:#888;margin-bottom:16px;">Add your preferred timeslots in <strong>even numbers</strong> (e.g. 2, 4, 6…). Each stream must start within <strong>${formatMonth(brandApp.month)}</strong> and be at least 2 hours long. Slots taken by other creators are blocked.</p>
-                    <div class="form-row">
-                      <div class="form-group">
-                        <label class="form-label">Stream Start</label>
-                        <input type="date" id="f-start-date" class="form-input" min="${monthMin}" max="${monthMax}" style="width:100%;margin-bottom:6px;">
-                        <div style="display:flex;align-items:center;gap:6px;">
-                          <select id="f-start-hour" class="form-input" style="flex:1;">
-                            ${hours.map(h=>`<option value="${h}">${h}</option>`).join('')}
-                          </select>
-                          <span style="font-weight:700;color:#888;flex-shrink:0;">:</span>
-                          <select id="f-start-min" class="form-input" style="flex:1;">
-                            <option value="00">00</option>
-                            <option value="30">30</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div class="form-group">
-                        <label class="form-label">Stream End</label>
-                        <input type="date" id="f-end-date" class="form-input" min="${monthMin}" max="${monthMax}" style="width:100%;margin-bottom:6px;">
-                        <div style="display:flex;align-items:center;gap:6px;">
-                          <select id="f-end-hour" class="form-input" style="flex:1;">
-                            ${hours.map(h=>`<option value="${h}">${h}</option>`).join('')}
-                          </select>
-                          <span style="font-weight:700;color:#888;flex-shrink:0;">:</span>
-                          <select id="f-end-min" class="form-input" style="flex:1;">
-                            <option value="00">00</option>
-                            <option value="30">30</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                    <button type="button" class="btn-secondary" style="margin-top:8px;" onclick="addTimeslot('${brandAppId}')">+ Add Timeslot</button>
+                    <p style="font-size:13px;color:#888;margin-bottom:16px;">Pick your preferred days and times in <strong>even numbers</strong> (e.g. 2, 4, 6…). Each stream must start within <strong>${formatMonth(brandApp.month)}</strong> and is a fixed 2-hour block. Slots already taken by other creators won't appear.</p>
+                    ${renderPillDayPicker(brandAppId)}
                     ${selectedTimeslots.length > 0 ? `
                       <div style="margin-top:16px;">
                         <label class="form-label" style="margin-bottom:8px;">Selected Timeslots (${selectedTimeslots.length})</label>
@@ -5738,7 +5784,7 @@
                       </div>
                     ` : `
                       <div style="margin-top:16px;padding:20px;text-align:center;background:#f9f9f9;border-radius:8px;border:1px dashed #ddd;">
-                        <p style="font-size:13px;color:#999;">No timeslots added yet. Select a start and end date/time, then click "+ Add Timeslot". You need an even number of timeslots (e.g. 2, 4, 6…).</p>
+                        <p style="font-size:13px;color:#999;">No timeslots added yet. Click a day, then pick a start time. You need an even number of timeslots (e.g. 2, 4, 6…).</p>
                       </div>
                     `}
                   </div>`;
@@ -5747,10 +5793,15 @@
 
             <div class="form-section">
               <div class="form-section-title creator-accent">Booking Calendar</div>
-              <p style="font-size:13px;color:#888;margin-bottom:14px;">Timeslots already booked for this brand's listing.</p>
-              <div class="creator-cal-wrapper" id="creator-booking-cal">
-                ${buildCreatorCalendarInner(brandAppId)}
-              </div>
+              <p style="font-size:13px;color:#888;margin-bottom:14px;">Timeslots already booked for this brand's listing (view only).</p>
+              <button class="expand-btn" onclick="toggleCardExpand('creator-booking-cal-${brandAppId}')">
+                ${state.expandedCards['creator-booking-cal-' + brandAppId] ? '▲ Hide calendar' : '▼ Show calendar'}
+              </button>
+              ${state.expandedCards['creator-booking-cal-' + brandAppId] ? `
+                <div class="creator-cal-wrapper" id="creator-booking-cal" style="margin-top:12px;">
+                  ${buildCreatorCalendarInner(brandAppId)}
+                </div>
+              ` : ''}
             </div>
 
             <div class="form-section">
@@ -6376,6 +6427,7 @@
     const renderInternalLogin = () => {
       return `
         <div class="login-container">
+            ${renderLoginBanner()}
           <button class="back-btn" onclick="setView('landing')">← Back</button>
           <div class="login-card" style="border-color:#333;">
             <div class="login-icon" style="background:#f5f5f5;">⚙️</div>
@@ -7023,7 +7075,7 @@
 
           ${(() => {
             if (!state.internalConfigMode) return '';
-            const typeOptions = ['VoucherTier', 'ProductNominationLink', 'InternalPIC', 'InternalPICNumber', 'AvailableMonth', 'BrandActivation', 'SyncAlertsPIC', 'RescheduleReason'];
+            const typeOptions = ['VoucherTier', 'ProductNominationLink', 'InternalPIC', 'InternalPICNumber', 'AvailableMonth', 'BrandActivation', 'SyncAlertsPIC', 'RescheduleReason', 'LoginBanner'];
             return `
               <div style="background:#f8f9fa;border:1px solid #dfe6e9;border-radius:12px;padding:20px;margin-bottom:24px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -7056,7 +7108,10 @@
                         <tr style="background:#fff3cd;border-bottom:1px solid #f0f0f0;">
                           <td style="padding:8px 12px;"><select value="${escapeHtml(state.configEditingDraft.type)}" onchange="state.configEditingDraft.type = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;">${typeOptions.map(t => `<option value="${t}" ${state.configEditingDraft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
                           <td style="padding:8px 12px;"><input type="text" placeholder="Code" value="${escapeHtml(state.configEditingDraft.code)}" oninput="state.configEditingDraft.code = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
-                          <td style="padding:8px 12px;"><input type="text" placeholder="Description" value="${escapeHtml(state.configEditingDraft.description)}" oninput="state.configEditingDraft.description = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                          <td style="padding:8px 12px;">
+                            <input type="text" placeholder="Description" value="${escapeHtml(state.configEditingDraft.description)}" ${state.configEditingDraft.type === 'LoginBanner' ? 'maxlength="150"' : ''} oninput="state.configEditingDraft.description = this.value; document.getElementById('config-desc-counter-new').textContent = this.value.length + '/150';" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;">
+                            ${state.configEditingDraft.type === 'LoginBanner' ? `<div id="config-desc-counter-new" style="font-size:11px;color:#999;margin-top:2px;">${state.configEditingDraft.description.length}/150</div>` : ''}
+                          </td>
                           <td style="padding:8px 12px;text-align:center;"><input type="checkbox" ${state.configEditingDraft.active === 'ACTIVE' ? 'checked' : ''} onchange="state.configEditingDraft.active = this.checked ? 'ACTIVE' : 'INACTIVE';" style="cursor:pointer;"></td>
                           <td style="padding:8px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="handleAddNewConfigRow();" style="padding:4px 8px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Add</button><button onclick="state.configAddingNew = false; state.configEditingDraft = { type: '', code: '', description: '', active: 'ACTIVE' }; render();" style="padding:4px 8px;background:#999;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button></td>
                         </tr>
@@ -7066,7 +7121,10 @@
                           ${state.configEditingId === row.id ? `
                             <td style="padding:8px 12px;"><select value="${escapeHtml(state.configEditingDraft.type)}" onchange="state.configEditingDraft.type = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;">${typeOptions.map(t => `<option value="${t}" ${state.configEditingDraft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
                             <td style="padding:8px 12px;"><input type="text" value="${escapeHtml(state.configEditingDraft.code)}" oninput="state.configEditingDraft.code = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
-                            <td style="padding:8px 12px;"><input type="text" value="${escapeHtml(state.configEditingDraft.description)}" oninput="state.configEditingDraft.description = this.value;" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;"></td>
+                            <td style="padding:8px 12px;">
+                              <input type="text" value="${escapeHtml(state.configEditingDraft.description)}" ${state.configEditingDraft.type === 'LoginBanner' ? 'maxlength="150"' : ''} oninput="state.configEditingDraft.description = this.value; document.getElementById('config-desc-counter-edit').textContent = this.value.length + '/150';" style="width:100%;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;">
+                              ${state.configEditingDraft.type === 'LoginBanner' ? `<div id="config-desc-counter-edit" style="font-size:11px;color:#999;margin-top:2px;">${state.configEditingDraft.description.length}/150</div>` : ''}
+                            </td>
                             <td style="padding:8px 12px;text-align:center;"><input type="checkbox" ${state.configEditingDraft.active === 'ACTIVE' ? 'checked' : ''} onchange="state.configEditingDraft.active = this.checked ? 'ACTIVE' : 'INACTIVE';" style="cursor:pointer;"></td>
                             <td style="padding:8px 12px;text-align:center;display:flex;gap:4px;justify-content:center;"><button onclick="handleSaveConfigRow(${row.id});" style="padding:4px 8px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Save</button><button onclick="state.configEditingId = null; render();" style="padding:4px 8px;background:#999;color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button></td>
                           ` : `
@@ -8296,6 +8354,15 @@
     document.addEventListener('click', (e) => {
       if (state.adminMenuOpen && !e.target.closest('[data-admin-menu]')) {
         state.adminMenuOpen = false;
+        render();
+      }
+    });
+
+    // Fetch the login banner (public, non-blocking) — re-renders once it arrives so it
+    // appears on the landing/login screens without delaying initial page load.
+    apiCall('getLoginBanner', {}).then(banner => {
+      if (banner && banner.message) {
+        state.loginBanner = banner;
         render();
       }
     });

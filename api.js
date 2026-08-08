@@ -123,6 +123,9 @@ router.get('/', async (req, res) => {
       case 'adminResetPin':
         result = await adminResetPin(req.query.userId, req.query.userType);
         break;
+      case 'getLoginBanner':
+        result = await getLoginBanner();
+        break;
       case 'getInternalTeam':
         result = await getInternalTeam();
         break;
@@ -1345,6 +1348,22 @@ async function getSyncAlertTelegramUsername() {
     return data?.code || null;
   } catch (err) {
     console.warn('[getSyncAlertTelegramUsername] Could not fetch config:', err.message);
+    return null;
+  }
+}
+
+// Public, unauthenticated — read by the login/landing page before any login attempt
+async function getLoginBanner() {
+  try {
+    const { data } = await supabase
+      .from('business_mapping_values')
+      .select('description')
+      .eq('type', 'LoginBanner')
+      .eq('active', 'ACTIVE')
+      .limit(1);
+    return data?.[0]?.description ? { message: data[0].description } : null;
+  } catch (err) {
+    console.warn('[getLoginBanner] Could not fetch banner:', err.message);
     return null;
   }
 }
