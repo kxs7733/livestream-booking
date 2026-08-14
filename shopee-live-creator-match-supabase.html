@@ -2767,11 +2767,9 @@
           return;
         }
 
-        // New slot must be tomorrow or later
-        const todayCheck = new Date(); todayCheck.setHours(0, 0, 0, 0);
-        const tomorrowCheck = new Date(todayCheck); tomorrowCheck.setDate(todayCheck.getDate() + 1);
-        if (new Date(newDate + 'T00:00:00') < tomorrowCheck) {
-          showNotification('New slot date must be tomorrow or later.', 'error');
+        // New slot must start in the future (same-day reschedule is allowed as long as the time hasn't passed)
+        if (new Date(`${newDate}T${newStartTime}`) <= new Date()) {
+          showNotification('New slot must start in the future. Please pick a later time.', 'error');
           return;
         }
 
@@ -3114,11 +3112,20 @@
       const slotMonth = String(ca.streamDate).substring(0, 7);
       const [yr, mo] = slotMonth.split('-').map(Number);
       const lastDay = new Date(yr, mo, 0).getDate();
-      const tomorrowForMin = new Date(); tomorrowForMin.setDate(tomorrowForMin.getDate() + 1);
-      const tomorrowStr = tomorrowForMin.toISOString().substring(0, 10);
-      const minDate = tomorrowStr > `${slotMonth}-01` ? tomorrowStr : `${slotMonth}-01`;
-      const maxDate = `${slotMonth}-${String(lastDay).padStart(2, '0')}`;
-      const reschedHours = Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+      const pad2 = n => String(n).padStart(2, '0');
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+      // Earliest selectable half-hour slot today (times only come in :00/:30 increments)
+      const earliestTodayHour = now.getMinutes() < 30 ? now.getHours() : now.getHours() + 1;
+      const earliestTodayMin = now.getMinutes() < 30 ? 30 : 0;
+      const hasSlotLeftToday = earliestTodayHour < 24;
+      const minDateBase = hasSlotLeftToday ? todayStr : (() => {
+        const t = new Date(now); t.setDate(t.getDate() + 1);
+        return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
+      })();
+      const minDate = minDateBase > `${slotMonth}-01` ? minDateBase : `${slotMonth}-01`;
+      const maxDate = `${slotMonth}-${pad2(lastDay)}`;
+      const reschedHours = Array.from({length:24},(_,i)=>pad2(i));
 
       const currentSlotStr = formatDate(ca.streamDate)
         + (ca.streamTime ? ' ' + formatTime(ca.streamTime) : '')
@@ -3154,12 +3161,13 @@
             ${predefinedSlots.map((slot, idx) => {
               const isCurrent = String(slot.date) === String(ca.streamDate) && String(slot.startTime) === String(ca.streamTime || '');
               const isTaken = takenSlotKeys.has(`${slot.date}|${slot.startTime}`);
+              const isPast = new Date(`${slot.date}T${slot.startTime || '00:00'}`) <= now;
               const isSelected = state.rescheduleModal.selectedSlotIdx === idx;
               const slotLabel = `${formatDate(slot.date)} · ${formatTime(slot.startTime)}–${formatTime(slot.endTime)}`;
-              if (isCurrent || isTaken) {
+              if (isCurrent || isTaken || isPast) {
                 return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;opacity:0.55;cursor:not-allowed;">
                   <span style="font-size:13px;color:#999;">📅 ${slotLabel}</span>
-                  <span style="margin-left:auto;font-size:11px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:0.5px;">${isCurrent ? 'Current' : 'Taken'}</span>
+                  <span style="margin-left:auto;font-size:11px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:0.5px;">${isCurrent ? 'Current' : isTaken ? 'Taken' : 'Past'}</span>
                 </div>`;
               }
               return `<div onclick="${busy ? '' : `state.rescheduleModal.selectedSlotIdx = ${idx}; render();`}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${isSelected ? '#f4f0ff' : '#fff'};border:2px solid ${isSelected ? '#6c5ce7' : '#e0e0e0'};border-radius:8px;cursor:${busy ? 'not-allowed' : 'pointer'};">
@@ -3171,23 +3179,31 @@
         </div>` : '';
 
       const rm = state.rescheduleModal;
+      const isStartToday = (rm.newStartDate || '') === todayStr;
+      const startHourOptions = isStartToday ? reschedHours.filter(h => Number(h) >= earliestTodayHour) : reschedHours;
+      const startHourDefault = (isStartToday && Number(rm.newStartHour || '00') < earliestTodayHour)
+        ? pad2(earliestTodayHour) : (rm.newStartHour || '00');
+      const isStartAtEarliestHour = isStartToday && Number(startHourDefault) === earliestTodayHour;
+      const startMinOptions = isStartAtEarliestHour && earliestTodayMin === 30 ? ['30'] : ['00', '30'];
+      const startMinDefault = (isStartAtEarliestHour && !startMinOptions.includes(rm.newStartMin || '00'))
+        ? pad2(earliestTodayMin) : (rm.newStartMin || '00');
       const freeDatePickerHtml = !isSellerSite ? `
         <div style="margin-bottom:16px;">
           <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:10px;">New Date & Time <span style="font-size:11px;font-weight:400;color:#888;">(must be within ${formatMonth(slotMonth)})</span></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div>
               <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;">Start Date <span style="color:#e74c3c;">*</span></label>
-              <input type="date" id="reschedule-start-date" min="${minDate}" max="${maxDate}" value="${rm.newStartDate || ''}" oninput="state.rescheduleModal.newStartDate = this.value;" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
+              <input type="date" id="reschedule-start-date" min="${minDate}" max="${maxDate}" value="${rm.newStartDate || ''}" oninput="state.rescheduleModal.newStartDate = this.value; render();" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
               <div style="display:flex;align-items:center;gap:6px;">
-                <select id="reschedule-start-hour" onchange="state.rescheduleModal.newStartHour = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  ${reschedHours.map(h=>`<option value="${h}" ${(rm.newStartHour || '00') === h ? 'selected' : ''}>${h}</option>`).join('')}
+                <select id="reschedule-start-hour" onchange="state.rescheduleModal.newStartHour = this.value; render();" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
+                  ${startHourOptions.map(h=>`<option value="${h}" ${startHourDefault === h ? 'selected' : ''}>${h}</option>`).join('')}
                 </select>
                 <span style="font-weight:700;color:#888;flex-shrink:0;">:</span>
                 <select id="reschedule-start-min" onchange="state.rescheduleModal.newStartMin = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  <option value="00" ${(rm.newStartMin || '00') === '00' ? 'selected' : ''}>00</option>
-                  <option value="30" ${rm.newStartMin === '30' ? 'selected' : ''}>30</option>
+                  ${startMinOptions.map(m=>`<option value="${m}" ${startMinDefault === m ? 'selected' : ''}>${m}</option>`).join('')}
                 </select>
               </div>
+              ${isStartToday ? `<div style="font-size:11px;color:#888;margin-top:4px;">Same-day reschedule — only remaining times today are shown.</div>` : ''}
             </div>
             <div>
               <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;">End Date</label>

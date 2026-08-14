@@ -607,6 +607,9 @@ async function rescheduleCreatorApplication(id, data) {
 
   const newStart = new Date(data.newDate + 'T' + (data.newStartTime || '00:00'));
   const newEnd   = new Date((data.newEndDate || data.newDate) + 'T' + (data.newEndTime || '00:00'));
+  if (newStart.getTime() <= Date.now()) {
+    return { success: false, error: 'The new slot must start in the future.' };
+  }
   if ((newEnd - newStart) < 2 * 60 * 60 * 1000) {
     return { success: false, error: 'Each stream must be at least 2 hours long.' };
   }
@@ -759,6 +762,11 @@ async function approveRescheduleRequest(historyId, force) {
 
   if (overlappingOtherCreatorIds.size >= slotCapacity && !force) {
     return { success: false, conflict: true, error: 'This timeslot has since been booked by another creator. You can approve anyway (double-book) or reject this request.' };
+  }
+
+  const newStartTs = new Date(String(historyRow.newStreamDate) + 'T' + String(historyRow.newStreamTime || '00:00'));
+  if (newStartTs.getTime() <= Date.now()) {
+    return { success: false, error: 'The requested slot has already passed. Please reject this request so the creator can resubmit.' };
   }
 
   const updates = {
