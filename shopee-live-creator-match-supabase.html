@@ -925,7 +925,8 @@
 
     // Get taken timeslots for a creator at a shop (from non-rejected creator applications across all brand apps for that shop)
     // Pass creatorId to only return that creator's own slots — used to prevent self-conflict (different creators may share a timeslot)
-    const getTakenTimeslotObjects = (brandAppId, creatorId) => {
+    // Pass excludeCaId (rescheduling) to leave out the application being rescheduled — its own current slot shouldn't count against itself
+    const getTakenTimeslotObjects = (brandAppId, creatorId, excludeCaId) => {
       const brandApp = state.brandApplications.find(ba => ba.id === brandAppId);
       const shopId = brandApp ? (brandApp.shopId || brandApp.brandId || '') : '';
       const shopBrandAppIds = shopId
@@ -933,7 +934,7 @@
         : [brandAppId];
       const taken = [];
       state.creatorApplications
-        .filter(ca => shopBrandAppIds.some(id => String(id) === String(ca.brandApplicationId)) && ca.status !== 'rejected' && ca.status !== 'cancelled' && (!creatorId || String(ca.creatorId) === String(creatorId)))
+        .filter(ca => shopBrandAppIds.some(id => String(id) === String(ca.brandApplicationId)) && ca.status !== 'rejected' && ca.status !== 'cancelled' && (!creatorId || String(ca.creatorId) === String(creatorId)) && (!excludeCaId || String(ca.id) !== String(excludeCaId)))
         .forEach(ca => {
           getTimeslots(ca).forEach(slot => {
             taken.push({ date: slot.date, startTime: slot.startTime || slot.time, endDate: slot.endDate || slot.date, endTime: slot.endTime || '' });
@@ -944,7 +945,8 @@
 
     // Count how many OTHER creators (not currentCreatorId) have a slot overlapping with the given slot
     // Used to enforce the max-2-creators-per-timeslot cap
-    const countOtherCreatorsForSlot = (slot, brandAppId, currentCreatorId) => {
+    // Pass excludeCaId (rescheduling) to leave out the application being rescheduled
+    const countOtherCreatorsForSlot = (slot, brandAppId, currentCreatorId, excludeCaId) => {
       const brandApp = state.brandApplications.find(ba => ba.id === brandAppId);
       const shopId = brandApp ? (brandApp.shopId || brandApp.brandId || '') : '';
       const shopBrandAppIds = shopId
@@ -955,7 +957,8 @@
         .filter(ca =>
           shopBrandAppIds.some(id => String(id) === String(ca.brandApplicationId)) &&
           ca.status !== 'rejected' && ca.status !== 'cancelled' &&
-          (!currentCreatorId || String(ca.creatorId) !== String(currentCreatorId))
+          (!currentCreatorId || String(ca.creatorId) !== String(currentCreatorId)) &&
+          (!excludeCaId || String(ca.id) !== String(excludeCaId))
         )
         .forEach(ca => {
           getTimeslots(ca).forEach(s => {
@@ -993,14 +996,14 @@
     // Get all active timeslots for the current creator across ALL brands (to prevent double-booking)
     // Includes pending/approved/confirmed — excludes rejected and cancelled
     // In internal-apply mode, uses the selected creator instead of the logged-in user
-    const getCreatorConfirmedTimeslots = () => {
+    const getCreatorConfirmedTimeslots = (excludeCaId) => {
       const creatorId = (state.internalCreatorApplyMode && state.internalSelectedCreatorId)
         ? state.internalSelectedCreatorId
         : state.currentUser?.id;
       if (!creatorId) return [];
       const confirmed = [];
       state.creatorApplications
-        .filter(ca => String(ca.creatorId) === String(creatorId) && ca.status !== 'rejected' && ca.status !== 'cancelled')
+        .filter(ca => String(ca.creatorId) === String(creatorId) && ca.status !== 'rejected' && ca.status !== 'cancelled' && (!excludeCaId || String(ca.id) !== String(excludeCaId)))
         .forEach(ca => {
           getTimeslots(ca).forEach(slot => {
             confirmed.push({ date: slot.date, startTime: slot.startTime || slot.time, endDate: slot.endDate || slot.date, endTime: slot.endTime || '' });
@@ -1890,6 +1893,127 @@
         </div>`;
     };
 
+    // Select a new reschedule timeslot (single-select, fixed 2hr block) — mirrors togglePillSlot but for the reschedule flow
+    const selectReschedulePill = (caId, brandAppId, date, startTime) => {
+      const rm = state.rescheduleModal;
+      if (!rm || rm.caId !== caId) return;
+      // Deselect if clicking the already-selected pill
+      if (rm.newStartDate === date && rm.newStartTime === startTime) {
+        rm.newStartDate = null;
+        rm.newStartTime = null;
+        render();
+        return;
+      }
+      const { endDate, endTime } = addMinutesToDateTime(date, startTime, 120);
+      const candidate = { date, startTime, endDate, endTime };
+
+      // Capacity check — max 2 creators per timeslot (race-condition safety net; full pills are already hidden)
+      const currentCreatorId = String(state.currentUser?.id || '');
+      if (countOtherCreatorsForSlot(candidate, brandAppId, currentCreatorId, caId) >= 2) {
+        showNotification('This timeslot has just been taken by another creator. Please pick another slot.', 'error');
+        render();
+        return;
+      }
+
+      rm.newStartDate = date;
+      rm.newStartTime = startTime;
+      render();
+    };
+
+    // Render the 30-min-interval time pills for the reschedule modal's selected day (same fixed-2hr-slot model, and the
+    // same max-2-creators-per-timeslot capacity + self-conflict rules, as the apply flow's renderTimePills).
+    // Pills already at capacity, conflicting with the creator's own bookings, or in the past are omitted entirely.
+    const renderReschedulePills = (caId, brandAppId, date, now) => {
+      const rm = state.rescheduleModal;
+      const currentCreatorId = String(state.currentUser?.id || '');
+      const creatorTakenSlots = getTakenTimeslotObjects(brandAppId, currentCreatorId, caId);
+      const creatorConfirmedSlots = getCreatorConfirmedTimeslots(caId);
+      const buildPill = (startTime) => {
+        const { endDate, endTime } = addMinutesToDateTime(date, startTime, 120);
+        const candidate = { date, startTime, endDate, endTime };
+        const isSelected = rm.newStartDate === date && rm.newStartTime === startTime;
+        // The application's own current slot is excluded from creatorTakenSlots/creatorConfirmedSlots above (so it
+        // doesn't block *other* nearby pills) — check for it explicitly so it isn't shown as a normal open pill.
+        const isCurrent = String(rm.ca?.streamDate || '') === date && String(rm.ca?.streamTime || '') === startTime;
+        const isPast = new Date(`${date}T${startTime}`) <= now;
+        const isFull = !isSelected && countOtherCreatorsForSlot(candidate, brandAppId, currentCreatorId, caId) >= 2;
+        const isSelfConflict = !isSelected && (
+          creatorTakenSlots.some(s => timeslotsOverlap(candidate, s)) ||
+          creatorConfirmedSlots.some(s => timeslotsOverlap(candidate, s))
+        );
+        if (!isCurrent && (isPast || isFull || isSelfConflict)) return null;
+        if (isCurrent) {
+          return `<button type="button" disabled title="This is your current slot"
+            style="width:100%;box-sizing:border-box;padding:8px 4px;background:#f5f5f5;border:2px solid #e0e0e0;border-radius:20px;font-size:12px;color:#bbb;cursor:not-allowed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${formatTime(startTime)}
+          </button>`;
+        }
+        const bg = isSelected ? '#6c5ce7' : '#fff';
+        const border = isSelected ? '#6c5ce7' : '#ddd';
+        const color = isSelected ? '#fff' : '#333';
+        return `<button type="button"
+          onclick="selectReschedulePill('${caId}', '${brandAppId}', '${date}', '${startTime}')"
+          style="width:100%;box-sizing:border-box;padding:8px 4px;background:${bg};border:2px solid ${border};border-radius:20px;font-size:12px;color:${color};cursor:pointer;font-weight:${isSelected ? '600' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${formatTime(startTime)}
+        </button>`;
+      };
+      const amPills = PILL_START_TIMES.slice(0, 24).map(buildPill).filter(Boolean);
+      const pmPills = PILL_START_TIMES.slice(24).map(buildPill).filter(Boolean);
+      if (amPills.length === 0 && pmPills.length === 0) {
+        return `<div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:8px;border:1px dashed #ddd;"><p style="font-size:13px;color:#999;">No timeslots available on this day — fully booked.</p></div>`;
+      }
+      const renderSection = (label, pills) => `
+        <div style="margin-bottom:14px;">
+          <div style="font-size:12px;font-weight:600;color:#888;margin-bottom:6px;">${label}</div>
+          ${pills.length === 0
+            ? `<div style="padding:12px;text-align:center;background:#f9f9f9;border-radius:8px;border:1px dashed #ddd;"><p style="font-size:12px;color:#999;">Fully booked</p></div>`
+            : `<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;">${pills.join('')}</div>`
+          }
+        </div>`;
+      return renderSection('AM', amPills) + renderSection('PM', pmPills);
+    };
+
+    // Render the small clickable day-picker calendar (scoped to the brand's stream month) + time pills for the reschedule modal.
+    // Same-day reschedule is allowed — only days strictly before today are blocked (past times within today are filtered pill-side).
+    const renderReschedulePillDayPicker = (caId, brandAppId) => {
+      const rm = state.rescheduleModal;
+      const brandApp = state.brandApplications.find(a => a.id === brandAppId);
+      const [yr, mo] = brandApp.month.split('-').map(Number);
+      const firstDay = new Date(yr, mo - 1, 1).getDay();
+      const daysInMonth = new Date(yr, mo, 0).getDate();
+      const monthName = new Date(yr, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const now = new Date();
+      const today = new Date(now); today.setHours(0, 0, 0, 0);
+      const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      let cells = '';
+      for (let i = 0; i < firstDay; i++) cells += '<div class="calendar-day empty" style="min-height:auto;padding:10px 4px;"></div>';
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${yr}-${String(mo).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isPast = new Date(dateStr) < today;
+        const isSelectedDay = rm.pillSelectedDate === dateStr;
+        const hasSlot = rm.newStartDate === dateStr;
+        cells += `<div class="calendar-day" style="min-height:auto;padding:10px 4px;text-align:center;cursor:${isPast ? 'not-allowed' : 'pointer'};background:${isSelectedDay ? '#6c5ce7' : hasSlot ? '#f4f0ff' : '#fff'};opacity:${isPast ? '0.35' : '1'};"
+          ${isPast ? '' : `onclick="state.rescheduleModal.pillSelectedDate='${dateStr}'; render();"`}>
+          <div class="calendar-day-num" style="color:${isSelectedDay ? '#fff' : '#888'};margin:0;">${day}</div>
+          ${hasSlot ? `<div style="width:5px;height:5px;border-radius:50%;background:${isSelectedDay ? '#fff' : '#6c5ce7'};margin:3px auto 0;"></div>` : ''}
+        </div>`;
+      }
+
+      return `
+        <h4 style="font-size:14px;color:#555;margin-bottom:8px;">${monthName}</h4>
+        <div class="calendar-month">
+          ${dayHeaders.map(d => `<div class="calendar-day-header">${d}</div>`).join('')}
+          ${cells}
+        </div>
+        <div style="margin-top:16px;">
+          ${rm.pillSelectedDate
+            ? `<label class="form-label" style="margin-bottom:8px;display:block;">Available Times for ${formatDate(rm.pillSelectedDate)}</label>${renderReschedulePills(caId, brandAppId, rm.pillSelectedDate, now)}`
+            : `<div style="padding:16px;text-align:center;background:#f9f9f9;border-radius:8px;border:1px dashed #ddd;"><p style="font-size:13px;color:#999;">Click a day above to see available times.</p></div>`
+          }
+        </div>`;
+    };
+
     const removeTimeslot = (index) => {
       const form = document.getElementById('creator-app-form');
       if (form) {
@@ -2717,7 +2841,7 @@
       const ca = state.creatorApplications.find(a => a.id === caId);
       if (!ca) return;
       const brandApp = state.brandApplications.find(ba => ba.id === ca.brandApplicationId);
-      state.rescheduleModal = { caId, ca, brandApp, selectedSlotIdx: null, showCalendar: false, calendarWeekOffset: 0, reasonCode: '', reasonDesc: '' };
+      state.rescheduleModal = { caId, ca, brandApp, selectedSlotIdx: null, pillSelectedDate: null, newStartDate: null, newStartTime: null, showCalendar: false, calendarWeekOffset: 0, reasonCode: '', reasonDesc: '' };
       render();
     };
 
@@ -2753,35 +2877,20 @@
         newEndDate = slot.endDate || slot.date;
         newEndTime = slot.endTime || '';
       } else {
-        newDate = document.getElementById('reschedule-start-date')?.value;
-        const newStartHour = document.getElementById('reschedule-start-hour')?.value || '00';
-        const newStartMin  = document.getElementById('reschedule-start-min')?.value  || '00';
-        newStartTime = `${newStartHour}:${newStartMin}`;
-        newEndDate = document.getElementById('reschedule-end-date')?.value || '';
-        const newEndHour = document.getElementById('reschedule-end-hour')?.value || '00';
-        const newEndMin  = document.getElementById('reschedule-end-min')?.value  || '00';
-        newEndTime = `${newEndHour}:${newEndMin}`;
-
-        if (!newDate) {
-          showNotification('Please fill in the start date.', 'error');
+        const rm = state.rescheduleModal;
+        newDate = rm?.newStartDate;
+        newStartTime = rm?.newStartTime;
+        if (!newDate || !newStartTime) {
+          showNotification('Please pick a new date and time.', 'error');
           return;
         }
+        const computed = addMinutesToDateTime(newDate, newStartTime, 120);
+        newEndDate = computed.endDate;
+        newEndTime = computed.endTime;
 
         // New slot must start in the future (same-day reschedule is allowed as long as the time hasn't passed)
         if (new Date(`${newDate}T${newStartTime}`) <= new Date()) {
           showNotification('New slot must start in the future. Please pick a later time.', 'error');
-          return;
-        }
-
-        const endDateForCalc = newEndDate || newDate;
-        const startMs = new Date(`${newDate}T${newStartTime}`).getTime();
-        const endMs = new Date(`${endDateForCalc}T${newEndTime}`).getTime();
-        if (endMs <= startMs) {
-          showNotification('End time must be after start time.', 'error');
-          return;
-        }
-        if (endMs - startMs < 2 * 60 * 60 * 1000) {
-          showNotification('Each stream must be at least 2 hours long.', 'error');
           return;
         }
 
@@ -2798,33 +2907,23 @@
         }
       }
 
-      // Conflict checks (both modes)
+      // Conflict checks (both modes) — same max-2-creators-per-timeslot capacity (1 for seller-site) and self-conflict
+      // rules as the apply flow; race-condition safety net since matching pills/chips are already hidden in the UI.
       if (ca) {
         const currentCreatorId = String(state.currentUser?.id || '');
         const newSlotObj = { date: newDate, startTime: newStartTime, endDate: newEndDate || newDate, endTime: newEndTime };
-        const reschShopId = reschBrandApp ? (reschBrandApp.shopId || reschBrandApp.brandId || '') : '';
-        const reschShopBrandAppIds = reschShopId
-          ? state.brandApplications.filter(ba => (ba.shopId || ba.brandId) === reschShopId).map(ba => ba.id)
-          : [ca.brandApplicationId];
+        const capacityLimit = isSellerSite ? 1 : 2;
 
-        const sameShopConflict = state.creatorApplications.find(a =>
-          reschShopBrandAppIds.includes(a.brandApplicationId) && a.id !== caId &&
-          a.status !== 'rejected' && a.status !== 'cancelled' &&
-          timeslotsOverlap(newSlotObj, { date: String(a.streamDate), startTime: String(a.streamTime || ''), endDate: String(a.streamEndDate || a.streamDate), endTime: String(a.streamEndTime || '') })
-        );
-        if (sameShopConflict) {
-          showNotification(`This timeslot overlaps with an existing booking for this shop (${formatDate(sameShopConflict.streamDate)} ${formatTime(sameShopConflict.streamTime)}–${formatTime(sameShopConflict.streamEndTime)})`, 'error');
+        if (countOtherCreatorsForSlot(newSlotObj, ca.brandApplicationId, currentCreatorId, caId) >= capacityLimit) {
+          showNotification('This timeslot has just been taken by another creator. Please pick another slot.', 'error');
           return;
         }
 
-        const ownConflict = state.creatorApplications.find(a =>
-          String(a.creatorId) === currentCreatorId && a.id !== caId &&
-          !reschShopBrandAppIds.includes(a.brandApplicationId) &&
-          a.status !== 'rejected' && a.status !== 'cancelled' &&
-          timeslotsOverlap(newSlotObj, { date: String(a.streamDate), startTime: String(a.streamTime || ''), endDate: String(a.streamEndDate || a.streamDate), endTime: String(a.streamEndTime || '') })
-        );
-        if (ownConflict) {
-          showNotification(`This timeslot overlaps with your existing stream at ${formatDate(ownConflict.streamDate)} ${formatTime(ownConflict.streamTime)}–${formatTime(ownConflict.streamEndTime)}`, 'error');
+        const selfConflict = getTakenTimeslotObjects(ca.brandApplicationId, currentCreatorId, caId)
+          .concat(getCreatorConfirmedTimeslots(caId))
+          .find(s => timeslotsOverlap(newSlotObj, s));
+        if (selfConflict) {
+          showNotification(`This timeslot overlaps with your existing stream at ${formatDate(selfConflict.date)} ${formatTime(selfConflict.startTime)}–${selfConflict.endDate && selfConflict.endDate !== selfConflict.date ? formatDate(selfConflict.endDate) + ' ' : ''}${formatTime(selfConflict.endTime)}`, 'error');
           return;
         }
       }
@@ -3110,22 +3209,7 @@
       if (!ca) return '';
 
       const slotMonth = String(ca.streamDate).substring(0, 7);
-      const [yr, mo] = slotMonth.split('-').map(Number);
-      const lastDay = new Date(yr, mo, 0).getDate();
-      const pad2 = n => String(n).padStart(2, '0');
       const now = new Date();
-      const todayStr = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-      // Earliest selectable half-hour slot today (times only come in :00/:30 increments)
-      const earliestTodayHour = now.getMinutes() < 30 ? now.getHours() : now.getHours() + 1;
-      const earliestTodayMin = now.getMinutes() < 30 ? 30 : 0;
-      const hasSlotLeftToday = earliestTodayHour < 24;
-      const minDateBase = hasSlotLeftToday ? todayStr : (() => {
-        const t = new Date(now); t.setDate(t.getDate() + 1);
-        return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
-      })();
-      const minDate = minDateBase > `${slotMonth}-01` ? minDateBase : `${slotMonth}-01`;
-      const maxDate = `${slotMonth}-${pad2(lastDay)}`;
-      const reschedHours = Array.from({length:24},(_,i)=>pad2(i));
 
       const currentSlotStr = formatDate(ca.streamDate)
         + (ca.streamTime ? ' ' + formatTime(ca.streamTime) : '')
@@ -3179,47 +3263,18 @@
         </div>` : '';
 
       const rm = state.rescheduleModal;
-      const isStartToday = (rm.newStartDate || '') === todayStr;
-      const startHourOptions = isStartToday ? reschedHours.filter(h => Number(h) >= earliestTodayHour) : reschedHours;
-      const startHourDefault = (isStartToday && Number(rm.newStartHour || '00') < earliestTodayHour)
-        ? pad2(earliestTodayHour) : (rm.newStartHour || '00');
-      const isStartAtEarliestHour = isStartToday && Number(startHourDefault) === earliestTodayHour;
-      const startMinOptions = isStartAtEarliestHour && earliestTodayMin === 30 ? ['30'] : ['00', '30'];
-      const startMinDefault = (isStartAtEarliestHour && !startMinOptions.includes(rm.newStartMin || '00'))
-        ? pad2(earliestTodayMin) : (rm.newStartMin || '00');
-      const freeDatePickerHtml = !isSellerSite ? `
+      const pillPickerHtml = !isSellerSite ? `
         <div style="margin-bottom:16px;">
           <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:10px;">New Date & Time <span style="font-size:11px;font-weight:400;color:#888;">(must be within ${formatMonth(slotMonth)})</span></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div>
-              <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;">Start Date <span style="color:#e74c3c;">*</span></label>
-              <input type="date" id="reschedule-start-date" min="${minDate}" max="${maxDate}" value="${rm.newStartDate || ''}" oninput="state.rescheduleModal.newStartDate = this.value; render();" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <select id="reschedule-start-hour" onchange="state.rescheduleModal.newStartHour = this.value; render();" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  ${startHourOptions.map(h=>`<option value="${h}" ${startHourDefault === h ? 'selected' : ''}>${h}</option>`).join('')}
-                </select>
-                <span style="font-weight:700;color:#888;flex-shrink:0;">:</span>
-                <select id="reschedule-start-min" onchange="state.rescheduleModal.newStartMin = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  ${startMinOptions.map(m=>`<option value="${m}" ${startMinDefault === m ? 'selected' : ''}>${m}</option>`).join('')}
-                </select>
-              </div>
-              ${isStartToday ? `<div style="font-size:11px;color:#888;margin-top:4px;">Same-day reschedule — only remaining times today are shown.</div>` : ''}
-            </div>
-            <div>
-              <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;">End Date</label>
-              <input type="date" id="reschedule-end-date" min="${minDate}" max="${maxDate}" value="${rm.newEndDate || ''}" oninput="state.rescheduleModal.newEndDate = this.value;" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" ${busy ? 'disabled' : ''}>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <select id="reschedule-end-hour" onchange="state.rescheduleModal.newEndHour = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  ${reschedHours.map(h=>`<option value="${h}" ${(rm.newEndHour || '00') === h ? 'selected' : ''}>${h}</option>`).join('')}
-                </select>
-                <span style="font-weight:700;color:#888;flex-shrink:0;">:</span>
-                <select id="reschedule-end-min" onchange="state.rescheduleModal.newEndMin = this.value;" style="flex:1;padding:8px 6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" ${busy ? 'disabled' : ''}>
-                  <option value="00" ${(rm.newEndMin || '00') === '00' ? 'selected' : ''}>00</option>
-                  <option value="30" ${rm.newEndMin === '30' ? 'selected' : ''}>30</option>
-                </select>
-              </div>
-            </div>
-          </div>
+          <p style="font-size:12px;color:#888;margin-bottom:12px;">Pick a day, then a start time. Each stream is a fixed 2-hour block. Slots that are full or overlap your own bookings won't appear.</p>
+          ${renderReschedulePillDayPicker(caId, ca.brandApplicationId)}
+          ${rm.newStartDate && rm.newStartTime ? (() => {
+            const { endDate: selEndDate, endTime: selEndTime } = addMinutesToDateTime(rm.newStartDate, rm.newStartTime, 120);
+            return `<div style="margin-top:16px;display:flex;align-items:center;gap:12px;padding:10px 16px;background:#f0f0ff;border-radius:8px;border:1px solid #e0e0ff;">
+              <span style="flex:1;font-size:14px;color:#333;">📅 ${formatDate(rm.newStartDate)} ${formatTime(rm.newStartTime)} — ${selEndDate !== rm.newStartDate ? formatDate(selEndDate) + ' ' : ''}${formatTime(selEndTime)}</span>
+              <button type="button" class="timeslot-remove-btn" onclick="state.rescheduleModal.newStartDate = null; state.rescheduleModal.newStartTime = null; render();">✕</button>
+            </div>`;
+          })() : ''}
         </div>` : '';
 
       const reasonOptions = state.businessMappingValues
@@ -3265,13 +3320,14 @@
                   })}
                 </div>` : '';
               return `
+                ${pillPickerHtml}
+                <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:10px;">Booking Calendar <span style="font-size:11px;font-weight:400;color:#888;">(view only)</span></div>
                 <button type="button" onclick="state.rescheduleModal.showCalendar=!state.rescheduleModal.showCalendar;render();"
                   style="width:100%;margin-bottom:12px;padding:9px 14px;background:${showCal ? '#f0f0f0' : '#fafafa'};border:1px solid #ddd;border-radius:8px;font-size:13px;color:#444;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px;">
                   📅 <span style="flex:1;font-weight:600;">${showCal ? 'Hide Slot Calendar' : 'View Slot Calendar'}</span>
                   <span style="color:#aaa;font-size:16px;">${showCal ? '▲' : '▼'}</span>
                 </button>
-                ${calendarHtml}
-                ${freeDatePickerHtml}`;
+                ${calendarHtml}`;
             })()}
             ${reasonHtml}
             <div style="display:flex;gap:10px;">
