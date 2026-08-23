@@ -81,6 +81,9 @@ router.get('/', async (req, res) => {
       case 'editPendingBrandApplication':
         result = await editPendingBrandApplication(req.query.id, JSON.parse(req.query.data));
         break;
+      case 'setBrandAppSlots':
+        result = await setBrandAppSlots(req.query.id, JSON.parse(req.query.data));
+        break;
       case 'cancelBrandApplication':
         result = await cancelBrandApplication(req.query.id, req.query.cancelReason);
         break;
@@ -553,6 +556,74 @@ async function editPendingBrandApplication(id, data) {
   }
   await db.updateById('brand_applications', id, data);
   return { success: true };
+}
+
+// ─── setBrandAppSlots (internal-only — set the exact slot count/timeslots, no evenness rule) ──
+
+async function setBrandAppSlots(id, data) {
+  const app = await db.findById('brand_applications', id);
+  if (!app) return { success: false, error: 'Application not found' };
+  if (String(app.status) !== 'approved') {
+    return { success: false, error: `This application is no longer approved (current status: ${app.status}) — please refresh the page.` };
+  }
+
+  const isSellerSite = String(app.sellerSiteRequired).trim().toLowerCase() === 'true';
+  const activeCAs = (await db.where('creator_applications', { brandApplicationId: id }))
+    .filter(ca => ca.status !== 'rejected' && ca.status !== 'cancelled');
+
+  const updates = {};
+
+  if (isSellerSite) {
+    let slots;
+    try {
+      slots = typeof data.sellerSiteTimeslots === 'string' ? JSON.parse(data.sellerSiteTimeslots) : data.sellerSiteTimeslots;
+    } catch (e) {
+      return { success: false, error: 'Invalid timeslot data' };
+    }
+    if (!Array.isArray(slots)) return { success: false, error: 'Invalid timeslot data' };
+
+    for (const s of slots) {
+      if (!s || !s.date || !s.startTime || !s.endTime) return { success: false, error: 'Invalid timeslot data' };
+      if (String(s.date).substring(0, 7) !== app.month) {
+        return { success: false, error: `All timeslots must fall within ${app.month}` };
+      }
+    }
+    for (let i = 0; i < slots.length; i++) {
+      for (let j = i + 1; j < slots.length; j++) {
+        if (timeslotsOverlap(slots[i], slots[j])) {
+          return { success: false, error: `Timeslot ${slots[i].date} ${slots[i].startTime} overlaps with another timeslot in the list` };
+        }
+      }
+    }
+
+    // Block removing any timeslot that still has an active creator application booked on it
+    let existing = [];
+    try {
+      existing = Array.isArray(app.sellerSiteTimeslots) ? app.sellerSiteTimeslots : JSON.parse(app.sellerSiteTimeslots || '[]');
+    } catch (e) { existing = []; }
+    const stillPresent = new Set(slots.map(s => `${s.date}|${s.startTime}`));
+    for (const removed of existing) {
+      if (stillPresent.has(`${removed.date}|${removed.startTime}`)) continue;
+      const occupied = activeCAs.some(ca => String(ca.streamDate) === String(removed.date) && String(ca.streamTime) === String(removed.startTime));
+      if (occupied) {
+        return { success: false, error: `Cannot remove ${removed.date} ${removed.startTime} — a creator is already booked on this timeslot.` };
+      }
+    }
+
+    updates.sellerSiteTimeslots = JSON.stringify(slots);
+    updates.streamCount = slots.length;
+  } else {
+    const newCount = parseInt(data.streamCount, 10);
+    if (!newCount || newCount < 1) return { success: false, error: 'Please enter a valid number of livestreams' };
+    const approvedCount = activeCAs.filter(ca => ca.status === 'approved').length;
+    if (newCount < approvedCount) {
+      return { success: false, error: `Cannot set below ${approvedCount} — ${approvedCount} creator${approvedCount !== 1 ? 's are' : ' is'} already approved for this brand.` };
+    }
+    updates.streamCount = newCount;
+  }
+
+  await db.updateById('brand_applications', id, updates);
+  return { success: true, streamCount: updates.streamCount, sellerSiteTimeslots: isSellerSite ? JSON.parse(updates.sellerSiteTimeslots) : undefined };
 }
 
 // ─── updateCreatorApplication ─────────────────────────────────────────────────
