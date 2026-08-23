@@ -78,6 +78,9 @@ router.get('/', async (req, res) => {
       case 'increaseSellerSiteSlots':
         result = await increaseSellerSiteSlots(req.query.id, req.query.newTimeslots);
         break;
+      case 'editPendingBrandApplication':
+        result = await editPendingBrandApplication(req.query.id, JSON.parse(req.query.data));
+        break;
       case 'cancelBrandApplication':
         result = await cancelBrandApplication(req.query.id, req.query.cancelReason);
         break;
@@ -473,6 +476,9 @@ async function toggleBrandPause(id) {
 async function increaseBrandAppSlots(id, additionalCount) {
   const app = await db.findById('brand_applications', id);
   if (!app) return { success: false, error: 'Application not found' };
+  if (String(app.status) !== 'approved') {
+    return { success: false, error: `This application is no longer approved (current status: ${app.status}) — please refresh the page.` };
+  }
   if (String(app.sellerSiteRequired).trim().toLowerCase() === 'true') {
     return { success: false, error: 'Seller site applications must add specific timeslots.' };
   }
@@ -491,6 +497,9 @@ async function increaseBrandAppSlots(id, additionalCount) {
 async function increaseSellerSiteSlots(id, newTimeslotsRaw) {
   const app = await db.findById('brand_applications', id);
   if (!app) return { success: false, error: 'Application not found' };
+  if (String(app.status) !== 'approved') {
+    return { success: false, error: `This application is no longer approved (current status: ${app.status}) — please refresh the page.` };
+  }
   if (String(app.sellerSiteRequired).trim().toLowerCase() !== 'true') {
     return { success: false, error: 'This application is not a seller site application' };
   }
@@ -532,6 +541,18 @@ async function increaseSellerSiteSlots(id, newTimeslotsRaw) {
     sellerSiteTimeslots: JSON.stringify(combined),
   });
   return { success: true, streamCount: newStreamCount, sellerSiteTimeslots: combined };
+}
+
+// ─── editPendingBrandApplication (seller self-service full edit, pending only) ─
+
+async function editPendingBrandApplication(id, data) {
+  const app = await db.findById('brand_applications', id);
+  if (!app) return { success: false, error: 'Application not found' };
+  if (String(app.status) !== 'pending') {
+    return { success: false, error: `This application is no longer pending (current status: ${app.status}) — it can no longer be fully edited. Please refresh the page.` };
+  }
+  await db.updateById('brand_applications', id, data);
+  return { success: true };
 }
 
 // ─── updateCreatorApplication ─────────────────────────────────────────────────

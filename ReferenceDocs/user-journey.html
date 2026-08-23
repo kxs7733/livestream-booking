@@ -252,6 +252,11 @@
       <div class="step-body">
         <div class="step-title">Awaiting Internal Approval</div>
         <div class="step-desc">Brand can monitor status from the dashboard. Can cancel the application at any time (but all linked creator applications will be cancelled too).</div>
+        <ul class="step-list">
+          <li>While <span class="pill pill-pending">Pending</span>, clicking "✏️ Edit" opens the full application form, pre-filled, with every field editable and the exact same validations as at submission — including re-picking seller site timeslots if applicable</li>
+          <li>Re-uploading the Livestream Brief is optional while editing — leave it blank to keep the brief already on file</li>
+          <li>Saving keeps the application <span class="pill pill-pending">Pending</span>; internal team reviews the latest saved version</li>
+        </ul>
       </div>
     </div>
 
@@ -272,6 +277,22 @@
         <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
       </div>
       <div class="step-body">
+        <div class="step-title">Edit Approved Application (self-service)</div>
+        <div class="step-desc">Dashboard → "My Applications" → "✏️ Edit" button on an <span class="pill pill-approved">Approved</span> application. Fully self-service — no internal approval needed. Once approved, edits are limited to two things (everything else is locked since creators/internal team are already relying on the committed details):</div>
+        <ul class="step-list">
+          <li><strong>Increase Livestream Slots</strong> — <strong>Creator Site:</strong> enter the number of additional slots to add, must be even (2, 4, 6…). <strong>Seller Site:</strong> pick new specific timeslots using the same date/time picker as the original application form, scoped to the application's existing month; must add an even number of new timeslots with no overlap against existing timeslots, the new timeslots being added, or the seller's other active seller site applications. Slots can only be increased, never decreased</li>
+          <li><strong>Seller PIC Contact Details</strong> — Name, Mobile, and Email can be updated at any time; always saved on submit (safe no-op if left unchanged)</li>
+          <li>The Slots section is optional per edit — leave it blank if you only want to update contact details</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div style="display:flex;flex-direction:column;align-items:center;width:28px">
+        <div class="step-number">7</div>
+        <div style="width:2px;flex:1;background:#dfe1e6;margin-top:4px"></div>
+      </div>
+      <div class="step-body">
         <div class="step-title">Monitor Confirmed Slots</div>
         <div class="step-desc">Dashboard → "Confirmed Slots" tab shows all creator-brand confirmed matches:</div>
         <ul class="step-list">
@@ -284,7 +305,7 @@
 
     <div class="step">
       <div style="display:flex;flex-direction:column;align-items:center;width:28px">
-        <div class="step-number">7</div>
+        <div class="step-number">8</div>
       </div>
       <div class="step-body">
         <div class="step-title">Sample Dispatch</div>
@@ -771,6 +792,21 @@
         <td>All seller site slots filled</td>
         <td>Creator Application (Seller Site only)</td>
         <td>If all predefined slots are confirmed by other creators, the apply form shows an "All Timeslots Filled" message instead of the chip selector — no further applications can be submitted for that brand</td>
+      </tr>
+      <tr>
+        <td>Slot increase count must be even</td>
+        <td>Brand Application (self-service Edit)</td>
+        <td>Applies to both Creator Site and Seller Site applications — enforced client and server side</td>
+      </tr>
+      <tr>
+        <td>Seller site slot increase within original month</td>
+        <td>Brand Application (Seller Site only, self-service Edit)</td>
+        <td>New timeslots added via the Edit panel must fall within the application's existing month, and must not overlap the application's existing timeslots, each other, or the seller's other active seller site applications</td>
+      </tr>
+      <tr>
+        <td>Full edit only while pending</td>
+        <td>Brand Application (self-service Edit)</td>
+        <td>The full application form (all fields, same validations as at submission) can only be reopened for editing while status is <span class="pill pill-pending">Pending</span>. Once <span class="pill pill-approved">Approved</span>, only slots and Seller PIC contact details remain editable</td>
       </tr>
     </tbody>
   </table>

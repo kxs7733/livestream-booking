@@ -672,6 +672,7 @@
       showBrandForm: false,
       brandFormDraft: null,
       brandFormTimeslots: [],
+      brandFormEditId: null, // set when a seller is editing an existing pending application (vs. creating new)
       showCreatorApplyForm: null, // brandApplicationId to apply for
       expandedCards: {}, // cardId -> bool
       calendarMonth: new Date().getMonth(),
@@ -1456,6 +1457,8 @@
     const handleSubmitBrandApplication = async () => {
       if (state.isSubmitting) return;
       const isInternal = state.currentUser?.type === 'internal';
+      const editId = state.brandFormEditId;
+      const editingApp = editId ? state.brandApplications.find(a => a.id === editId) : null;
       const form = document.getElementById('brand-app-form');
       const shopId = form.querySelector('#f-shop-id').value.trim();
       const shopName = form.querySelector('#f-shop-name').value.trim();
@@ -1588,15 +1591,18 @@
       }
 
       const briefFileInput = form.querySelector('#f-brief-file');
-      if (!briefFileInput || briefFileInput.files.length === 0) {
+      const hasNewBriefFile = !!(briefFileInput && briefFileInput.files.length > 0);
+      if (!editId && !hasNewBriefFile) {
         showNotification('Please upload a Livestream Brief for the Creator', 'error');
         return;
       }
-      const briefFileName = briefFileInput.files[0].name.replace(/\.[^/.]+$/, '');
-      const normalise = s => s.toLowerCase().replace(/\s+/g, '');
-      if (!normalise(briefFileName).includes(normalise(state.currentUser.shopName || ''))) {
-        showNotification('Filename must include your shop username. Please rename your file and re-upload (e.g., innisfreesg_Jun26_CreatorMatch).', 'error');
-        return;
+      if (hasNewBriefFile) {
+        const briefFileName = briefFileInput.files[0].name.replace(/\.[^/.]+$/, '');
+        const normalise = s => s.toLowerCase().replace(/\s+/g, '');
+        if (!normalise(briefFileName).includes(normalise(state.currentUser.shopName || ''))) {
+          showNotification('Filename must include your shop username. Please rename your file and re-upload (e.g., innisfreesg_Jun26_CreatorMatch).', 'error');
+          return;
+        }
       }
 
       state.brandFormDraft = {
@@ -1627,23 +1633,80 @@
       state.isLoading = true;
       render();
 
-      // Upload brief file
-      let livestreamBrief = '';
-      const file = briefFileInput.files[0];
-      if (file.size > 10 * 1024 * 1024) {
-        state.isSubmitting = false;
-        state.isLoading = false;
-        showNotification('Brief file must be under 10 MB', 'error');
-        render();
-        return;
+      // Upload brief file (only if a new one was chosen — editing keeps the existing brief otherwise)
+      let livestreamBrief = editingApp ? (editingApp.livestreamBrief || '') : '';
+      if (hasNewBriefFile) {
+        const file = briefFileInput.files[0];
+        if (file.size > 10 * 1024 * 1024) {
+          state.isSubmitting = false;
+          state.isLoading = false;
+          showNotification('Brief file must be under 10 MB', 'error');
+          render();
+          return;
+        }
+        const uploadResult = await uploadFile(file);
+        if (uploadResult && uploadResult.success) {
+          livestreamBrief = uploadResult.fileUrl;
+        } else {
+          state.isSubmitting = false;
+          state.isLoading = false;
+          showNotification('Failed to upload brief file. Please try again.', 'error');
+          render();
+          return;
+        }
       }
-      const uploadResult = await uploadFile(file);
-      if (uploadResult && uploadResult.success) {
-        livestreamBrief = uploadResult.fileUrl;
-      } else {
+
+      if (editId) {
+        const updates = {
+          month,
+          streamCount,
+          sellerType,
+          productNominationsConfirmed: productNomConfirmed,
+          numProductsSponsored,
+          streamLocation,
+          hasPackageActivation,
+          brandActivationType,
+          preferredDate,
+          sellerSiteRequired: streamLocation === 'Seller Site',
+          sellerSiteAddress,
+          sellerSitePostalCode,
+          transportationCovered,
+          sellerPdpaConsentGiven,
+          loanedProductReturnCostsAgreed,
+          sellerSiteTimeslots: streamLocation === 'Seller Site' ? JSON.stringify(state.brandFormTimeslots) : '[]',
+          amsCommission,
+          bundleDealsAgreed,
+          voucherTier,
+          creatorAssignmentAgreed,
+          sellerPicName: picName,
+          sellerPicMobile: picMobile,
+          sellerPicEmail: picEmail,
+          livestreamBrief,
+        };
+        const result = await apiCall('editPendingBrandApplication', { id: editId, data: updates });
         state.isSubmitting = false;
         state.isLoading = false;
-        showNotification('Failed to upload brief file. Please try again.', 'error');
+        if (!result || !result.success) {
+          showNotification(result?.error || 'Failed to save changes. Please try again.', 'error');
+          // Status likely changed underneath us (e.g. internal team approved it while this form was
+          // open) — drop out of edit mode and reload so the seller sees the current, real state.
+          state.brandFormEditId = null;
+          state.brandFormDraft = null;
+          state.brandFormTimeslots = [];
+          state.showBrandForm = false;
+          state.brandTab = 'my-applications';
+          await loadAllData();
+          return;
+        }
+        updateStateBA(editId, Object.assign({}, updates, {
+          sellerSiteTimeslots: streamLocation === 'Seller Site' ? state.brandFormTimeslots : [],
+        }));
+        showNotification('Application updated successfully!');
+        state.brandFormEditId = null;
+        state.brandFormDraft = null;
+        state.brandFormTimeslots = [];
+        state.showBrandForm = false;
+        state.brandTab = 'my-applications';
         render();
         return;
       }
@@ -1688,7 +1751,11 @@
       } else {
         showNotification('Application submitted successfully!');
       }
-      state.brandApplications.push(application);
+      // Local state expects sellerSiteTimeslots as a parsed array (matching loadAllData's shape) —
+      // the API payload above needs it JSON-stringified, so fix up the locally-pushed copy here.
+      state.brandApplications.push(Object.assign({}, application, {
+        sellerSiteTimeslots: streamLocation === 'Seller Site' ? state.brandFormTimeslots.slice() : [],
+      }));
       state.brandFormDraft = null;
       state.brandFormTimeslots = [];
       state.isSubmitting = false;
@@ -3059,6 +3126,42 @@
       render();
     };
 
+    // While an application is still pending, let the seller edit the whole thing via the
+    // same form + validations used at creation, pre-filled with the app's current values.
+    const openFullEditBrandApp = (appId) => {
+      const app = state.brandApplications.find(a => a.id === appId);
+      if (!app) return;
+      const picPhone = parseStoredPhone(app.sellerPicMobile);
+      state.brandFormEditId = appId;
+      state.brandFormDraft = {
+        month: app.month,
+        streamCount: app.streamCount,
+        sellerType: app.sellerType,
+        productNomConfirmed: String(app.productNominationsConfirmed) === 'true',
+        numProductsSponsored: app.numProductsSponsored,
+        streamLocation: app.streamLocation,
+        transportationCovered: String(app.transportationCovered) === 'true',
+        sellerSiteAddress: app.sellerSiteAddress,
+        sellerSitePostalCode: app.sellerSitePostalCode,
+        sellerPdpaConsentGiven: String(app.sellerPdpaConsentGiven) === 'true',
+        loanedProductReturnCostsAgreed: String(app.loanedProductReturnCostsAgreed) === 'true',
+        hasPackageActivation: String(app.hasPackageActivation) === 'true',
+        brandActivationType: app.brandActivationType || '',
+        preferredDate: app.preferredDate || '',
+        amsCommission: app.amsCommission,
+        bundleDealsAgreed: String(app.bundleDealsAgreed) === 'true',
+        voucherTier: app.voucherTier,
+        creatorAssignmentAgreed: String(app.creatorAssignmentAgreed) === 'true',
+        picName: app.sellerPicName,
+        picMobileCode: picPhone.code,
+        picMobileNumber: picPhone.number,
+        picEmail: app.sellerPicEmail,
+      };
+      state.brandFormTimeslots = Array.isArray(app.sellerSiteTimeslots) ? app.sellerSiteTimeslots.slice() : [];
+      state.showBrandForm = true;
+      render();
+    };
+
     const addEditSlotTimeslot = () => {
       const m = state.editBrandAppModal;
       if (!m) return;
@@ -3117,57 +3220,92 @@
       render();
     };
 
-    const handleSaveEditBrandAppSlots = async () => {
+    const handleSaveEditBrandApp = async () => {
       const m = state.editBrandAppModal;
       if (!m || state.isSubmitting) return;
       const app = state.brandApplications.find(a => a.id === m.appId);
       if (!app) return;
       const isSellerSite = String(app.sellerSiteRequired) === 'true';
 
-      if (isSellerSite) {
-        if (m.newTimeslots.length === 0) {
-          showNotification('Please add at least one new timeslot', 'error');
-          return;
-        }
-        if (m.newTimeslots.length % 2 !== 0) {
-          showNotification('Number of additional timeslots must be an even number (2, 4, 6…)', 'error');
-          return;
-        }
-        state.isSubmitting = true;
-        render();
-        const result = await apiCall('increaseSellerSiteSlots', { id: app.id, newTimeslots: m.newTimeslots });
-        if (result && result.success) {
-          updateStateBA(app.id, { streamCount: result.streamCount, sellerSiteTimeslots: result.sellerSiteTimeslots });
-          showNotification(`Added ${m.newTimeslots.length} new timeslot${m.newTimeslots.length !== 1 ? 's' : ''}`, 'success');
-          state.editBrandAppModal = null;
-        } else {
-          showNotification(result?.error || 'Failed to add slots. Please try again.', 'error');
-        }
-        state.isSubmitting = false;
-        render();
-      } else {
-        const add = parseInt(m.addSlotsCount, 10) || 0;
-        if (add < 1) {
-          showNotification('Please enter a valid number of additional slots', 'error');
-          return;
-        }
-        if (add % 2 !== 0) {
-          showNotification('Number of additional slots must be an even number (2, 4, 6…)', 'error');
-          return;
-        }
-        state.isSubmitting = true;
-        render();
-        const result = await apiCall('increaseBrandAppSlots', { id: app.id, additionalCount: add });
-        if (result && result.success) {
-          updateStateBA(app.id, { streamCount: result.streamCount });
-          showNotification(`Added ${add} new slot${add !== 1 ? 's' : ''}`, 'success');
-          state.editBrandAppModal = null;
-        } else {
-          showNotification(result?.error || 'Failed to add slots. Please try again.', 'error');
-        }
-        state.isSubmitting = false;
-        render();
+      // Seller PIC contact fields — always saved (safe to write back unchanged)
+      const picName = document.getElementById('edit-pic-name')?.value.trim() || '';
+      const picMobileCode = document.getElementById('edit-pic-mobile-code')?.value || '65';
+      const picMobileNumber = document.getElementById('edit-pic-mobile')?.value.trim() || '';
+      const picEmail = document.getElementById('edit-pic-email')?.value.trim() || '';
+      if (!picName || !picMobileNumber || !picEmail) {
+        showNotification('Please fill in all Seller PIC contact fields', 'error');
+        return;
       }
+      const picMobile = formatPhoneForStorage(picMobileCode, picMobileNumber);
+
+      // Slots section — optional, only acted on if the seller entered something
+      let slotAction = null;
+      if (isSellerSite) {
+        if (m.newTimeslots.length > 0) {
+          if (m.newTimeslots.length % 2 !== 0) {
+            showNotification('Number of additional timeslots must be an even number (2, 4, 6…)', 'error');
+            return;
+          }
+          slotAction = { type: 'seller', timeslots: m.newTimeslots };
+        }
+      } else {
+        const addRaw = String(m.addSlotsCount || '').trim();
+        if (addRaw !== '') {
+          const add = parseInt(addRaw, 10);
+          if (!add || add < 1) {
+            showNotification('Please enter a valid number of additional slots', 'error');
+            return;
+          }
+          if (add % 2 !== 0) {
+            showNotification('Number of additional slots must be an even number (2, 4, 6…)', 'error');
+            return;
+          }
+          slotAction = { type: 'creator', add };
+        }
+      }
+
+      state.isSubmitting = true;
+      render();
+
+      const picResult = await apiCall('updateBrandApplication', {
+        id: app.id,
+        data: { sellerPicName: picName, sellerPicMobile: picMobile, sellerPicEmail: picEmail },
+      });
+      if (!picResult || !picResult.success) {
+        showNotification(picResult?.error || 'Failed to save contact details. Please try again.', 'error');
+        state.isSubmitting = false;
+        render();
+        return;
+      }
+      const stateUpdates = { sellerPicName: picName, sellerPicMobile: picMobile, sellerPicEmail: picEmail };
+      let slotMessage = '';
+
+      if (slotAction) {
+        const result = slotAction.type === 'seller'
+          ? await apiCall('increaseSellerSiteSlots', { id: app.id, newTimeslots: slotAction.timeslots })
+          : await apiCall('increaseBrandAppSlots', { id: app.id, additionalCount: slotAction.add });
+
+        if (result && result.success) {
+          stateUpdates.streamCount = result.streamCount;
+          if (slotAction.type === 'seller') stateUpdates.sellerSiteTimeslots = result.sellerSiteTimeslots;
+          const count = slotAction.type === 'seller' ? slotAction.timeslots.length : slotAction.add;
+          slotMessage = ` and added ${count} new ${slotAction.type === 'seller' ? 'timeslot' : 'slot'}${count !== 1 ? 's' : ''}`;
+        } else {
+          showNotification(result?.error || 'Contact details saved, but failed to add slots.', 'error');
+          state.editBrandAppModal = null;
+          state.isSubmitting = false;
+          // Slot action may have failed because the app's status changed underneath us
+          // (e.g. cancelled while this modal was open) — reload so the list reflects reality.
+          await loadAllData();
+          return;
+        }
+      }
+
+      updateStateBA(app.id, stateUpdates);
+      showNotification(`Application updated${slotMessage}`, 'success');
+      state.editBrandAppModal = null;
+      state.isSubmitting = false;
+      render();
     };
 
     const setView = async (view) => {
@@ -3373,11 +3511,11 @@
               return `
                 <input type="date" id="edit-ss-date" class="form-input" style="flex:1;min-width:130px;" min="${minDate > tomorrowStr ? minDate : tomorrowStr}" max="${maxDate}" value="${defaultDate}">
                 <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
-                  <select id="edit-ss-hour" class="form-input" style="width:72px;">
+                  <select id="edit-ss-hour" class="form-input" style="width:84px;padding:10px 6px;text-align:center;">
                     ${hours.map(h => `<option value="${h}">${h}</option>`).join('')}
                   </select>
                   <span style="font-weight:700;color:#888;">:</span>
-                  <select id="edit-ss-min" class="form-input" style="width:72px;">
+                  <select id="edit-ss-min" class="form-input" style="width:84px;padding:10px 6px;text-align:center;">
                     <option value="00">00</option>
                     <option value="30">30</option>
                   </select>
@@ -3397,6 +3535,25 @@
         </div>
       `;
 
+      const picPhone = parseStoredPhone(app.sellerPicMobile);
+      const picSectionHtml = `
+        <div style="margin:20px 0 6px;padding-top:16px;border-top:1px solid #eee;">
+          <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:10px;">Seller PIC Contact Details</div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <label class="form-label" style="font-size:12px;">Name</label>
+            <input type="text" id="edit-pic-name" class="form-input" placeholder="Contact person name" value="${app.sellerPicName || ''}" ${busy ? 'disabled' : ''}>
+          </div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <label class="form-label" style="font-size:12px;">Mobile</label>
+            ${phoneInputHtml('edit-pic-mobile', 'edit-pic-mobile-code', picPhone.code, picPhone.number)}
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:12px;">Email</label>
+            <input type="email" id="edit-pic-email" class="form-input" placeholder="email@example.com" value="${app.sellerPicEmail || ''}" ${busy ? 'disabled' : ''}>
+          </div>
+        </div>
+      `;
+
       return `
         <div class="brand-detail-overlay" onclick="${close}" style="z-index:1100;">
           <div class="brand-detail-modal" onclick="event.stopPropagation();" style="border-top-color:#6c5ce7;max-width:480px;">
@@ -3404,10 +3561,12 @@
             <div style="margin-bottom:16px;padding-right:24px;">
               <div style="font-size:16px;font-weight:700;color:#222;">✏️ Edit Application</div>
               <div style="font-size:13px;color:#888;margin-top:4px;">${formatMonth(app.month)}</div>
+              <div style="font-size:12px;color:#aaa;margin-top:8px;">Leave the slot fields blank if you're not adding more slots this time.</div>
             </div>
             ${slotsSectionHtml}
+            ${picSectionHtml}
             <div style="display:flex;gap:10px;margin-top:18px;">
-              <button class="btn-primary" style="flex:1;" onclick="handleSaveEditBrandAppSlots()" ${busy ? 'disabled' : ''}>
+              <button class="btn-primary" style="flex:1;" onclick="handleSaveEditBrandApp()" ${busy ? 'disabled' : ''}>
                 ${busy ? '⏳ Saving...' : 'Save'}
               </button>
               <button class="btn-secondary" style="flex:1;" onclick="${close}" ${busy ? 'disabled' : ''}>
@@ -4449,6 +4608,8 @@
               const isExpanded = state.expandedCards['brand-app-' + app.id];
               const isPaused = String(app.isPaused) === 'true';
               const canPause = app.status === 'approved';
+              const isPending = app.status === 'pending';
+              const canEdit = canPause || isPending;
               return `
                 <div class="app-card" style="margin-bottom:12px;padding:0;overflow:hidden;border-left-color:${isPaused ? '#e67e22' : '#27ae60'};background-color:${isPaused ? '#fffcf8' : '#fff'};">
                   <!-- Header: month + toggle -->
@@ -4462,23 +4623,25 @@
                       </div>
                       <div style="font-size:12px;color:#888;margin-top:4px;">${app.streamCount} streams requested · ${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} left</div>
                     </div>
-                    ${canPause ? `
+                    ${canEdit ? `
                       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;">
-                        <button type="button" onclick="openEditBrandAppModal('${app.id}')"
+                        <button type="button" onclick="${isPending ? `openFullEditBrandApp('${app.id}')` : `openEditBrandAppModal('${app.id}')`}"
                           style="padding:5px 12px;border-radius:16px;font-size:12px;font-weight:600;border:1px solid #ddd;background:#fff;color:#555;cursor:pointer;">
                           ✏️ Edit
                         </button>
-                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
-                          <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="font-size:12px;font-weight:600;color:${isPaused ? '#e67e22' : '#777'};">Pause applications</span>
-                            <div onclick="handleToggleBrandPause('${app.id}')"
-                              style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0;${state.isSubmitting ? 'opacity:0.5;pointer-events:none;' : ''}">
-                              <div style="position:absolute;inset:0;border-radius:11px;background:${isPaused ? '#e67e22' : '#ddd'};"></div>
-                              <div style="position:absolute;top:3px;left:${isPaused ? '21px' : '3px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+                        ${canPause ? `
+                          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                              <span style="font-size:12px;font-weight:600;color:${isPaused ? '#e67e22' : '#777'};">Pause applications</span>
+                              <div onclick="handleToggleBrandPause('${app.id}')"
+                                style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0;${state.isSubmitting ? 'opacity:0.5;pointer-events:none;' : ''}">
+                                <div style="position:absolute;inset:0;border-radius:11px;background:${isPaused ? '#e67e22' : '#ddd'};"></div>
+                                <div style="position:absolute;top:3px;left:${isPaused ? '21px' : '3px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+                              </div>
                             </div>
+                            <div style="font-size:11px;color:#c0c0c0;max-width:170px;text-align:right;line-height:1.4;">Stops new creators from applying. Existing applications continue as normal.</div>
                           </div>
-                          <div style="font-size:11px;color:#c0c0c0;max-width:170px;text-align:right;line-height:1.4;">Stops new creators from applying. Existing applications continue as normal.</div>
-                        </div>
+                        ` : ''}
                       </div>
                     ` : ''}
                   </div>
@@ -4845,16 +5008,17 @@
 
       const shopId = isInternal ? '' : (state.currentUser?.shopId || '');
       const shopName = isInternal ? '' : (state.currentUser?.shopName || state.currentUser?.name || '');
+      const editId = state.brandFormEditId;
       const backOnclick = isInternal
         ? 'state.internalBrandApplyMode = false; state.internalSelectedSellerId = \'\'; state.brandFormDraft = null; render();'
-        : 'state.showBrandForm = false; state.brandFormDraft = null; render();';
+        : 'state.showBrandForm = false; state.brandFormDraft = null; state.brandFormEditId = null; render();';
 
       return `
         <div class="dashboard">
           <button class="back-btn" onclick="${backOnclick}">← Back to Dashboard</button>
           <div class="form-container" id="brand-app-form">
-            <h2 class="form-title">Apply for Livestream Slots</h2>
-            <p class="form-subtitle">Complete this application to engage a Creator from Shopee to stream & sell on your behalf — for FREE with no hosting fees!</p>
+            <h2 class="form-title">${editId ? 'Edit Application' : 'Apply for Livestream Slots'}</h2>
+            <p class="form-subtitle">${editId ? 'Update your application below — all fields can be edited while it is still pending approval.' : 'Complete this application to engage a Creator from Shopee to stream & sell on your behalf — for FREE with no hosting fees!'}</p>
 
             <div style="background:linear-gradient(135deg, #fff1ed 0%, #fff7f5 100%);border-radius:8px;padding:16px;margin-bottom:28px;font-size:13px;color:#888;line-height:1.8;border:1px solid #FCDDD4;">
               <strong style="color:#ee4d2d;">How it works</strong><br>
@@ -5014,11 +5178,11 @@
                       return `
                         <input type="date" id="f-ss-date" class="form-input" style="flex:1;min-width:130px;" ${minDate ? `min="${minDate}" max="${maxDate}" value="${minDate}"` : ''}>
                         <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
-                          <select id="f-ss-hour" class="form-input" style="width:72px;">
+                          <select id="f-ss-hour" class="form-input" style="width:84px;padding:10px 6px;text-align:center;">
                             ${hours.map(h=>`<option value="${h}">${h}</option>`).join('')}
                           </select>
                           <span style="font-weight:700;color:#888;">:</span>
-                          <select id="f-ss-min" class="form-input" style="width:72px;">
+                          <select id="f-ss-min" class="form-input" style="width:84px;padding:10px 6px;text-align:center;">
                             <option value="00">00</option>
                             <option value="30">30</option>
                           </select>
@@ -5160,7 +5324,7 @@
               </div>
               <div class="form-row single">
                 <div class="form-group">
-                  <label class="form-label">Upload Livestream Brief for Creator <span class="required">*</span></label>
+                  <label class="form-label">Upload Livestream Brief for Creator ${editId ? '<span style="font-weight:400;color:#888;">(optional — leave blank to keep the current brief)</span>' : '<span class="required">*</span>'}</label>
                   <input type="file" id="f-brief-file" class="form-input" accept=".xlsx,.xls,.csv,.ods" style="padding:10px 16px;width:100%;max-width:100%;box-sizing:border-box;">
                   <div class="form-hint">Please include your shop username in the filename - e.g., innisfreesg_Jun26_CreatorMatch</div>
                   <div class="form-hint">Supported formats: Excel (.xlsx, .xls), CSV (.csv), OpenDocument Spreadsheet (.ods). Max 10 MB.</div>
@@ -5211,8 +5375,8 @@
             </div>
 
             <div class="form-actions">
-              <button class="btn-primary" onclick="handleSubmitBrandApplication()" ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>${state.isSubmitting ? 'Submitting...' : 'Submit Application'}</button>
-              <button class="btn-secondary" onclick="${isInternal ? 'state.internalBrandApplyMode = false; state.internalSelectedSellerId = \'\'; state.brandFormDraft = null; render();' : 'state.showBrandForm = false; state.brandFormDraft = null; render();'}" ${state.isSubmitting ? 'disabled' : ''}>Cancel</button>
+              <button class="btn-primary" onclick="handleSubmitBrandApplication()" ${state.isSubmitting ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>${state.isSubmitting ? 'Submitting...' : (editId ? 'Save Changes' : 'Submit Application')}</button>
+              <button class="btn-secondary" onclick="${isInternal ? 'state.internalBrandApplyMode = false; state.internalSelectedSellerId = \'\'; state.brandFormDraft = null; render();' : 'state.showBrandForm = false; state.brandFormDraft = null; state.brandFormEditId = null; render();'}" ${state.isSubmitting ? 'disabled' : ''}>Cancel</button>
             </div>
           </div>
         </div>
