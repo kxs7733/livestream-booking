@@ -704,6 +704,7 @@
       brandShowPastMonths: false,
       cancelModal: { show: false, id: null, label: '' },
       rescheduleModal: null,
+      editBrandAppModal: null,
       brandCancelModal: { show: false, id: null, shopName: '', linkedCreators: [] },
       creatorCancelModal: { show: false, id: null, reason: '' },
       creatorSubmitSuccessModal: { show: false },
@@ -3047,6 +3048,128 @@
       render();
     };
 
+    const openEditBrandAppModal = (appId) => {
+      const app = state.brandApplications.find(a => a.id === appId);
+      if (!app) return;
+      state.editBrandAppModal = {
+        appId,
+        addSlotsCount: '',
+        newTimeslots: [],
+      };
+      render();
+    };
+
+    const addEditSlotTimeslot = () => {
+      const m = state.editBrandAppModal;
+      if (!m) return;
+      const app = state.brandApplications.find(a => a.id === m.appId);
+      if (!app) return;
+
+      const dateVal = document.getElementById('edit-ss-date')?.value;
+      const hourVal = document.getElementById('edit-ss-hour')?.value || '00';
+      const minVal  = document.getElementById('edit-ss-min')?.value  || '00';
+      if (!dateVal) { showNotification('Please select a date', 'error'); return; }
+      if (dateVal.substring(0, 7) !== app.month) {
+        showNotification(`Timeslot must be within ${formatMonth(app.month)}`, 'error');
+        return;
+      }
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+      if (new Date(dateVal) < tomorrow) {
+        showNotification('Timeslot date must be tomorrow or later', 'error');
+        return;
+      }
+
+      const startMins = parseInt(hourVal) * 60 + parseInt(minVal);
+      const endTotalMins = startMins + 120;
+      const endHour = String(Math.floor(endTotalMins / 60) % 24).padStart(2, '0');
+      const endMin  = String(endTotalMins % 60).padStart(2, '0');
+      const endDate = endTotalMins >= 1440
+        ? (() => { const d = new Date(dateVal + 'T00:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().substring(0, 10); })()
+        : dateVal;
+      const newSlot = { date: dateVal, startTime: `${hourVal}:${minVal}`, endDate, endTime: `${endHour}:${endMin}` };
+
+      const existingSlots = Array.isArray(app.sellerSiteTimeslots) ? app.sellerSiteTimeslots : [];
+      const combined = existingSlots.concat(m.newTimeslots);
+      const conflict = combined.find(s => timeslotsOverlap(newSlot, s));
+      if (conflict) {
+        showNotification(`This overlaps with ${formatDate(conflict.date)} · ${formatTime(conflict.startTime)}–${formatTime(conflict.endTime)} already on this application`, 'error');
+        return;
+      }
+
+      const currentShopId = state.currentUser?.shopId || state.currentUser?.id || '';
+      const existingConflict = (state.brandApplications || [])
+        .filter(a => a.id !== app.id && String(a.sellerSiteRequired) === 'true' && a.status !== 'rejected' && a.status !== 'cancelled' && Array.isArray(a.sellerSiteTimeslots) && (a.shopId || a.brandId) === currentShopId)
+        .flatMap(a => a.sellerSiteTimeslots)
+        .find(s => timeslotsOverlap(newSlot, s));
+      if (existingConflict) {
+        showNotification(`This overlaps with ${formatDate(existingConflict.date)} · ${formatTime(existingConflict.startTime)}–${formatTime(existingConflict.endTime)} in another brand application`, 'error');
+        return;
+      }
+
+      m.newTimeslots.push(newSlot);
+      render();
+    };
+
+    const removeEditSlotTimeslot = (index) => {
+      if (!state.editBrandAppModal) return;
+      state.editBrandAppModal.newTimeslots.splice(index, 1);
+      render();
+    };
+
+    const handleSaveEditBrandAppSlots = async () => {
+      const m = state.editBrandAppModal;
+      if (!m || state.isSubmitting) return;
+      const app = state.brandApplications.find(a => a.id === m.appId);
+      if (!app) return;
+      const isSellerSite = String(app.sellerSiteRequired) === 'true';
+
+      if (isSellerSite) {
+        if (m.newTimeslots.length === 0) {
+          showNotification('Please add at least one new timeslot', 'error');
+          return;
+        }
+        if (m.newTimeslots.length % 2 !== 0) {
+          showNotification('Number of additional timeslots must be an even number (2, 4, 6…)', 'error');
+          return;
+        }
+        state.isSubmitting = true;
+        render();
+        const result = await apiCall('increaseSellerSiteSlots', { id: app.id, newTimeslots: m.newTimeslots });
+        if (result && result.success) {
+          updateStateBA(app.id, { streamCount: result.streamCount, sellerSiteTimeslots: result.sellerSiteTimeslots });
+          showNotification(`Added ${m.newTimeslots.length} new timeslot${m.newTimeslots.length !== 1 ? 's' : ''}`, 'success');
+          state.editBrandAppModal = null;
+        } else {
+          showNotification(result?.error || 'Failed to add slots. Please try again.', 'error');
+        }
+        state.isSubmitting = false;
+        render();
+      } else {
+        const add = parseInt(m.addSlotsCount, 10) || 0;
+        if (add < 1) {
+          showNotification('Please enter a valid number of additional slots', 'error');
+          return;
+        }
+        if (add % 2 !== 0) {
+          showNotification('Number of additional slots must be an even number (2, 4, 6…)', 'error');
+          return;
+        }
+        state.isSubmitting = true;
+        render();
+        const result = await apiCall('increaseBrandAppSlots', { id: app.id, additionalCount: add });
+        if (result && result.success) {
+          updateStateBA(app.id, { streamCount: result.streamCount });
+          showNotification(`Added ${add} new slot${add !== 1 ? 's' : ''}`, 'success');
+          state.editBrandAppModal = null;
+        } else {
+          showNotification(result?.error || 'Failed to add slots. Please try again.', 'error');
+        }
+        state.isSubmitting = false;
+        render();
+      }
+    };
+
     const setView = async (view) => {
       if (view === 'landing') {
         state.loginStep = 'credentials';
@@ -3199,6 +3322,98 @@
             <button class="btn-primary creator-accent" style="width:100%;" onclick="state.creatorSubmitSuccessModal = { show: false }; render();">
               OK
             </button>
+          </div>
+        </div>`;
+    };
+
+    const renderEditBrandAppModal = () => {
+      const m = state.editBrandAppModal;
+      if (!m) return '';
+      const app = state.brandApplications.find(a => a.id === m.appId);
+      if (!app) return '';
+
+      const close = `state.editBrandAppModal = null; render();`;
+      const busy = state.isSubmitting;
+      const isSellerSite = String(app.sellerSiteRequired) === 'true';
+      const existingSlots = Array.isArray(app.sellerSiteTimeslots) ? app.sellerSiteTimeslots : [];
+
+      const slotsSectionHtml = isSellerSite ? `
+        <div style="margin-bottom:6px;">
+          <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:8px;">Current Timeslots (${existingSlots.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+            ${existingSlots.length > 0
+              ? existingSlots.map(s => `<span style="display:inline-block;padding:6px 12px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:16px;font-size:12px;color:#666;">📅 ${formatDate(s.date)} · ${formatTime(s.startTime)}–${formatTime(s.endTime)}</span>`).join('')
+              : '<span style="font-size:13px;color:#999;">None yet.</span>'}
+          </div>
+          <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:8px;">Add New Timeslots <span style="font-size:11px;font-weight:400;color:#888;">(within ${formatMonth(app.month)} only, must be an even number)</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;min-height:20px;">
+            ${m.newTimeslots.length > 0
+              ? m.newTimeslots.map((slot, i) => `
+                  <div style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#fff0f0;border:1px solid #fcddd4;border-radius:20px;font-size:13px;color:#333;">
+                    <span>📅 ${formatDate(slot.date)} · ${formatTime(slot.startTime)}–${formatTime(slot.endTime)}</span>
+                    <button type="button" onclick="removeEditSlotTimeslot(${i})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:15px;line-height:1;padding:0 0 0 4px;font-weight:700;">✕</button>
+                  </div>`).join('')
+              : '<span style="font-size:13px;color:#999;">No new timeslots added yet.</span>'}
+          </div>
+          <div style="font-size:12px;font-weight:600;margin-bottom:12px;color:${m.newTimeslots.length > 0 && m.newTimeslots.length % 2 === 0 ? '#27ae60' : '#e67e22'};">
+            ${m.newTimeslots.length} new timeslot${m.newTimeslots.length !== 1 ? 's' : ''} added${m.newTimeslots.length % 2 !== 0 ? ' — must be even' : ''}
+          </div>
+          <div style="background:#f9f9f9;border-radius:8px;padding:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:12px;font-weight:600;color:#555;white-space:nowrap;">Add a slot:</span>
+            ${(() => {
+              const [yr, mo] = app.month.split('-').map(Number);
+              const lastDay = new Date(yr, mo, 0).getDate();
+              const minDate = `${app.month}-01`;
+              const maxDate = `${app.month}-${String(lastDay).padStart(2, '0')}`;
+              const today = new Date(); today.setHours(0, 0, 0, 0);
+              const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+              const tomorrowStr = tomorrow.toISOString().substring(0, 10);
+              const defaultDate = tomorrowStr > minDate ? tomorrowStr : minDate;
+              const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+              return `
+                <input type="date" id="edit-ss-date" class="form-input" style="flex:1;min-width:130px;" min="${minDate > tomorrowStr ? minDate : tomorrowStr}" max="${maxDate}" value="${defaultDate}">
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  <select id="edit-ss-hour" class="form-input" style="width:72px;">
+                    ${hours.map(h => `<option value="${h}">${h}</option>`).join('')}
+                  </select>
+                  <span style="font-weight:700;color:#888;">:</span>
+                  <select id="edit-ss-min" class="form-input" style="width:72px;">
+                    <option value="00">00</option>
+                    <option value="30">30</option>
+                  </select>
+                </div>
+                <button type="button" class="btn-secondary" onclick="addEditSlotTimeslot()" style="white-space:nowrap;flex-shrink:0;" ${busy ? 'disabled' : ''}>+ Add</button>
+              `;
+            })()}
+          </div>
+        </div>
+      ` : `
+        <div style="margin-bottom:6px;">
+          <div style="font-size:12px;color:#888;margin-bottom:10px;">Currently requested: <strong>${app.streamCount} streams</strong></div>
+          <div style="font-size:12px;font-weight:700;color:#444;margin-bottom:8px;">Add Additional Slots <span style="font-size:11px;font-weight:400;color:#888;">(must be an even number)</span></div>
+          <input type="number" min="2" step="2" placeholder="e.g. 2, 4, 6…" value="${m.addSlotsCount}"
+            oninput="state.editBrandAppModal.addSlotsCount = this.value;"
+            style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;" ${busy ? 'disabled' : ''}>
+        </div>
+      `;
+
+      return `
+        <div class="brand-detail-overlay" onclick="${close}" style="z-index:1100;">
+          <div class="brand-detail-modal" onclick="event.stopPropagation();" style="border-top-color:#6c5ce7;max-width:480px;">
+            <button class="modal-close" onclick="${close}">×</button>
+            <div style="margin-bottom:16px;padding-right:24px;">
+              <div style="font-size:16px;font-weight:700;color:#222;">✏️ Edit Application</div>
+              <div style="font-size:13px;color:#888;margin-top:4px;">${formatMonth(app.month)}</div>
+            </div>
+            ${slotsSectionHtml}
+            <div style="display:flex;gap:10px;margin-top:18px;">
+              <button class="btn-primary" style="flex:1;" onclick="handleSaveEditBrandAppSlots()" ${busy ? 'disabled' : ''}>
+                ${busy ? '⏳ Saving...' : 'Save'}
+              </button>
+              <button class="btn-secondary" style="flex:1;" onclick="${close}" ${busy ? 'disabled' : ''}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>`;
     };
@@ -3992,7 +4207,7 @@
 
       const footerHtml = state.view === 'landing' ? `<div class="shopee-powered">Powered by <a href="https://shopee.sg" target="_blank">Shopee</a> &middot; Shopee Live Creator Match</div>` : '';
       const loadingHtml = state.isLoading ? `<div class="loading-overlay"><div class="loading-spinner"></div></div>` : '';
-      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderCreatorSubmitSuccessModal()}${renderRescheduleModal()}${renderRejectModal()}${renderRescheduleConflictModal()}${renderArchiveModal()}${renderPinResetModal()}`;
+      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderCreatorSubmitSuccessModal()}${renderRescheduleModal()}${renderEditBrandAppModal()}${renderRejectModal()}${renderRescheduleConflictModal()}${renderArchiveModal()}${renderPinResetModal()}`;
       // Scroll booking calendars to 8am after render
       requestAnimationFrame(() => {
         const sy = document.getElementById('creator-cal-scroll-y');
@@ -4248,16 +4463,22 @@
                       <div style="font-size:12px;color:#888;margin-top:4px;">${app.streamCount} streams requested · ${slotsLeft} slot${slotsLeft !== 1 ? 's' : ''} left</div>
                     </div>
                     ${canPause ? `
-                      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                          <span style="font-size:12px;font-weight:600;color:${isPaused ? '#e67e22' : '#777'};">Pause applications</span>
-                          <div onclick="handleToggleBrandPause('${app.id}')"
-                            style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0;${state.isSubmitting ? 'opacity:0.5;pointer-events:none;' : ''}">
-                            <div style="position:absolute;inset:0;border-radius:11px;background:${isPaused ? '#e67e22' : '#ddd'};"></div>
-                            <div style="position:absolute;top:3px;left:${isPaused ? '21px' : '3px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+                      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;">
+                        <button type="button" onclick="openEditBrandAppModal('${app.id}')"
+                          style="padding:5px 12px;border-radius:16px;font-size:12px;font-weight:600;border:1px solid #ddd;background:#fff;color:#555;cursor:pointer;">
+                          ✏️ Edit
+                        </button>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+                          <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:12px;font-weight:600;color:${isPaused ? '#e67e22' : '#777'};">Pause applications</span>
+                            <div onclick="handleToggleBrandPause('${app.id}')"
+                              style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0;${state.isSubmitting ? 'opacity:0.5;pointer-events:none;' : ''}">
+                              <div style="position:absolute;inset:0;border-radius:11px;background:${isPaused ? '#e67e22' : '#ddd'};"></div>
+                              <div style="position:absolute;top:3px;left:${isPaused ? '21px' : '3px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+                            </div>
                           </div>
+                          <div style="font-size:11px;color:#c0c0c0;max-width:170px;text-align:right;line-height:1.4;">Stops new creators from applying. Existing applications continue as normal.</div>
                         </div>
-                        <div style="font-size:11px;color:#c0c0c0;max-width:170px;text-align:right;line-height:1.4;">Stops new creators from applying. Existing applications continue as normal.</div>
                       </div>
                     ` : ''}
                   </div>

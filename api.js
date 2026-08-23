@@ -72,6 +72,12 @@ router.get('/', async (req, res) => {
       case 'toggleBrandPause':
         result = await toggleBrandPause(req.query.id);
         break;
+      case 'increaseBrandAppSlots':
+        result = await increaseBrandAppSlots(req.query.id, req.query.additionalCount);
+        break;
+      case 'increaseSellerSiteSlots':
+        result = await increaseSellerSiteSlots(req.query.id, req.query.newTimeslots);
+        break;
       case 'cancelBrandApplication':
         result = await cancelBrandApplication(req.query.id, req.query.cancelReason);
         break;
@@ -460,6 +466,72 @@ async function toggleBrandPause(id) {
   const newVal = String(app.isPaused) === 'true' ? 'false' : 'true';
   await db.updateById('brand_applications', id, { isPaused: newVal });
   return { success: true, isPaused: newVal };
+}
+
+// ─── increaseBrandAppSlots (creator-site self-service) ────────────────────────
+
+async function increaseBrandAppSlots(id, additionalCount) {
+  const app = await db.findById('brand_applications', id);
+  if (!app) return { success: false, error: 'Application not found' };
+  if (String(app.sellerSiteRequired).trim().toLowerCase() === 'true') {
+    return { success: false, error: 'Seller site applications must add specific timeslots.' };
+  }
+
+  const add = parseInt(additionalCount, 10);
+  if (!add || add < 1) return { success: false, error: 'Please enter a valid number of additional slots' };
+  if (add % 2 !== 0) return { success: false, error: 'Number of additional slots must be an even number (2, 4, 6…)' };
+
+  const newCount = (parseInt(app.streamCount, 10) || 0) + add;
+  await db.updateById('brand_applications', id, { streamCount: newCount });
+  return { success: true, streamCount: newCount };
+}
+
+// ─── increaseSellerSiteSlots (seller-site self-service) ───────────────────────
+
+async function increaseSellerSiteSlots(id, newTimeslotsRaw) {
+  const app = await db.findById('brand_applications', id);
+  if (!app) return { success: false, error: 'Application not found' };
+  if (String(app.sellerSiteRequired).trim().toLowerCase() !== 'true') {
+    return { success: false, error: 'This application is not a seller site application' };
+  }
+
+  let slots;
+  try {
+    slots = typeof newTimeslotsRaw === 'string' ? JSON.parse(newTimeslotsRaw) : newTimeslotsRaw;
+  } catch (e) {
+    return { success: false, error: 'Invalid timeslot data' };
+  }
+  if (!Array.isArray(slots) || slots.length === 0) return { success: false, error: 'Please add at least one timeslot' };
+  if (slots.length % 2 !== 0) return { success: false, error: 'Number of additional timeslots must be an even number (2, 4, 6…)' };
+
+  const month = app.month;
+  for (const s of slots) {
+    if (!s || !s.date || !s.startTime || !s.endTime) return { success: false, error: 'Invalid timeslot data' };
+    if (String(s.date).substring(0, 7) !== month) {
+      return { success: false, error: `All new timeslots must fall within ${month}` };
+    }
+  }
+
+  let existing = [];
+  try {
+    existing = Array.isArray(app.sellerSiteTimeslots) ? app.sellerSiteTimeslots : JSON.parse(app.sellerSiteTimeslots || '[]');
+  } catch (e) { existing = []; }
+
+  const combined = existing.slice();
+  for (const s of slots) {
+    const conflict = combined.find(e => timeslotsOverlap(s, e));
+    if (conflict) {
+      return { success: false, error: `Timeslot ${s.date} ${s.startTime} overlaps with an existing timeslot` };
+    }
+    combined.push(s);
+  }
+
+  const newStreamCount = (parseInt(app.streamCount, 10) || 0) + slots.length;
+  await db.updateById('brand_applications', id, {
+    streamCount: newStreamCount,
+    sellerSiteTimeslots: JSON.stringify(combined),
+  });
+  return { success: true, streamCount: newStreamCount, sellerSiteTimeslots: combined };
 }
 
 // ─── updateCreatorApplication ─────────────────────────────────────────────────
