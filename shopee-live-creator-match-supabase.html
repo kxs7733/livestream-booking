@@ -2514,13 +2514,12 @@
 
     const renderOddSlotsWarningModal = () => {
       if (!state.oddSlotsWarningModal?.show) return '';
-      const remaining = state.oddSlotsWarningModal.remaining;
       return `
         <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;">
           <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
-            <h3 style="margin:0 0 8px;font-size:18px;color:#e67e22;">⚠️ Odd Number of Slots Left</h3>
+            <h3 style="margin:0 0 8px;font-size:18px;color:#e67e22;">⚠️ You are applying for odd number of slots</h3>
             <p style="margin:0 0 16px;color:#555;font-size:14px;line-height:1.5;">
-              After this submission, this brand application will have <strong>${remaining}</strong> slot${Math.abs(remaining) !== 1 ? 's' : ''} left — an odd number. Double-check this is intended before proceeding.
+              You are submitting odd number of slots. Double check this is intended before proceeding.
             </p>
             <div style="display:flex;gap:12px;">
               <button class="btn-secondary" style="flex:1;" onclick="closeOddSlotsWarningModal();" ${state.isSubmitting ? 'disabled' : ''}>Go Back</button>
@@ -3076,7 +3075,12 @@
         showNotification("Rescheduling within 3 days of your scheduled livestream requires approval from the Shopee Live Team. You'll be notified of the outcome via Telegram, or you can check your dashboard for updates.", 'success', 8000);
       } else {
         updateStateCA(caId, { streamDate: newDate, streamTime: newStartTime, streamEndDate: newEndDate || newDate, streamEndTime: newEndTime });
-        showNotification(isInternalInitiated ? 'Slot rescheduled successfully! The creator has been notified.' : 'Slot rescheduled successfully!');
+        const rescheduleSuccessMsg = !isInternalInitiated
+          ? 'Slot rescheduled successfully!'
+          : ca.status === 'pending'
+            ? 'Slot rescheduled successfully! The creator will be notified by Telegram once this application is approved.'
+            : 'Slot rescheduled successfully! The creator has been notified.';
+        showNotification(rescheduleSuccessMsg);
         if (isInternalInitiated) {
           await loadAllData(0, state.internalShowPast);
         }

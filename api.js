@@ -908,9 +908,13 @@ async function rescheduleCreatorApplication(id, data, isInternal) {
   // Email + Telegram notifications
   sendEmailNotification_SlotRescheduled(updatedRow, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp).catch(console.error);
   sendRescheduleEmailToInternalTeam(updatedRow, oldDate, oldStartTime, oldEndDate, oldEndTime, brandApp).catch(console.error);
-  const chatId = await getTelegramChatId(currentRow.telegram);
-  if (chatId) {
-    sendRescheduledApprovalNotification(updatedRow, chatId, oldDate, oldStartTime, oldEndDate, oldEndTime).catch(console.error);
+  // Skip the Telegram reschedule notification if this application is still pending internal
+  // approval — the creator will get a Telegram notification anyway when it's approved.
+  if (currentStatus !== 'pending') {
+    const chatId = await getTelegramChatId(currentRow.telegram);
+    if (chatId) {
+      sendRescheduledApprovalNotification(updatedRow, chatId, oldDate, oldStartTime, oldEndDate, oldEndTime).catch(console.error);
+    }
   }
 
   return { success: true };
