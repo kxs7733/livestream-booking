@@ -320,20 +320,24 @@ async function addAffiliate(data) {
   return { success: true, data };
 }
 
-// A shop may only have one brand application per month that is still pending or approved —
-// a cancelled or rejected application for that same shop+month does not block a new one.
-async function findBlockingBrandApplication(shopId, month, excludeId) {
+// A shop may have at most one pending/approved Seller Site application AND one pending/approved
+// Creator Site application per month — only a same-type application blocks a new one; a
+// cancelled/rejected application, or one of the other type, never blocks a new submission.
+async function findBlockingBrandApplication(shopId, month, isSellerSite, excludeId) {
   const rows = await db.where('brand_applications', { shopId, month });
   return (rows || []).find(r =>
     String(r.id) !== String(excludeId || '') &&
-    ['pending', 'approved'].includes(String(r.status).trim().toLowerCase())
+    ['pending', 'approved'].includes(String(r.status).trim().toLowerCase()) &&
+    (String(r.sellerSiteRequired).trim().toLowerCase() === 'true') === isSellerSite
   );
 }
 
 async function addBrandApplication(data) {
-  const blocking = await findBlockingBrandApplication(data.shopId, data.month);
+  const isSellerSite = String(data.sellerSiteRequired).trim().toLowerCase() === 'true';
+  const typeLabel = isSellerSite ? 'Seller Site' : 'Creator Site';
+  const blocking = await findBlockingBrandApplication(data.shopId, data.month, isSellerSite);
   if (blocking) {
-    return { error: `This shop already has a ${blocking.status} brand application for ${data.month}. Only one pending or approved application per shop per month is allowed.` };
+    return { error: `This shop already has a ${blocking.status} ${typeLabel} brand application for ${data.month}. Only one pending or approved ${typeLabel} application per shop per month is allowed.` };
   }
   await db.insert('brand_applications', data);
   return { success: true, data };
@@ -345,15 +349,17 @@ async function bulkAddBrandApplications(applications) {
   const seenInBatch = new Map();
   for (let i = 0; i < applications.length; i++) {
     const app = applications[i];
-    const key = `${app.shopId}|${app.month}`;
+    const isSellerSite = String(app.sellerSiteRequired).trim().toLowerCase() === 'true';
+    const typeLabel = isSellerSite ? 'Seller Site' : 'Creator Site';
+    const key = `${app.shopId}|${app.month}|${isSellerSite}`;
     if (seenInBatch.has(key)) {
-      return { error: `Row ${i + 1}: duplicate brand application for shop ${app.shopId} in ${app.month} within this batch (already in row ${seenInBatch.get(key)}).` };
+      return { error: `Row ${i + 1}: duplicate ${typeLabel} brand application for shop ${app.shopId} in ${app.month} within this batch (already in row ${seenInBatch.get(key)}).` };
     }
     seenInBatch.set(key, i + 1);
 
-    const blocking = await findBlockingBrandApplication(app.shopId, app.month);
+    const blocking = await findBlockingBrandApplication(app.shopId, app.month, isSellerSite);
     if (blocking) {
-      return { error: `Row ${i + 1}: shop ${app.shopId} already has a ${blocking.status} brand application for ${app.month}.` };
+      return { error: `Row ${i + 1}: shop ${app.shopId} already has a ${blocking.status} ${typeLabel} brand application for ${app.month}.` };
     }
   }
 

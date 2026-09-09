@@ -1521,13 +1521,16 @@
         return;
       }
       if (!editId) {
+        const isSellerSiteSubmit = streamLocation === 'Seller Site';
+        const typeLabel = isSellerSiteSubmit ? 'Seller Site' : 'Creator Site';
         const conflictApp = (state.brandApplications || []).find(a =>
           String(a.shopId) === String(shopId) &&
           String(a.month) === String(month) &&
-          ['pending', 'approved'].includes(String(a.status).trim().toLowerCase())
+          ['pending', 'approved'].includes(String(a.status).trim().toLowerCase()) &&
+          (String(a.sellerSiteRequired) === 'true') === isSellerSiteSubmit
         );
         if (conflictApp) {
-          showNotification(`This shop already has a ${conflictApp.status} brand application for ${formatMonth(month)}. Only one pending or approved application per shop per month is allowed.`, 'error');
+          showNotification(`This shop already has a ${conflictApp.status} ${typeLabel} brand application for ${formatMonth(month)}. Only one pending or approved ${typeLabel} application per shop per month is allowed.`, 'error');
           return;
         }
       }
