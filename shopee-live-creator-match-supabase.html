@@ -711,6 +711,7 @@
       creatorSubmitSuccessModal: { show: false },
       rejectModal: { show: false, type: null, id: null, reason: '' },
       rescheduleConflictModal: { show: false, historyId: null, message: '' },
+      oddSlotsWarningModal: { show: false, remaining: 0, ctx: null },
       internalShowPast: false,
       internalBrandApplyMode: false,
       internalCreatorApplyMode: null,   // brandAppId when active
@@ -997,10 +998,10 @@
     // Get all active timeslots for the current creator across ALL brands (to prevent double-booking)
     // Includes pending/approved/confirmed — excludes rejected and cancelled
     // In internal-apply mode, uses the selected creator instead of the logged-in user
-    const getCreatorConfirmedTimeslots = (excludeCaId) => {
-      const creatorId = (state.internalCreatorApplyMode && state.internalSelectedCreatorId)
+    const getCreatorConfirmedTimeslots = (excludeCaId, creatorIdOverride) => {
+      const creatorId = creatorIdOverride || ((state.internalCreatorApplyMode && state.internalSelectedCreatorId)
         ? state.internalSelectedCreatorId
-        : state.currentUser?.id;
+        : state.currentUser?.id);
       if (!creatorId) return [];
       const confirmed = [];
       state.creatorApplications
@@ -1518,6 +1519,17 @@
       if (streamCount % 2 !== 0) {
         showNotification('Number of livestreams must be an even number (2, 4, 6…)', 'error');
         return;
+      }
+      if (!editId) {
+        const conflictApp = (state.brandApplications || []).find(a =>
+          String(a.shopId) === String(shopId) &&
+          String(a.month) === String(month) &&
+          ['pending', 'approved'].includes(String(a.status).trim().toLowerCase())
+        );
+        if (conflictApp) {
+          showNotification(`This shop already has a ${conflictApp.status} brand application for ${formatMonth(month)}. Only one pending or approved application per shop per month is allowed.`, 'error');
+          return;
+        }
       }
       if (!productNomConfirmed) {
         showNotification('Please confirm product nominations have been submitted', 'error');
@@ -2297,17 +2309,25 @@
       const hasSamples = form.querySelector('#f-has-samples') ? form.querySelector('#f-has-samples').checked : false;
 
       const timeslots = state.creatorFormTimeslots;
+      // Internal team applying on behalf of a creator may submit any number of slots —
+      // the even-number rule is a creator-facing convention, not a hard capacity constraint.
+      const isInternalOnBehalf = isInternal && !!state.internalCreatorApplyMode;
 
       if (isInternal && !state.internalSelectedCreatorId) {
         showNotification('Please select a creator', 'error');
         return;
       }
-      if (timeslots.length < 2) {
-        showNotification('Please add at least 2 timeslots — creators must commit to a minimum of 2 livestreams per brand', 'error');
-        return;
-      }
-      if (timeslots.length % 2 !== 0) {
-        showNotification('Number of timeslots must be an even number (2, 4, 6…)', 'error');
+      if (!isInternalOnBehalf) {
+        if (timeslots.length < 2) {
+          showNotification('Please add at least 2 timeslots — creators must commit to a minimum of 2 livestreams per brand', 'error');
+          return;
+        }
+        if (timeslots.length % 2 !== 0) {
+          showNotification('Number of timeslots must be an even number (2, 4, 6…)', 'error');
+          return;
+        }
+      } else if (timeslots.length < 1) {
+        showNotification('Please add at least 1 timeslot', 'error');
         return;
       }
       if (!affiliateUsername || !phone || !telegram || !shippingRecipientName || !shippingAddress) {
@@ -2376,6 +2396,35 @@
         status: 'pending',
         createdAt: submittedAt
       };
+
+      const ctx = {
+        brandAppId, brandApp, isInternal, application, timeslotsWithIds,
+        affiliateUsername, phone, telegram, shippingRecipientName, shippingAddress,
+        shippingPostalCode, deliveryInstructions, willingToTravel, hasSamples,
+        submittedAt, creatorId, creatorName,
+      };
+
+      // Internal-on-behalf submissions may leave an odd number of slots remaining on the
+      // brand application — warn and require explicit confirmation before submitting.
+      if (isInternalOnBehalf) {
+        const remainingAfter = (parseInt(brandApp.streamCount, 10) || 0) - countTakenSlots(brandAppId) - timeslots.length;
+        if (remainingAfter % 2 !== 0) {
+          state.oddSlotsWarningModal = { show: true, remaining: remainingAfter, ctx };
+          render();
+          return;
+        }
+      }
+
+      await submitCreatorApplicationFinal(ctx);
+    };
+
+    const submitCreatorApplicationFinal = async (ctx) => {
+      const {
+        brandAppId, brandApp, isInternal, application, timeslotsWithIds,
+        affiliateUsername, phone, telegram, shippingRecipientName, shippingAddress,
+        shippingPostalCode, deliveryInstructions, willingToTravel, hasSamples,
+        submittedAt, creatorId, creatorName,
+      } = ctx;
 
       state.isSubmitting = true;
       state.isLoading = true;
@@ -2450,6 +2499,35 @@
         state.creatorSubmitSuccessModal = { show: true };
         render();
       }
+    };
+
+    const confirmOddSlotsWarningAndSubmit = async () => {
+      const ctx = state.oddSlotsWarningModal.ctx;
+      state.oddSlotsWarningModal = { show: false, remaining: 0, ctx: null };
+      if (ctx) await submitCreatorApplicationFinal(ctx);
+    };
+
+    const closeOddSlotsWarningModal = () => {
+      state.oddSlotsWarningModal = { show: false, remaining: 0, ctx: null };
+      render();
+    };
+
+    const renderOddSlotsWarningModal = () => {
+      if (!state.oddSlotsWarningModal?.show) return '';
+      const remaining = state.oddSlotsWarningModal.remaining;
+      return `
+        <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;">
+          <div style="background:#fff;border-radius:16px;padding:28px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+            <h3 style="margin:0 0 8px;font-size:18px;color:#e67e22;">⚠️ Odd Number of Slots Left</h3>
+            <p style="margin:0 0 16px;color:#555;font-size:14px;line-height:1.5;">
+              After this submission, this brand application will have <strong>${remaining}</strong> slot${Math.abs(remaining) !== 1 ? 's' : ''} left — an odd number. Double-check this is intended before proceeding.
+            </p>
+            <div style="display:flex;gap:12px;">
+              <button class="btn-secondary" style="flex:1;" onclick="closeOddSlotsWarningModal();" ${state.isSubmitting ? 'disabled' : ''}>Go Back</button>
+              <button style="flex:1;padding:10px 0;border-radius:8px;border:none;font-weight:600;cursor:pointer;background:#e67e22;color:#fff;" onclick="confirmOddSlotsWarningAndSubmit();" ${state.isSubmitting ? 'disabled' : ''}>Proceed Anyway</button>
+            </div>
+          </div>
+        </div>`;
     };
 
     // ── Pre-compute internal display arrays (called on data change, not on every render) ──
@@ -2882,11 +2960,11 @@
       render();
     };
 
-    const handleCreatorReschedule = (caId) => {
+    const handleCreatorReschedule = (caId, isInternalInitiated = false) => {
       const ca = state.creatorApplications.find(a => a.id === caId);
       if (!ca) return;
       const brandApp = state.brandApplications.find(ba => ba.id === ca.brandApplicationId);
-      state.rescheduleModal = { caId, ca, brandApp, selectedSlotIdx: null, pillSelectedDate: null, newStartDate: null, newStartTime: null, showCalendar: false, calendarWeekOffset: 0, reasonCode: '', reasonDesc: '' };
+      state.rescheduleModal = { caId, ca, brandApp, selectedSlotIdx: null, pillSelectedDate: null, newStartDate: null, newStartTime: null, showCalendar: false, calendarWeekOffset: 0, reasonCode: '', reasonDesc: '', isInternalInitiated };
       render();
     };
 
@@ -2954,8 +3032,11 @@
 
       // Conflict checks (both modes) — same max-2-creators-per-timeslot capacity (1 for seller-site) and self-conflict
       // rules as the apply flow; race-condition safety net since matching pills/chips are already hidden in the UI.
+      const isInternalInitiated = !!state.rescheduleModal?.isInternalInitiated;
       if (ca) {
-        const currentCreatorId = String(state.currentUser?.id || '');
+        // Internal-initiated: self-conflict must be scoped to the creator who owns this
+        // application, not the internal user actually clicking the button.
+        const currentCreatorId = isInternalInitiated ? String(ca.creatorId || '') : String(state.currentUser?.id || '');
         const newSlotObj = { date: newDate, startTime: newStartTime, endDate: newEndDate || newDate, endTime: newEndTime };
         const capacityLimit = isSellerSite ? 1 : 2;
 
@@ -2965,7 +3046,7 @@
         }
 
         const selfConflict = getTakenTimeslotObjects(ca.brandApplicationId, currentCreatorId, caId)
-          .concat(getCreatorConfirmedTimeslots(caId))
+          .concat(getCreatorConfirmedTimeslots(caId, isInternalInitiated ? currentCreatorId : undefined))
           .find(s => timeslotsOverlap(newSlotObj, s));
         if (selfConflict) {
           showNotification(`This timeslot overlaps with your existing stream at ${formatDate(selfConflict.date)} ${formatTime(selfConflict.startTime)}–${selfConflict.endDate && selfConflict.endDate !== selfConflict.date ? formatDate(selfConflict.endDate) + ' ' : ''}${formatTime(selfConflict.endTime)}`, 'error');
@@ -2982,7 +3063,7 @@
 
       state.isSubmitting = true;
       render();
-      const result = await apiCall('rescheduleCreatorApplication', { id: caId, data: { newDate, newStartTime, newEndDate: newEndDate || newDate, newEndTime, rescheduleReasonCode: reasonCode, rescheduleReasonDesc: reasonDesc } });
+      const result = await apiCall('rescheduleCreatorApplication', { id: caId, data: { newDate, newStartTime, newEndDate: newEndDate || newDate, newEndTime, rescheduleReasonCode: reasonCode, rescheduleReasonDesc: reasonDesc }, isInternal: isInternalInitiated });
       state.isSubmitting = false;
       if (!result || !result.success) {
         showNotification(result?.error || 'Failed to reschedule. Please try again.', 'error');
@@ -2995,7 +3076,10 @@
         showNotification("Rescheduling within 3 days of your scheduled livestream requires approval from the Shopee Live Team. You'll be notified of the outcome via Telegram, or you can check your dashboard for updates.", 'success', 8000);
       } else {
         updateStateCA(caId, { streamDate: newDate, streamTime: newStartTime, streamEndDate: newEndDate || newDate, streamEndTime: newEndTime });
-        showNotification('Slot rescheduled successfully!');
+        showNotification(isInternalInitiated ? 'Slot rescheduled successfully! The creator has been notified.' : 'Slot rescheduled successfully!');
+        if (isInternalInitiated) {
+          await loadAllData(0, state.internalShowPast);
+        }
       }
       render();
     };
@@ -4471,7 +4555,7 @@
 
       const footerHtml = state.view === 'landing' ? `<div class="shopee-powered">Powered by <a href="https://shopee.sg" target="_blank">Shopee</a> &middot; Shopee Live Creator Match</div>` : '';
       const loadingHtml = state.isLoading ? `<div class="loading-overlay"><div class="loading-spinner"></div></div>` : '';
-      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderCreatorSubmitSuccessModal()}${renderRescheduleModal()}${renderEditBrandAppModal()}${renderRejectModal()}${renderRescheduleConflictModal()}${renderArchiveModal()}${renderPinResetModal()}`;
+      app.innerHTML = `${loadingHtml}${headerHtml}<main class="main">${contentHtml}${footerHtml}</main>${renderCalendarModal()}${renderCancelModal()}${renderBrandCancelModal()}${renderCreatorCancelModal()}${renderCreatorSubmitSuccessModal()}${renderRescheduleModal()}${renderEditBrandAppModal()}${renderRejectModal()}${renderRescheduleConflictModal()}${renderOddSlotsWarningModal()}${renderArchiveModal()}${renderPinResetModal()}`;
       // Scroll booking calendars to 8am after render
       requestAnimationFrame(() => {
         const sy = document.getElementById('creator-cal-scroll-y');
@@ -8473,9 +8557,11 @@
                   <div class="action-btns">
                     <button class="action-btn btn-approve" onclick="handleApproveCreatorApp('${row.id}')" ${state.isSubmitting || slotsLeft === 0 ? 'disabled style="opacity:0.5;"' : ''}>Approve</button>
                     <button class="action-btn btn-reject" onclick="handleRejectCreatorApp('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reject</button>
+                    <button class="action-btn" style="background:#f0f0ff;color:#6c5ce7;" onclick="handleCreatorReschedule('${row.id}', true)" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reschedule</button>
                   </div>
                 ` : row.status === 'approved' ? `
                   <div class="action-btns">
+                    <button class="action-btn" style="background:#f0f0ff;color:#6c5ce7;" onclick="handleCreatorReschedule('${row.id}', true)" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Reschedule</button>
                     <button class="action-btn btn-reject" onclick="openCreatorCancelModal('${row.id}')" ${state.isSubmitting ? 'disabled style="opacity:0.5;"' : ''}>Cancel</button>
                   </div>
                 ` : ''}
@@ -8769,9 +8855,18 @@
                 <span style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="state.expandedCards['${cardKey}'] = !state.expandedCards['${cardKey}']; render();">
                   ${isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
                 </span>
-                <button onclick="handleCancelApplication('${s.caId}', '${(s.creatorName || '').replace(/'/g, "\\'")} × ${(s.shopName || '').replace(/'/g, "\\'")} — ${formatDate(s.date)}')" style="background:none;border:1px solid #e74c3c;border-radius:6px;padding:5px 12px;font-size:12px;color:#e74c3c;cursor:pointer;font-weight:500;">
-                  Cancel
-                </button>
+                <div style="display:flex;gap:8px;">
+                  ${(() => {
+                    const latestReschedule = getLatestRescheduleHistory(s.caId);
+                    if (latestReschedule && latestReschedule.status === 'pending') return '';
+                    return `<button onclick="handleCreatorReschedule('${s.caId}', true)" style="background:none;border:1px solid #6c5ce7;border-radius:6px;padding:5px 12px;font-size:12px;color:#6c5ce7;cursor:pointer;font-weight:500;">
+                      Reschedule
+                    </button>`;
+                  })()}
+                  <button onclick="handleCancelApplication('${s.caId}', '${(s.creatorName || '').replace(/'/g, "\\'")} × ${(s.shopName || '').replace(/'/g, "\\'")} — ${formatDate(s.date)}')" style="background:none;border:1px solid #e74c3c;border-radius:6px;padding:5px 12px;font-size:12px;color:#e74c3c;cursor:pointer;font-weight:500;">
+                    Cancel
+                  </button>
+                </div>
               </div>
               ${isExpanded ? `
                 <div style="margin-top:12px;padding:12px;background:#fff8f0;border-radius:8px;border:1px solid #fcddd4;">

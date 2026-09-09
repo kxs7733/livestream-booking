@@ -91,7 +91,7 @@ router.get('/', async (req, res) => {
         result = await updateCreatorApplication(req.query.id, JSON.parse(req.query.data));
         break;
       case 'rescheduleCreatorApplication':
-        result = await rescheduleCreatorApplication(req.query.id, JSON.parse(req.query.data));
+        result = await rescheduleCreatorApplication(req.query.id, JSON.parse(req.query.data), req.query.isInternal === 'true');
         break;
       case 'approveRescheduleRequest':
         result = await approveRescheduleRequest(req.query.id, req.query.force === 'true');
@@ -320,13 +320,43 @@ async function addAffiliate(data) {
   return { success: true, data };
 }
 
+// A shop may only have one brand application per month that is still pending or approved —
+// a cancelled or rejected application for that same shop+month does not block a new one.
+async function findBlockingBrandApplication(shopId, month, excludeId) {
+  const rows = await db.where('brand_applications', { shopId, month });
+  return (rows || []).find(r =>
+    String(r.id) !== String(excludeId || '') &&
+    ['pending', 'approved'].includes(String(r.status).trim().toLowerCase())
+  );
+}
+
 async function addBrandApplication(data) {
+  const blocking = await findBlockingBrandApplication(data.shopId, data.month);
+  if (blocking) {
+    return { error: `This shop already has a ${blocking.status} brand application for ${data.month}. Only one pending or approved application per shop per month is allowed.` };
+  }
   await db.insert('brand_applications', data);
   return { success: true, data };
 }
 
 async function bulkAddBrandApplications(applications) {
   if (!Array.isArray(applications) || applications.length === 0) return { error: 'No applications provided.' };
+
+  const seenInBatch = new Map();
+  for (let i = 0; i < applications.length; i++) {
+    const app = applications[i];
+    const key = `${app.shopId}|${app.month}`;
+    if (seenInBatch.has(key)) {
+      return { error: `Row ${i + 1}: duplicate brand application for shop ${app.shopId} in ${app.month} within this batch (already in row ${seenInBatch.get(key)}).` };
+    }
+    seenInBatch.set(key, i + 1);
+
+    const blocking = await findBlockingBrandApplication(app.shopId, app.month);
+    if (blocking) {
+      return { error: `Row ${i + 1}: shop ${app.shopId} already has a ${blocking.status} brand application for ${app.month}.` };
+    }
+  }
+
   await db.insertMany('brand_applications', applications);
   return { success: true, count: applications.length };
 }
@@ -714,12 +744,17 @@ async function updateCreatorApplication(id, data) {
 
 // ─── rescheduleCreatorApplication ─────────────────────────────────────────────
 
-async function rescheduleCreatorApplication(id, data) {
+async function rescheduleCreatorApplication(id, data, isInternal) {
   const currentRow = await db.findById('creator_applications', id);
   if (!currentRow) return { success: false, error: 'Application not found.' };
 
-  if (String(currentRow.status || '').trim().toLowerCase() !== 'approved') {
-    return { success: false, error: 'Only approved slots can be rescheduled. (current status: ' + currentRow.status + ')' };
+  const currentStatus = String(currentRow.status || '').trim().toLowerCase();
+  // Internal team may reschedule on behalf of a creator for both pending and approved
+  // applications; creator self-service reschedule stays restricted to approved slots.
+  const allowedStatuses = isInternal ? ['pending', 'approved'] : ['approved'];
+  if (!allowedStatuses.includes(currentStatus)) {
+    const allowedDesc = isInternal ? 'pending or approved' : 'approved';
+    return { success: false, error: `Only ${allowedDesc} slots can be rescheduled. (current status: ${currentRow.status})` };
   }
 
   const rescheduleReasonCode = String(data.rescheduleReasonCode || '').trim();
@@ -728,11 +763,12 @@ async function rescheduleCreatorApplication(id, data) {
     return { success: false, error: 'A reschedule reason is required.' };
   }
 
-  // 3-day rule: >3 days away reschedules instantly; 3 days or less requires internal approval
+  // 3-day rule: >3 days away reschedules instantly; 3 days or less requires internal approval.
+  // Internal-initiated reschedules always apply instantly — internal team is already the approver.
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const slotDate = new Date(String(currentRow.streamDate) + 'T00:00:00');
   const daysUntilSlot = Math.floor((slotDate - today) / 86400000);
-  const needsApproval = daysUntilSlot <= 3;
+  const needsApproval = !isInternal && daysUntilSlot <= 3;
 
   if (needsApproval) {
     const { data: existingPending } = await db.client
