@@ -24,8 +24,12 @@ app.use(express.text({ limit: '50mb' }));
 const apiRouter = require('./api');
 app.use('/api', apiRouter);
 
-// Serve static files
-app.use(express.static(__dirname));
+// Serve only the files the browser actually needs.
+// Do NOT use express.static(__dirname): it publishes the whole project folder
+// (api.js, server.js, schema.sql, migration scripts, ...) to anyone who asks.
+app.get('/bulk_brand_application_upload_template.xlsx', (req, res) => {
+  res.sendFile(path.join(__dirname, 'bulk_brand_application_upload_template.xlsx'));
+});
 
 // Serve main app for root
 app.get('/', (req, res) => {
