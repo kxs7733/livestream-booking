@@ -1,5 +1,9 @@
 node_modules/
 .env
+.env.*
+!.env.example
+.claude/
+GCP_Readiness_Assessment_*.md
 .DS_Store
 test-results/
 backup/
