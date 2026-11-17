@@ -238,14 +238,13 @@ async function getAllData(allMonths, pastMonths) {
   }
 
   // Fetch all tables in parallel — filter brand/creator applications server-side
-  const [sellers, affiliates, managedSellers, managedAffiliates, businessMappingValues, rescheduleHistory] =
+  const [sellers, affiliates, managedSellers, managedAffiliates, businessMappingValues] =
     await Promise.all([
       db.all('sellers'),
       db.all('affiliates'),
       db.all('managed_sellers'),
       db.all('managed_affiliates'),
       db.all('business_mapping_values'),
-      db.all('reschedule_history'),
     ]);
 
   // Fetch all rows for a table in parallel pages (get count first, then all pages simultaneously)
@@ -300,6 +299,27 @@ async function getAllData(allMonths, pastMonths) {
     return obj;
   });
   const creatorApplications = caRaw.map(row => {
+    const obj = {};
+    for (const [k, v] of Object.entries(row)) obj[snakeToCamelLocal(k)] = v;
+    return obj;
+  });
+
+  // reschedule_history scoped to the creator applications actually being loaded, instead of
+  // the whole table — anything tied to a CA outside this window is never displayed anyway
+  // (getLatestRescheduleHistory only ever looks up rows for CAs that are in state.creatorApplications),
+  // and the whole-table fetch would keep growing every month forever, same as the old unbounded toggle.
+  const caIds = caRaw.map(r => r.id);
+  const rescheduleHistoryRaw = [];
+  const ID_CHUNK = 500;
+  for (let i = 0; i < caIds.length; i += ID_CHUNK) {
+    const chunk = caIds.slice(i, i + ID_CHUNK);
+    const rows = await fetchAllParallel(
+      () => db.client.from('reschedule_history').select('*', { count: 'exact', head: true }).in('creator_application_id', chunk),
+      (from, to) => db.client.from('reschedule_history').select('*').in('creator_application_id', chunk).range(from, to)
+    );
+    rescheduleHistoryRaw.push(...rows);
+  }
+  const rescheduleHistory = rescheduleHistoryRaw.map(row => {
     const obj = {};
     for (const [k, v] of Object.entries(row)) obj[snakeToCamelLocal(k)] = v;
     return obj;
@@ -1894,16 +1914,38 @@ async function findArchiveCandidates(months) {
 }
 
 // Step 1 — read-only preview of what would be archived at this cutoff. No writes.
+// Deliberately does NOT reuse findArchiveCandidates — that fetches full row data (needed by
+// Export, which actually writes it to Sheets), but Preview only ever needs counts. Using
+// head:true counts plus an id-only (not select *) pass keeps every Preview click cheap.
 async function previewArchiveCandidates(months) {
-  const { cutoffMonthStr, cutoffDateStr, oldBrandApps, oldCreatorApps, oldRescheduleHistory } = await findArchiveCandidates(months);
+  const cutoffDate = new Date();
+  cutoffDate.setMonth(cutoffDate.getMonth() - months);
+  const cutoffMonthStr = cutoffDate.getFullYear() + '-' + String(cutoffDate.getMonth() + 1).padStart(2, '0');
+  const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+  const { count: brandCount } = await supabase.from('brand_applications').select('*', { count: 'exact', head: true }).lt('month', cutoffMonthStr);
+
+  const oldCreatorIds = await fetchAllRowsPaginated(
+    () => supabase.from('creator_applications').select('*', { count: 'exact', head: true }).lt('stream_date', cutoffDateStr),
+    (from, to) => supabase.from('creator_applications').select('id').lt('stream_date', cutoffDateStr).range(from, to)
+  );
+
+  let rescheduleCount = 0;
+  const ID_CHUNK = 500;
+  for (let i = 0; i < oldCreatorIds.length; i += ID_CHUNK) {
+    const chunk = oldCreatorIds.slice(i, i + ID_CHUNK).map(r => r.id);
+    const { count } = await supabase.from('reschedule_history').select('*', { count: 'exact', head: true }).in('creator_application_id', chunk);
+    rescheduleCount += count || 0;
+  }
+
   return {
     success: true,
     cutoffMonthStr,
     cutoffDateStr,
     counts: {
-      brandApplications: oldBrandApps.length,
-      creatorApplications: oldCreatorApps.length,
-      rescheduleHistory: oldRescheduleHistory.length,
+      brandApplications: brandCount || 0,
+      creatorApplications: oldCreatorIds.length,
+      rescheduleHistory: rescheduleCount,
     },
   };
 }
