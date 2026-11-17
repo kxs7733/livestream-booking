@@ -162,6 +162,12 @@ router.get('/', async (req, res) => {
       case 'updateAffiliateId':
         result = await updateAffiliateId(req.query.oldAffiliateId, req.query.newAffiliateId);
         break;
+      case 'previewArchiveCandidates':
+        result = await previewArchiveCandidates(parseInt(req.query.months || 3));
+        break;
+      case 'exportArchiveToSheets':
+        result = await exportArchiveToSheets(parseInt(req.query.months || 3));
+        break;
       default:
         result = { error: 'Unknown action' };
     }
@@ -183,6 +189,12 @@ router.post('/', async (req, res) => {
     }
     if (body && body.action === 'bulkAddBrandApplications') {
       const result = await bulkAddBrandApplications(body.applications);
+      return res.json(result);
+    }
+    if (body && body.action === 'deleteArchivedApplications') {
+      // POST body, not a GET query param — a first catch-up run can carry thousands of IDs,
+      // which would blow past URL length limits if sent as a query string.
+      const result = await deleteArchivedApplications(body.ids || {});
       return res.json(result);
     }
     res.json({ error: 'Unknown POST action' });
@@ -1742,6 +1754,7 @@ router.post('/configTable/delete', async (req, res) => {
 // ─── Google Sheets Sync ────────────────────────────────────────────────────
 
 const SHEET_ID = '170ruk_B9l3sLvxYCtMDNgpM6ncxqCyPhyVyuvvmzSXI';
+const ARCHIVE_SHEET_ID = process.env.ARCHIVE_SHEET_ID;
 const getGoogleSheetsClient = async () => {
   const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   if (!credentialsJson) {
@@ -1829,130 +1842,208 @@ const syncToGoogleSheets = async () => {
   }
 };
 
-const archiveOldApplications = async () => {
-  try {
-    const sheets = await getGoogleSheetsClient();
-    console.log('[archiveOldApplications] Starting archive...');
-
-    // Calculate cutoff date (6 months ago)
-    const cutoffDate = new Date();
-    cutoffDate.setMonth(cutoffDate.getMonth() - 6);
-    const cutoffMonthStr = cutoffDate.getFullYear() + '-' + String(cutoffDate.getMonth() + 1).padStart(2, '0');
-
-    // Find old brand applications (by month)
-    const { data: oldBrandApps } = await supabase
-      .from('brand_applications')
-      .select('*')
-      .lt('month', cutoffMonthStr);
-
-    // Find old creator applications (by stream_date)
-    const { data: oldCreatorApps } = await supabase
-      .from('creator_applications')
-      .select('*')
-      .lt('stream_date', cutoffDate.toISOString().split('T')[0]);
-
-    // Validate before appending
-    if ((!oldBrandApps || !oldBrandApps.length) && (!oldCreatorApps || !oldCreatorApps.length)) {
-      console.log('[archiveOldApplications] No old data to archive');
-      return { success: true, archived: 0 };
-    }
-
-    let archivedCount = 0;
-
-    // Archive brand applications
-    if (oldBrandApps && oldBrandApps.length > 0) {
-      const brandHeaders = Object.keys(oldBrandApps[0]);
-      const brandRows = oldBrandApps.map(row => brandHeaders.map(h => String(row[h] || '')));
-
-      const brandAppendResult = await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: 'archive_BrandApplications',
-        valueInputOption: 'RAW',
-        requestBody: { values: brandRows }
-      });
-      if (!brandAppendResult.data || brandAppendResult.status !== 200) {
-        throw new Error(`Failed to append brand applications to Google Sheets`);
-      }
-      archivedCount += oldBrandApps.length;
-    }
-
-    // Archive creator applications
-    if (oldCreatorApps && oldCreatorApps.length > 0) {
-      const creatorHeaders = Object.keys(oldCreatorApps[0]);
-      const creatorRows = oldCreatorApps.map(row => creatorHeaders.map(h => String(row[h] || '')));
-
-      const creatorAppendResult = await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: 'archive_CreatorApplications',
-        valueInputOption: 'RAW',
-        requestBody: { values: creatorRows }
-      });
-      if (!creatorAppendResult.data || creatorAppendResult.status !== 200) {
-        throw new Error(`Failed to append creator applications to Google Sheets`);
-      }
-      archivedCount += oldCreatorApps.length;
-    }
-
-    // Archive reschedule history belonging to the old creator applications
-    const oldCreatorAppIdsForHistory = (oldCreatorApps || []).map(a => a.id);
-    let oldRescheduleHistory = [];
-    if (oldCreatorAppIdsForHistory.length > 0) {
-      const { data: historyRowsRaw } = await supabase
-        .from('reschedule_history')
-        .select('*')
-        .in('creator_application_id', oldCreatorAppIdsForHistory);
-      oldRescheduleHistory = historyRowsRaw || [];
-    }
-
-    if (oldRescheduleHistory.length > 0) {
-      const historyHeaders = Object.keys(oldRescheduleHistory[0]);
-      const historyRows = oldRescheduleHistory.map(row => historyHeaders.map(h => String(row[h] || '')));
-
-      const historyAppendResult = await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: 'archive_RescheduleHistory',
-        valueInputOption: 'RAW',
-        requestBody: { values: historyRows }
-      });
-      if (!historyAppendResult.data || historyAppendResult.status !== 200) {
-        throw new Error(`Failed to append reschedule history to Google Sheets`);
-      }
-      archivedCount += oldRescheduleHistory.length;
-    }
-
-    // Delete old records from Supabase (only after successful appends)
-    const oldBrandAppIds = (oldBrandApps || []).map(a => a.id);
-    const oldCreatorAppIds = (oldCreatorApps || []).map(a => a.id);
-    const oldRescheduleHistoryIds = oldRescheduleHistory.map(r => r.id);
-
-    if (oldBrandAppIds.length > 0) {
-      const { error: brandDelError } = await supabase.from('brand_applications').delete().in('id', oldBrandAppIds);
-      if (brandDelError) throw new Error(`Delete brand applications: ${brandDelError.message}`);
-    }
-    if (oldRescheduleHistoryIds.length > 0) {
-      const { error: historyDelError } = await supabase.from('reschedule_history').delete().in('id', oldRescheduleHistoryIds);
-      if (historyDelError) throw new Error(`Delete reschedule history: ${historyDelError.message}`);
-    }
-    if (oldCreatorAppIds.length > 0) {
-      const { error: creatorDelError } = await supabase.from('creator_applications').delete().in('id', oldCreatorAppIds);
-      if (creatorDelError) throw new Error(`Delete creator applications: ${creatorDelError.message}`);
-    }
-
-    console.log(`[archiveOldApplications] Archived ${archivedCount} records`);
-    return { success: true, archived: archivedCount };
-  } catch (err) {
-    console.error('[archiveOldApplications]', err.message);
-    const alertUsername = await getSyncAlertTelegramUsername();
-    if (alertUsername) {
-      try {
-        await telegramSend(alertUsername, `🚨 *Sync Error*\n*archiveOldApplications* failed:\n${err.message}`);
-      } catch (telegramErr) {
-        console.error('[archiveOldApplications] Failed to send Telegram alert:', telegramErr.message);
-      }
-    }
-    throw err;
+// Supabase/PostgREST caps unpaginated selects at 1000 rows — page through count+range
+// so a large backlog (e.g. the first catch-up run) never gets silently truncated.
+async function fetchAllRowsPaginated(buildCountQ, buildPageQ) {
+  const { count, error: countErr } = await buildCountQ();
+  if (countErr) throw new Error(countErr.message);
+  if (!count) return [];
+  const PAGE = 1000;
+  const numPages = Math.ceil(count / PAGE);
+  const results = await Promise.all(
+    Array.from({ length: numPages }, (_, i) => buildPageQ(i * PAGE, (i + 1) * PAGE - 1))
+  );
+  const rows = [];
+  for (const { data, error } of results) {
+    if (error) throw new Error(error.message);
+    rows.push(...(data || []));
   }
-};
+  return rows;
+}
+
+// Shared lookup: which brand/creator/reschedule rows qualify as "old" at a given cutoff.
+// Read-only — used by both the preview and export steps so they always agree on what "old" means.
+async function findArchiveCandidates(months) {
+  const cutoffDate = new Date();
+  cutoffDate.setMonth(cutoffDate.getMonth() - months);
+  const cutoffMonthStr = cutoffDate.getFullYear() + '-' + String(cutoffDate.getMonth() + 1).padStart(2, '0');
+  const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+  const oldBrandApps = await fetchAllRowsPaginated(
+    () => supabase.from('brand_applications').select('*', { count: 'exact', head: true }).lt('month', cutoffMonthStr),
+    (from, to) => supabase.from('brand_applications').select('*').lt('month', cutoffMonthStr).range(from, to)
+  );
+  const oldCreatorApps = await fetchAllRowsPaginated(
+    () => supabase.from('creator_applications').select('*', { count: 'exact', head: true }).lt('stream_date', cutoffDateStr),
+    (from, to) => supabase.from('creator_applications').select('*').lt('stream_date', cutoffDateStr).range(from, to)
+  );
+
+  const oldCreatorAppIds = oldCreatorApps.map(a => a.id);
+  let oldRescheduleHistory = [];
+  const ID_CHUNK = 500;
+  for (let i = 0; i < oldCreatorAppIds.length; i += ID_CHUNK) {
+    const chunk = oldCreatorAppIds.slice(i, i + ID_CHUNK);
+    const rows = await fetchAllRowsPaginated(
+      () => supabase.from('reschedule_history').select('*', { count: 'exact', head: true }).in('creator_application_id', chunk),
+      (from, to) => supabase.from('reschedule_history').select('*').in('creator_application_id', chunk).range(from, to)
+    );
+    oldRescheduleHistory.push(...rows);
+  }
+
+  return { cutoffMonthStr, cutoffDateStr, oldBrandApps, oldCreatorApps, oldRescheduleHistory };
+}
+
+// Step 1 — read-only preview of what would be archived at this cutoff. No writes.
+async function previewArchiveCandidates(months) {
+  const { cutoffMonthStr, cutoffDateStr, oldBrandApps, oldCreatorApps, oldRescheduleHistory } = await findArchiveCandidates(months);
+  return {
+    success: true,
+    cutoffMonthStr,
+    cutoffDateStr,
+    counts: {
+      brandApplications: oldBrandApps.length,
+      creatorApplications: oldCreatorApps.length,
+      rescheduleHistory: oldRescheduleHistory.length,
+    },
+  };
+}
+
+async function ensureArchiveTabExists(sheets, spreadsheetId, tabName, headers) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = (meta.data.sheets || []).some(s => s.properties.title === tabName);
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: tabName } } }] },
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${tabName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [headers] },
+    });
+  }
+}
+
+// Step 2 — writes the qualifying rows to the dedicated archive spreadsheet. Does NOT touch Supabase.
+// Re-queries at click time (not from a stale preview) so the returned IDs are exactly what got written —
+// deleteArchivedApplications must be called with these exact IDs, never a fresh re-query by date.
+async function exportArchiveToSheets(months) {
+  if (!ARCHIVE_SHEET_ID) throw new Error('ARCHIVE_SHEET_ID environment variable not set');
+  const { cutoffMonthStr, cutoffDateStr, oldBrandApps, oldCreatorApps, oldRescheduleHistory } = await findArchiveCandidates(months);
+  const archiveSheetUrl = `https://docs.google.com/spreadsheets/d/${ARCHIVE_SHEET_ID}/edit`;
+
+  if (!oldBrandApps.length && !oldCreatorApps.length) {
+    return {
+      success: true,
+      archiveSheetUrl,
+      exported: { brandApplicationIds: [], creatorApplicationIds: [], rescheduleHistoryIds: [], counts: { brandApplications: 0, creatorApplications: 0, rescheduleHistory: 0 } },
+    };
+  }
+
+  const sheets = await getGoogleSheetsClient();
+
+  // Re-running Export before Delete (e.g. you're just checking it works, or didn't finish the
+  // delete step yet) must not duplicate rows already sitting in the sheet from a prior export.
+  async function getExistingIdsInTab(tabName) {
+    try {
+      const res = await sheets.spreadsheets.values.get({ spreadsheetId: ARCHIVE_SHEET_ID, range: `${tabName}!A2:A` });
+      return new Set((res.data.values || []).map(r => String(r[0])));
+    } catch (e) {
+      return new Set(); // tab doesn't exist yet — nothing archived so far
+    }
+  }
+
+  async function appendToTab(tabName, rows) {
+    if (!rows.length) return { appended: 0, alreadyPresent: 0 };
+    const headers = Object.keys(rows[0]);
+    await ensureArchiveTabExists(sheets, ARCHIVE_SHEET_ID, tabName, headers);
+
+    const existingIds = await getExistingIdsInTab(tabName);
+    const newRows = rows.filter(row => !existingIds.has(String(row.id)));
+
+    // Write in bounded chunks, not one giant request — a long-neglected first run could carry
+    // tens of thousands of rows, which risks the Sheets API's per-request payload/size limits.
+    const WRITE_CHUNK = 2000;
+    for (let i = 0; i < newRows.length; i += WRITE_CHUNK) {
+      const chunk = newRows.slice(i, i + WRITE_CHUNK);
+      const values = chunk.map(row => headers.map(h => String(row[h] ?? '')));
+      const result = await sheets.spreadsheets.values.append({
+        spreadsheetId: ARCHIVE_SHEET_ID,
+        range: tabName,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+      if (!result.data || result.status !== 200) throw new Error(`Failed to append to ${tabName}`);
+    }
+    return { appended: newRows.length, alreadyPresent: rows.length - newRows.length };
+  }
+
+  const brandResult = await appendToTab('BrandApplications', oldBrandApps);
+  const creatorResult = await appendToTab('CreatorApplications', oldCreatorApps);
+  const historyResult = await appendToTab('RescheduleHistory', oldRescheduleHistory);
+
+  return {
+    success: true,
+    cutoffMonthStr,
+    cutoffDateStr,
+    archiveSheetUrl,
+    exported: {
+      // Full current candidate set — this is what deleteArchivedApplications should act on,
+      // regardless of whether each row was newly written this time or already in the sheet.
+      brandApplicationIds: oldBrandApps.map(a => a.id),
+      creatorApplicationIds: oldCreatorApps.map(a => a.id),
+      rescheduleHistoryIds: oldRescheduleHistory.map(r => r.id),
+      counts: {
+        brandApplications: oldBrandApps.length,
+        creatorApplications: oldCreatorApps.length,
+        rescheduleHistory: oldRescheduleHistory.length,
+      },
+      newlyAppended: {
+        brandApplications: brandResult.appended,
+        creatorApplications: creatorResult.appended,
+        rescheduleHistory: historyResult.appended,
+      },
+    },
+  };
+}
+
+// Step 3 — the only destructive step. Deletes exactly the IDs passed in (from a prior successful
+// export response), never re-derives "old" by date itself, so it can never delete anything that
+// wasn't already confirmed to be sitting safely in the archive sheet.
+async function deleteArchivedApplications(ids) {
+  const brandApplicationIds = Array.isArray(ids.brandApplicationIds) ? ids.brandApplicationIds : [];
+  const creatorApplicationIds = Array.isArray(ids.creatorApplicationIds) ? ids.creatorApplicationIds : [];
+  const rescheduleHistoryIds = Array.isArray(ids.rescheduleHistoryIds) ? ids.rescheduleHistoryIds : [];
+
+  if (!brandApplicationIds.length && !creatorApplicationIds.length && !rescheduleHistoryIds.length) {
+    return { success: true, deleted: { brandApplications: 0, creatorApplications: 0, rescheduleHistory: 0 } };
+  }
+
+  // Chunk large ID lists — a single .in() call with thousands of IDs risks the query URL
+  // length limit, since this is a first catch-up run that can span a large backlog.
+  const ID_CHUNK = 300;
+  async function deleteByIdsChunked(table, ids) {
+    for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      const chunk = ids.slice(i, i + ID_CHUNK);
+      const { error } = await supabase.from(table).delete().in('id', chunk);
+      if (error) throw new Error(`Delete ${table}: ${error.message}`);
+    }
+  }
+
+  if (rescheduleHistoryIds.length > 0) await deleteByIdsChunked('reschedule_history', rescheduleHistoryIds);
+  if (creatorApplicationIds.length > 0) await deleteByIdsChunked('creator_applications', creatorApplicationIds);
+  if (brandApplicationIds.length > 0) await deleteByIdsChunked('brand_applications', brandApplicationIds);
+
+  return {
+    success: true,
+    deleted: {
+      brandApplications: brandApplicationIds.length,
+      creatorApplications: creatorApplicationIds.length,
+      rescheduleHistory: rescheduleHistoryIds.length,
+    },
+  };
+}
 
 router.post('/sync-google-sheets', async (req, res) => {
   try {
@@ -1960,16 +2051,6 @@ router.post('/sync-google-sheets', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[POST /sync-google-sheets]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/archive-old-applications', async (req, res) => {
-  try {
-    const result = await archiveOldApplications();
-    res.json(result);
-  } catch (err) {
-    console.error('[POST /archive-old-applications]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

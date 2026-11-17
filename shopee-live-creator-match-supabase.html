@@ -741,6 +741,9 @@
       configAddingNew: false,
       archiveConfirmationText: '',
       showArchiveModal: false,
+      archiveMonths: 3,
+      archivePreview: null,
+      archiveExportResult: null,
       internalTeamConfigMode: false,
       internalTeamData: [],
       internalTeamEditingId: null,
@@ -1078,33 +1081,33 @@
       });
     };
 
-    // Filter brand applications with optional past 2 months inclusion.
+    // Filter brand applications with optional past 1 month inclusion.
     const filterBrandAppsByDisplayWindow_WithPastOption = (apps) => {
       const currentMonth = getCurrentMonthStr();
       if (state.brandShowPastMonths) {
-        // Include past 2 months + current month onwards
-        const pastTwoMonthsAgo = (() => {
+        // Include past 1 month + current month onwards
+        const pastOneMonthAgo = (() => {
           const d = new Date();
-          d.setMonth(d.getMonth() - 2);
+          d.setMonth(d.getMonth() - 1);
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         })();
-        return apps.filter(a => String(a.month) >= pastTwoMonthsAgo);
+        return apps.filter(a => String(a.month) >= pastOneMonthAgo);
       }
       return filterBrandAppsByDisplayWindow(apps);
     };
 
-    // Filter creator applications with optional past 2 months inclusion.
+    // Filter creator applications with optional past 1 month inclusion.
     const filterCreatorAppsByDisplayWindow_WithPastOption = (apps) => {
       if (state.brandShowPastMonths) {
-        // Include past 2 months + current month onwards
-        const pastTwoMonthsAgo = (() => {
+        // Include past 1 month + current month onwards
+        const pastOneMonthAgo = (() => {
           const d = new Date();
-          d.setMonth(d.getMonth() - 2);
+          d.setMonth(d.getMonth() - 1);
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         })();
         return apps.filter(ca => {
           const brandApp = state.brandApplications.find(ba => ba.id === ca.brandApplicationId);
-          return brandApp && String(brandApp.month) >= pastTwoMonthsAgo;
+          return brandApp && String(brandApp.month) >= pastOneMonthAgo;
         });
       }
       return filterCreatorAppsByDisplayWindow(apps);
@@ -1236,7 +1239,8 @@
       state._dataPrefetch = apiCall('getAllData', {});
     };
 
-    // Load all data (filtered to 3-month window by default; allMonths=true for internal dashboard)
+    // Load all data. Default: current month onward only. Brand/creator "Show Past" toggle: 1 month
+    // back. Internal "Show Past" toggle: 3 months back (bounded — no longer allMonths/unbounded).
     const loadAllData = async (pastMonths = 0, allMonths = false) => {
       state.isLoading = true;
       render();
@@ -1711,7 +1715,7 @@
             state.internalBrandApplyMode = false;
             state.internalSelectedSellerId = '';
             state.internalTab = 'brand-apps';
-            await loadAllData(0, state.internalShowPast);
+            await loadAllData(state.internalShowPast ? 3 : 0, false);
           } else {
             state.showBrandForm = false;
             state.brandTab = 'my-applications';
@@ -1727,7 +1731,7 @@
           state.internalBrandApplyMode = false;
           state.internalSelectedSellerId = '';
           state.internalTab = 'brand-apps';
-          await loadAllData(0, state.internalShowPast);
+          await loadAllData(state.internalShowPast ? 3 : 0, false);
         } else {
           state.showBrandForm = false;
           state.brandTab = 'my-applications';
@@ -1789,7 +1793,7 @@
         state.internalBrandApplyMode = false;
         state.internalSelectedSellerId = '';
         state.internalTab = 'brand-apps';
-        await loadAllData(0, state.internalShowPast); // internal sees all brands — reload for freshness
+        await loadAllData(state.internalShowPast ? 3 : 0, false); // reload for freshness
       } else {
         // Brand user only sees their own apps — push locally is sufficient, no reload needed
         state.showBrandForm = false;
@@ -2466,7 +2470,7 @@
         state.internalCreatorApplyMode = null;
         state.internalSelectedCreatorId = '';
         state.internalTab = 'creator-apps';
-        await loadAllData(0, state.internalShowPast);
+        await loadAllData(state.internalShowPast ? 3 : 0, false);
       } else {
         // Push one row per timeslot locally — avoids reloading 80K rows just to show new records
         timeslotsWithIds.forEach(slot => {
@@ -3085,7 +3089,7 @@
             : 'Slot rescheduled successfully! The creator has been notified.';
         showNotification(rescheduleSuccessMsg);
         if (isInternalInitiated) {
-          await loadAllData(0, state.internalShowPast);
+          await loadAllData(state.internalShowPast ? 3 : 0, false);
         }
       }
       render();
@@ -4114,54 +4118,150 @@
 
     const handleArchiveOldApplications = async () => {
       state.showArchiveModal = true;
+      state.archivePreview = null;
+      state.archiveExportResult = null;
       state.archiveConfirmationText = '';
       render();
     };
 
-    const confirmArchiveOldApplications = async () => {
-      if (state.archiveConfirmationText !== 'I want to archive old data') {
+    const closeArchiveModal = () => {
+      state.showArchiveModal = false;
+      state.archivePreview = null;
+      state.archiveExportResult = null;
+      state.archiveConfirmationText = '';
+      render();
+    };
+
+    const handlePreviewArchive = async () => {
+      state.archivePreview = null;
+      state.archiveExportResult = null;
+      render();
+      showNotification('⟳ Checking what qualifies...', 'success', 0);
+      try {
+        const result = await apiCall('previewArchiveCandidates', { months: state.archiveMonths });
+        if (!result || result.error) {
+          showNotification(`✗ Preview failed: ${result?.error || 'Unknown error'}`, 'error');
+        } else {
+          state.archivePreview = result;
+          showNotification(`✓ ${result.counts.brandApplications} brand apps, ${result.counts.creatorApplications} creator apps older than ${state.archiveMonths} months`);
+        }
+      } catch (err) {
+        showNotification(`✗ Preview failed: ${err.message}`, 'error');
+      }
+      render();
+    };
+
+    const handleExportArchive = async () => {
+      showNotification('⟳ Exporting to Google Sheets...', 'success', 0);
+      try {
+        const result = await apiCall('exportArchiveToSheets', { months: state.archiveMonths });
+        if (!result || result.error) {
+          showNotification(`✗ Export failed: ${result?.error || 'Unknown error'}`, 'error');
+        } else {
+          state.archiveExportResult = result;
+          state.archiveConfirmationText = '';
+          const n = result.exported.newlyAppended;
+          const totalNew = n.brandApplications + n.creatorApplications + n.rescheduleHistory;
+          showNotification(totalNew > 0
+            ? `✓ Added ${n.brandApplications} brand, ${n.creatorApplications} creator, ${n.rescheduleHistory} reschedule rows to the archive sheet`
+            : `✓ Already in the archive sheet from a previous export — nothing new to add`);
+        }
+      } catch (err) {
+        showNotification(`✗ Export failed: ${err.message}`, 'error');
+      }
+      render();
+    };
+
+    const confirmDeleteArchivedApplications = async () => {
+      if (!state.archiveExportResult) {
+        showNotification('Export to Sheets first', 'error');
+        return;
+      }
+      if (state.archiveConfirmationText !== 'I confirm the archive is correct, delete from Supabase') {
         showNotification('Please type the exact confirmation text', 'error');
         return;
       }
-      state.showArchiveModal = false;
+      showNotification('⟳ Deleting archived rows from Supabase...', 'success', 0);
       try {
-        const result = await fetch('/api/archive-old-applications', { method: 'POST' }).then(r => r.json());
-        if (result.error) {
-          showNotification(`✗ Archive failed: ${result.error}`, 'error');
+        // POST body, not apiCall's GET query string — the exported ID list can be thousands of
+        // entries long on a large catch-up run, which would overflow a URL.
+        const result = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'deleteArchivedApplications', ids: state.archiveExportResult.exported }),
+          redirect: 'follow'
+        }).then(r => r.json());
+        if (!result || result.error) {
+          showNotification(`✗ Delete failed: ${result?.error || 'Unknown error'}`, 'error');
         } else {
-          showNotification(`✓ Archived ${result.archived} records and synced to Google Sheets`);
+          showNotification(`✓ Deleted ${result.deleted.brandApplications} brand apps, ${result.deleted.creatorApplications} creator apps from Supabase`);
+          closeArchiveModal();
+          return;
         }
       } catch (err) {
-        showNotification(`✗ Archive failed: ${err.message}`, 'error');
+        showNotification(`✗ Delete failed: ${err.message}`, 'error');
       }
-      state.archiveConfirmationText = '';
       render();
     };
 
     const renderArchiveModal = () => {
       if (!state.showArchiveModal) return '';
+      const preview = state.archivePreview;
+      const exported = state.archiveExportResult;
       return `
         <div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;">
-          <div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
-            <div style="font-size:18px;font-weight:700;color:#222;margin-bottom:16px;">⚠️ Archive Old Data</div>
-            <div style="font-size:14px;color:#666;margin-bottom:20px;line-height:1.6;">
-              <p><strong>This will:</strong></p>
-              <ul style="margin:8px 0;padding-left:20px;">
-                <li>Move all brand & creator applications older than 6 months to Google Sheets Archive tab</li>
-                <li><strong style="color:#e74c3c;">Permanently delete</strong> these records from Supabase</li>
-                <li>Next daily sync to google sheets will only contain recent 6 months + upcoming data</li>
-              </ul>
-              <p style="margin-top:12px;color:#e74c3c;"><strong>This action cannot be undone.</strong></p>
+          <div style="background:#fff;border-radius:16px;padding:28px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;">
+            <div style="font-size:18px;font-weight:700;color:#222;margin-bottom:6px;">🗄️ Archive Old Data</div>
+            <div style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.5;">
+              Three separate steps: preview what qualifies, export it to a dedicated archive sheet, then — only after you've checked that sheet — delete it from Supabase.
             </div>
-            <div style="margin-bottom:20px;">
-              <div style="font-size:13px;font-weight:600;color:#222;margin-bottom:12px;">Type to confirm:</div>
-              <div style="font-size:12px;color:#999;margin-bottom:8px;font-family:monospace;padding:8px 12px;background:#f5f5f5;border-radius:4px;border:1px solid #e0e0e0;">I want to archive old data</div>
-              <input type="text" placeholder="Enter the text above..." value="${escapeHtml(state.archiveConfirmationText)}" oninput="state.archiveConfirmationText = this.value;" style="width:100%;padding:12px 12px;border:2px solid #dfe6e9;border-radius:6px;font-size:14px;font-family:monospace;box-sizing:border-box;">
+
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:12px;background:#f8f9fa;border-radius:8px;">
+              <label style="font-size:13px;font-weight:600;color:#222;">Archive data older than</label>
+              <input type="number" min="1" value="${state.archiveMonths}" oninput="state.archiveMonths = parseInt(this.value)||3; state.archivePreview=null; state.archiveExportResult=null; render();" style="width:60px;padding:6px 8px;border:1px solid #dfe6e9;border-radius:4px;font-size:13px;">
+              <span style="font-size:13px;color:#666;">months</span>
             </div>
-            <div style="display:flex;gap:10px;">
-              <button onclick="confirmArchiveOldApplications();" style="flex:1;padding:10px 16px;background:#e74c3c;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Archive Now</button>
-              <button onclick="state.showArchiveModal = false; state.archiveConfirmationText = ''; render();" style="flex:1;padding:10px 16px;background:#b2bec3;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
+
+            <div style="margin-bottom:16px;">
+              <div style="font-size:13px;font-weight:600;color:#222;margin-bottom:8px;">Step 1 — Preview</div>
+              <button onclick="handlePreviewArchive();" style="width:100%;padding:10px 16px;background:#636e72;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">🔍 Preview what qualifies</button>
+              ${preview ? `
+                <div style="margin-top:10px;padding:10px 12px;background:#f0f4f8;border-radius:6px;font-size:12px;color:#444;line-height:1.6;">
+                  Cutoff: brand apps before <strong>${preview.cutoffMonthStr}</strong>, creator apps before <strong>${preview.cutoffDateStr}</strong><br>
+                  Brand applications: <strong>${preview.counts.brandApplications}</strong><br>
+                  Creator applications: <strong>${preview.counts.creatorApplications}</strong><br>
+                  Reschedule history: <strong>${preview.counts.rescheduleHistory}</strong>
+                </div>
+              ` : ''}
             </div>
+
+            <div style="margin-bottom:16px;opacity:${preview ? '1' : '0.5'};">
+              <div style="font-size:13px;font-weight:600;color:#222;margin-bottom:8px;">Step 2 — Export to Sheets</div>
+              <button ${preview ? '' : 'disabled'} onclick="handleExportArchive();" style="width:100%;padding:10px 16px;background:#0984e3;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:${preview ? 'pointer' : 'not-allowed'};">📤 Export to archive sheet</button>
+              ${exported ? `
+                <div style="margin-top:10px;padding:10px 12px;background:#eafaf1;border-radius:6px;font-size:12px;color:#444;line-height:1.6;">
+                  ✓ Exported — <a href="${exported.archiveSheetUrl}" target="_blank" rel="noopener">Open archive sheet ↗</a><br>
+                  In sheet now — Brand: <strong>${exported.exported.counts.brandApplications}</strong>,
+                  Creator: <strong>${exported.exported.counts.creatorApplications}</strong>,
+                  Reschedule: <strong>${exported.exported.counts.rescheduleHistory}</strong><br>
+                  Newly added this run — Brand: <strong>${exported.exported.newlyAppended.brandApplications}</strong>,
+                  Creator: <strong>${exported.exported.newlyAppended.creatorApplications}</strong>,
+                  Reschedule: <strong>${exported.exported.newlyAppended.rescheduleHistory}</strong>
+                </div>
+              ` : ''}
+            </div>
+
+            <div style="margin-bottom:20px;opacity:${exported ? '1' : '0.5'};padding-top:16px;border-top:1px solid #f0f0f0;">
+              <div style="font-size:13px;font-weight:600;color:#e74c3c;margin-bottom:8px;">Step 3 — Delete from Supabase ${exported ? '' : '(export first)'}</div>
+              ${exported ? `
+                <p style="font-size:12px;color:#e74c3c;margin:0 0 10px;"><strong>Check the archive sheet before doing this. This action cannot be undone.</strong></p>
+                <div style="font-size:12px;color:#999;margin-bottom:8px;font-family:monospace;padding:8px 12px;background:#f5f5f5;border-radius:4px;border:1px solid #e0e0e0;">I confirm the archive is correct, delete from Supabase</div>
+                <input type="text" placeholder="Enter the text above..." value="${escapeHtml(state.archiveConfirmationText)}" oninput="state.archiveConfirmationText = this.value;" style="width:100%;padding:12px 12px;border:2px solid #dfe6e9;border-radius:6px;font-size:14px;font-family:monospace;box-sizing:border-box;margin-bottom:10px;">
+              ` : ''}
+              <button ${exported ? '' : 'disabled'} onclick="confirmDeleteArchivedApplications();" style="width:100%;padding:10px 16px;background:#e74c3c;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:${exported ? 'pointer' : 'not-allowed'};">🗑️ Delete from Supabase</button>
+            </div>
+
+            <button onclick="closeArchiveModal();" style="width:100%;padding:10px 16px;background:#b2bec3;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Close</button>
           </div>
         </div>
       `;
@@ -4778,7 +4878,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
-                <span style="font-size:13px;color:#636e72;">Show Past 2 Months</span>
+                <span style="font-size:13px;color:#636e72;">Show Past 1 Month</span>
                 <span onclick="handleToggleBrandShowPast()" style="position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0;">
                   <span style="position:absolute;inset:0;background:${state.brandShowPastMonths ? '#0984e3' : '#ccc'};border-radius:22px;transition:background 0.2s;"></span>
                   <span style="position:absolute;top:3px;left:${state.brandShowPastMonths ? '21px' : '3px'};width:16px;height:16px;background:#fff;border-radius:50%;transition:left 0.2s;"></span>
@@ -5866,7 +5966,7 @@
               </button>
             </div>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
-              <span style="font-size:13px;color:#636e72;">Show Past 2 Months</span>
+              <span style="font-size:13px;color:#636e72;">Show Past 1 Month</span>
               <span onclick="handleToggleBrandShowPast()" style="position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0;">
                 <span style="position:absolute;inset:0;background:${state.brandShowPastMonths ? '#0984e3' : '#ccc'};border-radius:22px;transition:background 0.2s;"></span>
                 <span style="position:absolute;top:3px;left:${state.brandShowPastMonths ? '21px' : '3px'};width:16px;height:16px;background:#fff;border-radius:50%;transition:left 0.2s;"></span>
@@ -7140,7 +7240,7 @@
       state.internalShowPast = !state.internalShowPast;
       state.isLoading = true;
       render();
-      await loadAllData(0, state.internalShowPast);
+      await loadAllData(state.internalShowPast ? 3 : 0, false);
       state.isLoading = false;
       render();
     };
@@ -7149,7 +7249,7 @@
       state.brandShowPastMonths = !state.brandShowPastMonths;
       state.isLoading = true;
       render();
-      await loadAllData(state.brandShowPastMonths ? 2 : 0);
+      await loadAllData(state.brandShowPastMonths ? 1 : 0);
       state.isLoading = false;
       render();
     };
@@ -7693,7 +7793,7 @@
               <p class="dashboard-subtitle">Manage brand and creator applications</p>
             </div>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
-              <span style="font-size:13px;color:#636e72;">Show Past Months</span>
+              <span style="font-size:13px;color:#636e72;">Show Past 3 Months</span>
               <span onclick="handleToggleInternalShowPast()" style="position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0;">
                 <span style="position:absolute;inset:0;background:${state.internalShowPast ? '#0984e3' : '#ccc'};border-radius:22px;transition:background 0.2s;"></span>
                 <span style="position:absolute;top:3px;left:${state.internalShowPast ? '21px' : '3px'};width:16px;height:16px;background:#fff;border-radius:50%;transition:left 0.2s;"></span>
